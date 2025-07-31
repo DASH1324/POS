@@ -1,0 +1,191 @@
+body {
+    background: #eaf6f8;
+    margin: 0;
+    font-family: 'Segoe UI', sans-serif;
+}
+
+.roleManagement {
+    display: flex;
+    flex-direction: row;
+    min-height: 100vh;
+}
+
+.roles {
+    flex: 1;
+    padding-right: 60px;
+    padding-top: 20px;
+    box-sizing: border-box;
+    margin: 0 auto;
+}
+
+.roleManagement-content {
+    margin-top: 60px;
+}
+
+.table-header {
+    display: flex;
+    justify-content: flex-end;
+    margin-bottom: 15px;
+}
+
+.add-role-btn {
+    background-color: #007bff;
+    color: white;
+    padding: 9px 9px;
+    gap: 8px;
+    border: none;
+    border-radius: 4px;
+    cursor: pointer;
+    width: 10%;
+}
+
+.add-role-btn svg {
+    font-size: 12px;
+}
+
+.modal-role-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.3);
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  z-index: 1000;
+}
+
+.modal-role-border {
+  background: #EBF5F6;
+  height: 80%;
+  width: 45%;
+  border-radius: 12px;
+  flex-direction: column;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  padding: 5px;
+}
+
+.modal-role-header {
+  width: 95%;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  position: sticky;
+  top: 0;
+}
+
+.modal-role-header h2 {
+  color: #1aa3b3;
+  margin: 10px;
+  margin-top: 0;
+}
+
+.modal-role-close {
+  background: none;
+  border: none;
+  font-size: 1.5rem;
+  cursor: pointer;
+  color: #1aa3b3;
+  margin-top: 0;
+}
+
+.modal-role-container {
+  background: #fff;
+  padding: 5px;
+  border-radius: 12px;
+  height: auto;
+  width: 95%;
+  height: 90%;
+  box-shadow: 0 8px 24px rgba(176, 176, 176, 0.2);
+  display: flex;
+  justify-content: center;
+  align-items: center;
+}
+
+.modal-role-body {
+  width: 95%;
+  height: 95%;
+}
+
+.modal-form {
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+}
+
+.modal-form label {
+  display: block;
+  font-weight: 600;
+  margin: 4px 0 4px;
+}
+
+.modal-form input[type="text"],
+.modal-form textarea {
+  width: 97%;
+  height: 30px;
+  border: 1px solid #ccc;
+  border-radius: 5px;
+  padding: 10px;
+}
+
+.modal-form textarea {
+  height: 60px;
+  resize: none;
+}
+
+.required {
+  color: red;
+  margin-left: 4px;
+}
+
+.permissions-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(225px, 1fr));
+  gap: 15px;
+}
+
+.permission-group h4 {
+  font-size: 14px;
+  color: #007B8F;
+  margin-bottom: 8px;
+  border-bottom: 1px solid #ccc;
+  padding-bottom: 4px;
+}
+
+.permission-options-grid {
+  display: grid;
+  grid-template-rows: repeat(4, auto); /* 4 rows, then wrap */
+  grid-auto-flow: column; /* fill top to bottom first, then new column */
+  column-gap: 30px;
+}
+
+.permission-options-grid label {
+  font-weight: normal;
+  display: flex;
+  align-items: center;
+  font-size: 14px;
+  white-space: nowrap;
+}
+
+.permission-options-grid label {
+  font-weight: normal;
+  display: flex;
+  align-items: center;
+  font-size: 14px;
+}
+
+.modal-actions {
+  display: flex;
+  justify-content: flex-end;
+  width: 100%;
+}
+
+.save-role-btn {
+  background-color: #007bff;
+  color: white;
+  border: none;
+  border-radius: 8px;
+  cursor: pointer;
+  padding: 10px;
+  width: 100%;
+}

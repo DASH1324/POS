@@ -1,0 +1,172 @@
+* {
+  font-family: 'Poppins', sans-serif;
+  box-sizing: border-box;
+}
+
+body, html {
+  margin: 0;
+  padding: 0;
+  overflow: hidden; /* Prevent body scroll */
+  height: 100vh;
+  background: #eaf6f8; /* Added background color matching employee records */
+}
+
+.orders-main-container {
+  width: 100%;
+  min-height: 100vh;
+}
+
+.orders-content-container {
+  padding: 20px;
+  width: 97%;
+  margin: 0 auto;
+  transition: width 0.3s ease-in-out, margin-right 0.3s ease-in-out;
+}
+
+.orders-content-container.orders-panel-open {
+  width: calc(98% - 400px);
+  margin-right: 400px;
+}
+
+.orders-table-container {
+  overflow: hidden;
+}
+
+.orders-tab-container {
+  display: flex;
+  margin-bottom: 15px;
+  gap: 10px;
+}
+
+/* Tabs */
+.orders-tab {
+  padding: 8px 16px;
+  background-color: #ffffff;
+  color: #666;
+  border: none;
+  border-radius: 6px;
+  cursor: pointer;
+  font-weight: 500;
+  transition: background-color 0.3s;
+  width: 150px;
+  font-size: 16px;
+}
+
+.orders-tab:hover {
+  background-color: #f1f1f1;
+}
+
+.orders-tab.active {
+  background-color: #4B929D;
+  color: white;
+}
+
+.orders-tab.active:hover {
+  background-color: #4B929D;
+  color: white;
+}
+
+.orders-filter-bar {
+  display: flex;
+  gap: 12px;
+  margin-bottom: 15px;
+  width: 100%;
+  align-items: center;
+  flex-wrap: wrap; /* Allow wrapping on smaller screens */
+}
+
+.orders-filter-input {
+  padding: 8px 12px;
+  font-size: 14px;
+  border: 1px solid #ccc;
+  border-radius: 6px;
+  background: white;
+  flex: 1; /* This makes each input take equal space */
+  min-width: 150px; /* Minimum width to prevent too small inputs */
+}
+
+.orders-clear-btn {
+  padding: 8px 16px;
+  background-color: #d9534f;
+  color: white;
+  border: none;
+  border-radius: 6px;
+  cursor: pointer;
+  font-weight: 500;
+  transition: background-color 0.3s;
+  white-space: nowrap; /* Prevents text wrapping */
+  flex-shrink: 0; /* Prevents the button from shrinking */
+}
+
+.orders-clear-btn:hover {
+  background-color: #c9302c;
+}
+
+/* Status badges */
+.orders-status-badge {
+  padding: 6px 12px;
+  border-radius: 20px;
+  font-size: 12px;
+  font-weight: 500;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  display: inline-block;
+  min-width: 80px;
+  text-align: center;
+}
+
+.orders-status-badge.orders-completed {
+  background-color: #d4edda;
+  color: #28a745;
+  border: 1px solid #c3e6cb;
+}
+
+.orders-status-badge.orders-pending {
+  background-color: #fff3cd;
+  color: #856404;
+  border: 1px solid #ffeaa7;
+}
+
+.orders-status-badge.orders-cancelled {
+  background-color: #f8d7da;
+  color: #721c24;
+  border: 1px solid #f5c6cb;
+}
+
+/* Responsive adjustments */
+@media (max-width: 1200px) {
+  .orders-content-container.orders-panel-open {
+    width: calc(97% - 400px);
+    margin-right: 400px;
+  }
+}
+
+@media (max-width: 768px) {
+  .orders-content-container.orders-panel-open {
+    width: 0;
+    padding: 0;
+    overflow: hidden;
+  }
+  
+  .orders-filter-bar {
+    flex-direction: column;
+    gap: 8px;
+  }
+  
+  .orders-filter-input {
+    width: 100%;
+    flex: none;
+  }
+}
+
+@media (max-width: 480px) {
+  .orders-content-container {
+    padding: 10px;
+    width: 95%;
+  }
+  
+  .orders-tab {
+    width: 120px;
+    font-size: 14px;
+  }
+}

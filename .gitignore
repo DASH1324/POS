@@ -1,0 +1,26 @@
+# Ignore Node modules and build artifacts
+**/node_modules/
+**/dist/
+**/build/
+**/.cache/
+
+# Ignore logs and OS junk
+*.log
+.DS_Store
+Thumbs.db
+
+# Ignore environment files
+.env
+.env.*.local
+
+# Ignore IDE folders
+.vscode/
+.idea/
+
+# Optional: ignore Python/__pycache__ or C# build outputs if used
+__pycache__/
+*.dll
+*.exe
+*.pdb
+bin/
+obj/

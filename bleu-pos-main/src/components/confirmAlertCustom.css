@@ -1,0 +1,50 @@
+/* confirmAlertCustom.css */
+
+.react-confirm-alert-overlay {
+  background: rgba(0, 0, 0, 0.5); /* softer dark overlay */
+  z-index: 9999; /* ensure it's above other elements */
+}
+
+.react-confirm-alert h1 {
+  font-size: 20px;
+  margin-bottom: 10px;
+}
+
+.react-confirm-alert p {
+  font-size: 16px;
+  margin-bottom: 20px;
+}
+
+.react-confirm-alert-button-group {
+  display: flex;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.react-confirm-alert-button-group button {
+  padding: 8px 16px;
+  font-size: 14px;
+  border-radius: 6px;
+  cursor: pointer;
+  border: none;
+  transition: background 0.3s ease;
+  flex: 1;
+}
+
+.react-confirm-alert-button-group button:first-child {
+  background-color: #dc3545; /* red for confirm */
+  color: white;
+}
+
+.react-confirm-alert-button-group button:first-child:hover {
+  background-color: #c82333;
+}
+
+.react-confirm-alert-button-group button:last-child {
+  background-color: #6c757d; /* gray for cancel */
+  color: white;
+}
+
+.react-confirm-alert-button-group button:last-child:hover {
+  background-color: #5a6268;
+}

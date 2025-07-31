@@ -1,0 +1,212 @@
+body {
+  background: #eaf6f8;
+  margin: 0;
+  font-family: 'Segoe UI', sans-serif;
+}
+
+.posAdmnDashboard {
+  display: flex;
+  flex-direction: row;
+  min-height: 100vh;
+}
+
+.posAdmnDashboardMain {
+  flex: 1;
+  padding-right: 60px;
+  padding-top: 20px;
+  box-sizing: border-box;
+  margin: 0 auto;
+}
+
+.posAdmnDashboardContents {
+  margin-top: 60px;
+}
+
+/* Cards */
+.posAdmnDashboardCards {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  gap: 20px;
+  margin-bottom: 30px;
+}
+
+.posAdmnCard {
+  background-color: #ffffff;
+  border-radius: 12px;
+  padding: 20px;
+  height: auto;
+  min-height: 100px;
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  box-shadow: 0 1px 3px rgba(0,0,0,0.1);
+}
+
+.posAdmnCardIcon {
+  font-size: 18px;
+  color: #fff;
+  height: 32px;
+  width: 32px;
+  border-radius: 8px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+
+.posAdmnCard.posAdmnSales .posAdmnCardIcon { background: #007bff; }
+.posAdmnCard.posAdmnRevenue .posAdmnCardIcon { background: #28a745; }
+.posAdmnCard.posAdmnOrders .posAdmnCardIcon { background: #20c997; }
+.posAdmnCard.posAdmnPendings .posAdmnCardIcon { background: #fd7e14; }
+
+.posAdmnCardText {
+  flex: 1;
+  align-self: start;
+  margin-left: 10px;
+}
+
+.posAdmnCardTitle {
+  font-size: 14px;
+  color: #666;
+  margin-top: 10px;
+}
+
+.posAdmnCardDetails {
+  display: flex;
+  align-items: center;
+  justify-content: flex-start; /* Align items to the start, you can change it to 'space-between' if you prefer */
+  margin-top: 15px;
+  gap: 8px; /* Adjust space between the value and percent */
+}
+
+.posAdmnCardValue {
+  font-size: 24px;
+  font-weight: bold;
+  color: #333;
+}
+
+.posAdmnCardPercent {
+  font-size: 12px;
+  display: flex;
+  align-items: center;
+  gap: 5px;
+}
+
+.posAdmnCardPercent.posAdmnGreen {
+  color: green;
+}
+
+.posAdmnCardPercent.posAdmnRed {
+  color: red;
+}
+
+/* Charts */
+.posAdmnDashboardCharts {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 20px;
+}
+
+.posAdmnChartBox {
+  background: white;
+  padding: 20px;
+  border-radius: 12px;
+  box-shadow: 0 2px 5px rgba(0,0,0,0.08);
+  height: 450px;
+}
+
+.posAdmnChartHeader {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 10px;
+  font-size: 22px;
+  font-weight: 600;
+  margin-left: 10px;
+  margin-bottom: 30px;
+}
+
+.posAdmnChartDropdown {
+  padding: 5px 10px;
+  border: none;
+  border-radius: 6px;
+  font-size: 15px;
+}
+
+.posAdmnChartDropdown option {
+  background: white;
+  box-shadow: 0 2px 8px rgba(0,0,0,0.15);
+  border-radius: 8px;
+  overflow: hidden;
+  z-index: 10;
+  animation: fadeIn 0.3s ease;
+}
+
+.posAdmnChartDropdown:hover {
+  background-color: #f0f0f0;
+}
+
+/* Large screens (desktops) */
+@media (min-width: 1200px) {
+  .posAdmnDashboardMain {
+    width: 80%;
+    max-width: 1920px;
+  }
+
+  .posAdmnDashboardCards {
+    grid-template-columns: repeat(4, 1fr);
+  }
+}
+
+/* Medium screens (tablets) */
+@media (max-width: 1024px) {
+  .posAdmnDashboardMain {
+    width: 100%;
+    padding: 0 20px;
+  }
+
+  .posAdmnDashboardCards {
+    grid-template-columns: repeat(2, 1fr);
+  }
+
+  .posAdmnDashboardCharts {
+    grid-template-columns: 1fr;
+  }
+}
+
+/* Small screens (mobile) */
+@media (max-width: 768px) {
+  .posAdmnDashboardMain {
+    width: 100%;
+    padding: 15px;
+    flex-direction: column;
+  }
+
+  .posAdmnDashboardCharts {
+    grid-template-columns: 1fr;
+  }
+
+  .posAdmnHeaderProfile {
+    flex-wrap: wrap;
+  }
+
+  .posAdmnProfileDropdown {
+    right: 10px;
+    top: 80px;
+  }
+
+  .posAdmnHeaderRight {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 10px;
+  }
+
+  .posAdmnDashboardCards {
+    grid-template-columns: 1fr;
+  }
+
+  .posAdmnCard {
+    flex-direction: column;
+    align-items: flex-start;
+  }
+}

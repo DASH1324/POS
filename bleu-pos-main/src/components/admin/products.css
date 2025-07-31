@@ -1,0 +1,185 @@
+body {
+    background: #eaf6f8;
+    margin: 0;
+    font-family: 'Segoe UI', sans-serif;
+}
+
+.productList {
+    display: flex;
+    flex-direction: row;
+    min-height: 100vh;
+}
+
+.products {
+    flex: 1;
+    padding-right: 60px;
+    padding-top: 20px;
+    box-sizing: border-box;
+    margin: 0 auto;
+}
+
+.products-content {
+    margin-top: 60px;
+}
+
+.tabs {
+  display: flex;
+  margin-bottom: 15px;
+  gap: 10px;
+}
+
+.tab {
+  padding: 8px 16px;
+  background-color: #ffffff;
+  color: #666;
+  border: none;
+  border-radius: 6px;
+  cursor: pointer;
+  font-weight: 500;
+  transition: background-color 0.3s;
+  width: 150px;
+}
+
+.tab:hover {
+  background-color: #f1f1f1;
+}
+
+.active-tab {
+  background-color: #4B929D;
+  color: white;
+}
+
+.active-tab:hover {
+  background-color: #4B929D;
+  color: white;
+}
+
+.filter-bar {
+display: flex;
+gap: 10px;
+margin-bottom: 15px;
+align-items: center;
+}
+
+.filter-bar input,
+.filter-bar select {
+font-size: 14px; /* Adjust this to match your app's standard font size */
+padding: 8px;
+border: 0.5px solid #EBEBEB;
+border-radius: 6px;
+width: 80%;
+color: #888;
+}
+
+.add-btn {
+background-color: #007bff;
+color: white;
+padding: 9px 9px;
+gap: 8px;
+border: none;
+border-radius: 4px;
+cursor: pointer;
+width: 25%;
+display: flex;
+align-items: center;
+justify-content: center;
+}
+
+.add-btn:hover {
+background-color: #0069d9;
+}
+
+.add-btn svg {
+font-size: 12px;
+}
+
+.drink-info {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+}
+
+.drink-photo {
+    width: 90px;
+    height: 90px;
+    border-radius: 10%;
+    object-fit: cover;
+}
+
+.drink-name {
+  font-weight: 600;
+}
+
+.food-info {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+}
+
+.food-photo {
+    width: 90px;
+    height: 90px;
+    border-radius: 10%;
+    object-fit: cover;
+}
+
+.food-name {
+  font-weight: 600;
+}
+
+.merch-info {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+}
+
+.merch-photo {
+    width: 90px;
+    height: 90px;
+    border-radius: 10%;
+    object-fit: cover;
+}
+
+.merch-name {
+  font-weight: 600;
+}
+
+.filter-bar-merch {
+  display: flex;
+  gap: 10px;
+  margin-bottom: 15px;
+  align-items: center;
+}
+
+.filter-bar-merch input {
+  padding: 8px;
+  border: 0.5px solid #EBEBEB;
+  border-radius: 6px;
+  width: 100%;
+  color: #888;
+}
+
+.product-info {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    text-align: left; /* Ensures text doesn't center if the column is centered */
+    padding: 5px 0;   /* Adds a little vertical spacing */
+}
+
+/* This styles the image for ALL product types */
+.product-photo {
+    width: 90px;
+    height: 90px;
+    border-radius: 10%;
+    object-fit: cover;
+}
+
+/* This styles the name for ALL product types */
+.product-name {
+  font-weight: 600;
+}
+
+.products-table-container {
+  overflow: auto;
+}
