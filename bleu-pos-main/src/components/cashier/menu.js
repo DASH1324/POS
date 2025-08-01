@@ -221,8 +221,12 @@ function Menu() {
 
   const ProductList = ({ products, addToCart }) => (
     <div className="menu-product-grid">
+      {/* The .map() function where the error occurs */}
       {products.map(product => (
-        <div key={product.name} className="menu-product-item">
+        // --- THIS IS THE FIX ---
+        // We create a unique key by combining the product's category and name.
+        // This changes the key from "Matcha" to something like "Hot Drinks-Matcha", which is unique.
+        <div key={`${product.category}-${product.name}`} className="menu-product-item">
           {product.status === 'Unavailable' && (
             <div className="menu-product-unavailable-overlay">
               <span>Not Available</span>
@@ -252,6 +256,7 @@ function Menu() {
       ))}
     </div>
   );
+
 
   const renderMainContent = () => {
     if (isLoading) return <div className="menu-status-container">Loading Products...</div>;

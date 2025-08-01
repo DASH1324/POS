@@ -194,7 +194,7 @@ async def save_online_order(
     order_data: OnlineOrderRequest,
     current_user: dict = Depends(get_current_active_user)
 ):
-    allowed_roles = ["admin", "staff", "cashier"]
+    allowed_roles = ["admin", "staff", "cashier", "user"]
     if current_user.get("userRole") not in allowed_roles:
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
@@ -205,6 +205,12 @@ async def save_online_order(
         conn = await get_db_connection()
         async with conn.cursor() as cursor:
             discount_amount = Decimal(order_data.subtotal) - Decimal(order_data.total_amount)
+            
+            # --- MODIFICATION HERE ---
+            # The status is hardcoded to 'processing' because accepting an online order
+            # means it is now being processed by the store.
+            pos_order_status = 'processing'
+
             sql_insert_sale = """
                 INSERT INTO Sales (
                     OrderType, PaymentMethod, CashierName, TotalDiscountAmount, Status,
@@ -220,7 +226,7 @@ async def save_online_order(
                     order_data.payment_method,
                     order_data.customer_name,
                     discount_amount,
-                    order_data.status,
+                    pos_order_status, # Use the hardcoded status
                     f"ONLINE-{order_data.online_order_id}"
                 )
             )
@@ -259,7 +265,7 @@ async def save_online_order(
         )
     finally:
         if conn: await conn.close()
-
+        
 # --- Function to change the status of an order ---
 @router_purchase_order.patch(
     "/{order_id}/status",

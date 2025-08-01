@@ -15,21 +15,19 @@ function OrderPanel({ order, onClose, isOpen, isStore, onUpdateStatus }) {
   const subtotal = order.orderItems.reduce((sum, item) => sum + (item.price * item.quantity), 0);
   const discount = subtotal - order.total;
 
-  const handleCancelOrder = () => {
+  const handleStoreCancel = () => {
     setEnteredPin("");
     setPinError("");
     setShowPinModal(true);
   };
 
   const confirmCancelOrder = () => {
-    if (!enteredPin || enteredPin.length !== 4) {
-      setPinError("Please enter a 4-digit PIN.");
+    if (!enteredPin || enteredPin.length < 4) {
+      setPinError("Please enter a valid PIN.");
       return;
     }
-    // Pass the raw PIN to the parent component.
-    // The parent (orders.js) is responsible for the API calls.
     onUpdateStatus(order, "CANCELLED", { pin: enteredPin });
-    setShowPinModal(false); // Close modal after submission
+    setShowPinModal(false);
   };
 
   const handlePrintReceipt = () => setShowReceiptModal(true);
@@ -49,6 +47,100 @@ function OrderPanel({ order, onClose, isOpen, isStore, onUpdateStatus }) {
     }
     return 'None';
   };
+
+  // Renders the correct set of action buttons based on the order's state
+  const renderActionButtons = () => {
+    const status = order.status.toUpperCase();
+    const type = order.orderType ? order.orderType.toLowerCase() : '';
+
+    let mainAction = null;
+    let cancelAction = null;
+    let printAction = null;
+
+    // --- Determine Main Progressive Action Button ---
+    if (isStore) {
+        if (status === 'PROCESSING') {
+            mainAction = (
+                <button className="orderpanel-btn orderpanel-btn-complete" onClick={() => onUpdateStatus(order, "COMPLETED")}>
+                    Mark as Completed
+                </button>
+            );
+        }
+    } else { // Online Order Workflow
+        if (status === 'PENDING') {
+            mainAction = (
+                <button className="orderpanel-btn orderpanel-btn-complete" onClick={() => onUpdateStatus(order, "PREPARING")}>
+                    Accept Order
+                </button>
+            );
+        } else if (status === 'PREPARING') {
+            if (type === 'pick up') {
+                mainAction = (
+                    <button className="orderpanel-btn orderpanel-btn-complete" onClick={() => onUpdateStatus(order, "WAITING FOR PICK UP")}>
+                        Ready for Pick Up
+                    </button>
+                );
+            } else { // Delivery
+                mainAction = (
+                    <button className="orderpanel-btn orderpanel-btn-complete" onClick={() => onUpdateStatus(order, "DELIVERING")}>
+                        Ready to Deliver
+                    </button>
+                );
+            }
+        } else if (status === 'WAITING FOR PICK UP') {
+            mainAction = (
+                <button className="orderpanel-btn orderpanel-btn-complete" onClick={() => onUpdateStatus(order, "COMPLETED")}>
+                    Pick Up
+                </button>
+            );
+        } else if (status === 'DELIVERING') {
+            mainAction = (
+                <button className="orderpanel-btn orderpanel-btn-complete" onClick={() => onUpdateStatus(order, "COMPLETED")}>
+                    Delivered
+                </button>
+            );
+        }
+    }
+
+    // --- Determine Cancel Button Visibility ---
+    if (isStore) {
+        // In-store orders can be cancelled while they are 'PROCESSING'
+        if (status === 'PROCESSING') {
+            cancelAction = (
+                <button className="orderpanel-btn orderpanel-btn-refund" onClick={handleStoreCancel}>
+                    Cancel Order
+                </button>
+            );
+        }
+    } else {
+        // *** CHANGE IS HERE ***
+        // Online orders can ONLY be cancelled when they are 'PENDING'
+        if (status === 'PENDING') {
+            cancelAction = (
+                <button className="orderpanel-btn orderpanel-btn-refund" onClick={() => onUpdateStatus(order, "CANCELLED")}>
+                    Cancel Order
+                </button>
+            );
+        }
+    }
+
+    // --- Determine Print Button Visibility ---
+    if (isStore && (status === 'PROCESSING' || status === 'COMPLETED')) {
+        printAction = (
+             <button className="orderpanel-btn orderpanel-btn-print" onClick={handlePrintReceipt}>Print Receipt</button>
+        );
+    }
+    
+    // Return all applicable buttons in the desired order
+    return (
+        <>
+            {mainAction}
+            {printAction}
+            {cancelAction}
+        </>
+    );
+  };
+
 
   return (
     <div className={`orderpanel-container ${isOpen ? 'orderpanel-open' : ''}`}>
@@ -99,34 +191,9 @@ function OrderPanel({ order, onClose, isOpen, isStore, onUpdateStatus }) {
             </div>
         </div>
 
-        {order.status !== "CANCELLED" && order.status !== "COMPLETED" && order.status !== "DELIVERED" && (
-          <div className="orderpanel-actions">
-            {isStore && order.status === "PROCESSING" && (
-              <button className="orderpanel-btn orderpanel-btn-complete" onClick={() => onUpdateStatus(order, "COMPLETED")}>
-                Mark as Completed
-              </button>
-            )}
-            {!isStore && (
-              <>
-                {order.status === "PENDING" && (<button className="orderpanel-btn orderpanel-btn-complete" onClick={() => onUpdateStatus(order, "PREPARING")}>Accept Order</button>)}
-                {order.status === "PREPARING" && (<button className="orderpanel-btn orderpanel-btn-complete" onClick={() => onUpdateStatus(order, "DELIVERED")}>Mark as Delivered</button>)}
-                <button className="orderpanel-btn orderpanel-btn-refund" onClick={handleCancelOrder}>Cancel Order</button>
-              </>
-            )}
-            {isStore && (
-              <>
-                <button className="orderpanel-btn orderpanel-btn-print" onClick={handlePrintReceipt}>Print Receipt</button>
-                <button className="orderpanel-btn orderpanel-btn-refund" onClick={handleCancelOrder}>Cancel Order</button>
-              </>
-            )}
-          </div>
-        )}
-
-        {(order.status === "COMPLETED" || order.status === "DELIVERED") && isStore && (
-             <div className="orderpanel-actions">
-                <button className="orderpanel-btn orderpanel-btn-print" onClick={handlePrintReceipt}>Print Receipt</button>
-            </div>
-        )}
+        <div className="orderpanel-actions">
+            {renderActionButtons()}
+        </div>
 
         {showPinModal && (
           <div className="orderpanel-modal-overlay" onClick={() => setShowPinModal(false)}>
