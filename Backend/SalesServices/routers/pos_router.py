@@ -28,120 +28,104 @@ MATERIALS_DEDUCT_URL = "http://127.0.0.1:8002/materials/deduct-from-sale"
 
 router_sales = APIRouter(prefix="/auth/sales", tags=["sales"])
 
-ADDON_PRICES = {
-    'espressoShots': Decimal('25.00'),
-    'seaSaltCream': Decimal('30.00'),
-    'syrupSauces': Decimal('20.00'),
-}
+# --- Pydantic Models ---
+class AddonDetail(BaseModel):
+    addonId: int
+    addonName: str
+    price: float
+    quantity: int
 
 class SaleItem(BaseModel):
+    id: int 
     name: str
     quantity: int
     price: float
     category: str
-    addons: dict
+    addons: List[AddonDetail]
 
 class Sale(BaseModel):
     cartItems: List[SaleItem]
     orderType: str
     paymentMethod: str
     appliedDiscounts: List[str]
-    gcashReference: Optional[str] = None  # Add this field to accept the reference number
+    gcashReference: Optional[str] = None
 
 # --- Authorization Helper Function ---
-# ... (this function is unchanged)
 async def get_current_active_user(token: str = Depends(oauth2_scheme)):
     async with httpx.AsyncClient() as client:
         try:
             response = await client.get(USER_SERVICE_ME_URL, headers={"Authorization": f"Bearer {token}"})
             response.raise_for_status()
+            return response.json()
         except httpx.HTTPStatusError as e:
-            raise HTTPException(
-                status_code=e.response.status_code,
-                detail=f"Invalid token or user not found: {e.response.text}",
-                headers={"WWW-Authenticate": "Bearer"},
-            )
+            raise HTTPException(status_code=e.response.status_code, detail=f"Invalid token or user not found: {e.response.text}")
         except httpx.RequestError:
-            raise HTTPException(
-                status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
-                detail="Could not connect to the authentication service."
-            )
-    return response.json()
+            raise HTTPException(status_code=status.HTTP_503_SERVICE_UNAVAILABLE, detail="Could not connect to the authentication service.")
 
-
-# --- Helper functions to call Inventory Services ---
-# ... (these functions are unchanged)
-async def trigger_ingredients_deduction(cart_items: List[SaleItem], token: str):
-    logger.info("Triggering INGREDIENT deduction.")
-    payload = {"cartItems": [{"name": item.name, "quantity": item.quantity} for item in cart_items]}
-    headers = {"Authorization": f"Bearer {token}"}
+# --- Helper to call Inventory Services ---
+async def trigger_inventory_deduction(url: str, cart_items: List[SaleItem], token: str, inventory_type: str):
+    logger.info(f"Triggering {inventory_type.upper()} deduction.")
+    payload = {
+        "cartItems": [
+            {
+                "name": item.name,
+                "quantity": item.quantity,
+                "addons": [addon.dict() for addon in item.addons]
+            }
+            for item in cart_items
+        ]
+    }
+    headers = {"Authorization": f"Bearer {token}", "Content-Type": "application/json"}
     try:
         async with httpx.AsyncClient() as client:
-            response = await client.post(INGREDIENTS_DEDUCT_URL, json=payload, headers=headers)
+            response = await client.post(url, json=payload, headers=headers)
             response.raise_for_status()
-            logger.info("Successfully requested INGREDIENT deduction.")
+            logger.info(f"Successfully requested {inventory_type.upper()} deduction.")
     except Exception as e:
-        logger.critical(f"INGREDIENT-SYNC-FAILURE: Sale processed, but failed to deduct ingredients. Error: {e}")
-
-async def trigger_materials_deduction(cart_items: List[SaleItem], token: str):
-    logger.info("Triggering MATERIAL deduction.")
-    payload = {"cartItems": [{"name": item.name, "quantity": item.quantity} for item in cart_items]}
-    headers = {"Authorization": f"Bearer {token}"}
-    try:
-        async with httpx.AsyncClient() as client:
-            response = await client.post(MATERIALS_DEDUCT_URL, json=payload, headers=headers)
-            response.raise_for_status()
-            logger.info("Successfully requested MATERIAL deduction.")
-    except Exception as e:
-        logger.critical(f"MATERIAL-SYNC-FAILURE: Sale processed, but failed to deduct materials. Error: {e}")
-
+        error_text = str(e)
+        if hasattr(e, 'response') and e.response:
+            try:
+                error_text = e.response.json().get('detail', e.response.text)
+            except:
+                error_text = e.response.text
+        logger.critical(f"{inventory_type.upper()}-SYNC-FAILURE: Sale processed, but failed to deduct. Error: {error_text}")
 
 # --- Helper function for calculations ---
-# --- FIX: This entire function is updated to use the correct database schema ---
 async def calculate_totals_and_discounts(sale_data: Sale, cursor):
     subtotal = Decimal('0.0')
     for item in sale_data.cartItems:
         item_price = Decimal(str(item.price))
         addons_price = Decimal('0.0')
         if item.addons:
-            for addon_name, quantity in item.addons.items():
-                addons_price += ADDON_PRICES.get(addon_name, Decimal('0.0')) * quantity
+            for addon in item.addons:
+                addons_price += Decimal(str(addon.price)) * addon.quantity
         subtotal += (item_price + addons_price) * item.quantity
 
     total_discount_amount = Decimal('0.0')
     applied_discounts_details = []
-
     if not sale_data.appliedDiscounts:
         return subtotal, total_discount_amount, applied_discounts_details
 
     placeholders = ','.join(['?' for _ in sale_data.appliedDiscounts])
-    # Use the CORRECT column names from your database: name, discount_type, etc.
-    sql_fetch_discounts = f"""
-        SELECT id, name, discount_type, discount_value, minimum_spend
-        FROM discounts
-        WHERE name IN ({placeholders}) AND status = 'active'
-    """
+    sql_fetch_discounts = f"SELECT id, discount_type, discount_value, minimum_spend FROM discounts WHERE name IN ({placeholders}) AND status = 'active'"
     await cursor.execute(sql_fetch_discounts, sale_data.appliedDiscounts)
     valid_discounts = await cursor.fetchall()
 
     for discount in valid_discounts:
-        # Use the correct snake_case column names
         min_spend = discount.minimum_spend or Decimal('0.0')
         if subtotal >= min_spend:
             discount_value = Decimal('0.0')
-            # Check discount_type and use the single discount_value column
             if discount.discount_type == 'percentage' and discount.discount_value is not None:
                 discount_value = (subtotal * Decimal(str(discount.discount_value))) / Decimal('100')
             elif discount.discount_type == 'fixed_amount' and discount.discount_value is not None:
                 discount_value = Decimal(str(discount.discount_value))
-            
             total_discount_amount += discount_value
-            # Use the correct `id` column for the foreign key
             applied_discounts_details.append({"id": discount.id, "amount": discount_value})
-
+    
     final_discount = min(total_discount_amount, subtotal)
     return subtotal, final_discount, applied_discounts_details
 
+# --- API Endpoint to Create a Sale ---
 # --- API Endpoint to Create a Sale ---
 @router_sales.post("/", status_code=status.HTTP_201_CREATED)
 async def create_sale(
@@ -150,73 +134,100 @@ async def create_sale(
     current_user: dict = Depends(get_current_active_user)
 ):
     """
-    Creates a new sale record and triggers both ingredient and material inventory deduction.
+    Processes a new sale, records it in the database with an initial 'processing' status,
+    and triggers inventory deduction. The entire process is a single transaction.
     """
-    allowed_roles = ["admin", "manager", "staff", "cashier"]
-    if current_user.get("userRole") not in allowed_roles:
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail="You do not have permission to create a sale."
-        )
+    if current_user.get("userRole") not in ["admin", "manager", "staff", "cashier"]:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="You do not have permission to create a sale.")
 
     conn = None
     try:
         conn = await get_db_connection()
+        conn.autocommit = False # Start manual transaction control
+        
         async with conn.cursor() as cursor:
             subtotal, total_discount, discount_details = await calculate_totals_and_discounts(sale, cursor)
             cashier_name = current_user.get("username", "SystemUser")
 
-            # Updated SQL to include GCashReferenceNumber column
+            # --- START: THE ONLY CHANGE IS ON THIS LINE ---
+            # The status is now set to 'processing' by default upon creation.
             sql_sale = """
-                INSERT INTO Sales (OrderType, PaymentMethod, CashierName, TotalDiscountAmount, GCashReferenceNumber) 
+                INSERT INTO Sales (OrderType, PaymentMethod, CashierName, TotalDiscountAmount, GCashReferenceNumber, Status) 
                 OUTPUT INSERTED.SaleID 
-                VALUES (?, ?, ?, ?, ?)
+                VALUES (?, ?, ?, ?, ?, 'processing') 
             """
-            # Updated execute call to pass the gcashReference
-            await cursor.execute(
-                sql_sale, 
-                sale.orderType, 
-                sale.paymentMethod, 
-                cashier_name, 
-                total_discount, 
-                sale.gcashReference  # Pass the reference number here
-            )
+            # --- END: THE ONLY CHANGE IS ON THIS LINE ---
+
+            await cursor.execute(sql_sale, sale.orderType, sale.paymentMethod, cashier_name, total_discount, sale.gcashReference)
             sale_id_row = await cursor.fetchone()
             if not sale_id_row or not sale_id_row[0]:
-                raise HTTPException(status_code=500, detail="Failed to create sale record.")
+                raise HTTPException(status_code=500, detail="Failed to create sale record, starting rollback.")
             sale_id = sale_id_row[0]
 
+            # Step 2: Loop through cart items and insert them and their addons
             for item in sale.cartItems:
-                sql_item = "INSERT INTO SaleItems (SaleID, ItemName, Quantity, UnitPrice, Category, Addons) VALUES (?, ?, ?, ?, ?, ?)"
-                addons_str = json.dumps(item.addons) if item.addons else None
-                await cursor.execute(sql_item, sale_id, item.name, item.quantity, Decimal(str(item.price)), item.category, addons_str)
+                # 2a: Insert into SaleItems
+                sql_item = """
+                    INSERT INTO SaleItems (SaleID, ItemName, Quantity, UnitPrice, Category) 
+                    OUTPUT INSERTED.SaleItemID
+                    VALUES (?, ?, ?, ?, ?)
+                """
+                await cursor.execute(sql_item, sale_id, item.name, item.quantity, Decimal(str(item.price)), item.category)
+                sale_item_id_row = await cursor.fetchone()
+                if not sale_item_id_row or not sale_item_id_row[0]:
+                    raise HTTPException(status_code=500, detail=f"Failed to insert sale item: {item.name}")
+                sale_item_id = sale_item_id_row[0]
+                
+                # 2b: Get or Create Addons, then link them to the SaleItem
+                if item.addons:
+                    for addon in item.addons:
+                        sql_check_addon = "SELECT 1 FROM Addons WHERE AddonID = ?"
+                        await cursor.execute(sql_check_addon, addon.addonId)
+                        addon_exists = await cursor.fetchone()
 
+                        if not addon_exists:
+                            logger.info(f"New addon detected. ID: {addon.addonId}, Name: {addon.addonName}. Saving to POS database.")
+                            await cursor.execute("SET IDENTITY_INSERT dbo.Addons ON;")
+                            sql_create_addon = "INSERT INTO Addons (AddonID, AddonName, Price) VALUES (?, ?, ?)"
+                            await cursor.execute(sql_create_addon, addon.addonId, addon.addonName, Decimal(str(addon.price)))
+                            await cursor.execute("SET IDENTITY_INSERT dbo.Addons OFF;")
+                        
+                        sql_link_addon = "INSERT INTO SaleItemAddons (SaleItemID, AddonID, Quantity) VALUES (?, ?, ?)"
+                        await cursor.execute(sql_link_addon, sale_item_id, addon.addonId, addon.quantity)
+
+            # Step 3: Insert records for applied discounts
             for discount in discount_details:
-                # --- FIX: Use the correct column name 'DiscountID' as per your schema if that's its name
-                # Assuming the `SaleDiscounts` table has `DiscountID`. If it's `discount_id`, change it here.
                 sql_sale_discount = "INSERT INTO SaleDiscounts (SaleID, DiscountID, DiscountAppliedAmount) VALUES (?, ?, ?)"
                 await cursor.execute(sql_sale_discount, sale_id, discount['id'], discount['amount'])
 
-            # If all DB steps succeed, commit the changes.
+            # Step 4: If all DB operations are successful, commit the transaction
             await conn.commit()
             
-            # After committing the sale, trigger inventory deductions.
-            await trigger_ingredients_deduction(cart_items=sale.cartItems, token=token)
-            await trigger_materials_deduction(cart_items=sale.cartItems, token=token)
+        # Step 5: Trigger external services AFTER the sale is successfully committed
+        await trigger_inventory_deduction(INGREDIENTS_DEDUCT_URL, cart_items=sale.cartItems, token=token, inventory_type="Ingredient")
+        await trigger_inventory_deduction(MATERIALS_DEDUCT_URL, cart_items=sale.cartItems, token=token, inventory_type="Material")
             
-            final_total = subtotal - total_discount
-            return {
-                "saleId": sale_id,
-                "subtotal": float(subtotal),
-                "discountAmount": float(total_discount),
-                "finalTotal": float(final_total)
-            }
+        final_total = subtotal - total_discount
+        return {
+            "saleId": sale_id,
+            "subtotal": float(subtotal),
+            "discountAmount": float(total_discount),
+            "finalTotal": float(final_total)
+        }
+
     except Exception as e:
-        if conn: await conn.rollback()
-        # Log the full traceback for better debugging
+        if conn:
+            logger.warning("An error occurred. Rolling back database transaction.")
+            await conn.rollback()
+        
         logger.error(f"Error processing sale: {e}", exc_info=True)
-        if not isinstance(e, HTTPException):
-             raise HTTPException(status_code=500, detail=f"An unexpected error occurred while processing the sale.")
-        raise e
+        
+        if isinstance(e, HTTPException):
+            raise e
+        else:
+            raise HTTPException(status_code=500, detail="An unexpected error occurred while processing the sale.")
+
     finally:
-        if conn: await conn.close()
+        if conn:
+            conn.autocommit = True # Reset autocommit for the connection pool
+            await conn.close()

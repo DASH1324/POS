@@ -3,9 +3,8 @@ import Navbar from '../navbar';
 import CartPanel from './cartPanel.js';
 import './menu.css';
 
-// --- MODIFICATION: Updated API base URL to the correct port for the session backend ---
 const API_BASE_URL = 'http://127.0.0.1:9001/api'; 
-const PRODUCTS_API_URL = 'http://127.0.0.1:8001'; // Assuming products still come from 8001
+const PRODUCTS_API_URL = 'http://127.0.0.1:8001';
 
 function Menu() {
   // State for UI and Cart
@@ -14,7 +13,7 @@ function Menu() {
   const [isCartOpen, setIsCartOpen] = useState(false);
 
   // Initial cash modal states are maintained
-  const [showInitialCashModal, setShowInitialCashModal] = useState(false); // Default to false
+  const [showInitialCashModal, setShowInitialCashModal] = useState(false);
   const [initialCash, setInitialCash] = useState('');
   const [initialCashError, setInitialCashError] = useState('');
 
@@ -65,10 +64,8 @@ function Menu() {
       }
       
       try {
-        // --- MODIFICATION: Check for initial cash status from the database ---
         await checkCashierSession(token, username);
         
-        // Fetch product data from the products service
         const headers = { 'Authorization': `Bearer ${token}` };
         const [detailsResponse, productsResponse] = await Promise.all([
           fetch(`${PRODUCTS_API_URL}/is_products/products/details/`, { headers }),
@@ -92,7 +89,9 @@ function Menu() {
 
         const placeholderImage = 'https://images.unsplash.com/photo-1509042239860-f550ce710b93';
         
+        // --- MODIFICATION: Capture ProductID and HasAddOns from the backend response ---
         const mappedProducts = apiDetails.map(p => ({
+          id: p.ProductID,          // <-- ADDED: Store the product ID
           name: p.ProductName,
           description: p.Description,
           price: p.Price,
@@ -100,6 +99,7 @@ function Menu() {
           status: p.Status,
           image: imageMap[p.ProductName] || placeholderImage, 
           sizes: p.Sizes,
+          hasAddons: p.HasAddOns,   // <-- ADDED: Store the flag for addon availability
         }));
         setProducts(mappedProducts);
 
@@ -123,19 +123,16 @@ function Menu() {
 
   }, []);
   
-  // --- NEW FUNCTION: To check session status from backend ---
   const checkCashierSession = async (token, cashierName) => {
     try {
       const response = await fetch(`${API_BASE_URL}/session/status?cashier_name=${encodeURIComponent(cashierName)}`, {
         headers: { 'Authorization': `Bearer ${token}` }
       });
       if (!response.ok) {
-        // If the status check fails (e.g., 404, 500), assume we need to show the modal to be safe.
         const errData = await response.json();
         throw new Error(errData.detail || 'Failed to check cashier session.');
       }
       const data = await response.json();
-      // If the cashier does NOT have an active session, show the modal.
       if (!data.hasActiveSession) {
         setShowInitialCashModal(true);
       }
@@ -144,7 +141,6 @@ function Menu() {
       setError("Could not verify session status. Please try refreshing.");
     }
   };
-
 
   useEffect(() => {
     setIsCartOpen(cartItems.length > 0);
@@ -163,20 +159,24 @@ function Menu() {
 
   const filteredProducts = filterProducts();
 
+  // --- MODIFICATION: Updated addToCart to use an array for addons ---
   const addToCart = (product) => {
     if (product.status === 'Unavailable') return;
-    const defaultAddons = { espressoShots: 0, seaSaltCream: 0, syrupSauces: 0 };
-    const existingIndex = cartItems.findIndex(item => item.name === product.name);
+    
+    // We only merge items if the product being added has no custom addons selected yet.
+    // An item with addons will always be treated as a unique entry.
+    const existingIndex = cartItems.findIndex(item => item.id === product.id && (!item.addons || item.addons.length === 0));
+    
     if (existingIndex !== -1) {
       const updatedCart = [...cartItems];
       updatedCart[existingIndex].quantity += 1;
       setCartItems(updatedCart);
     } else {
-      setCartItems([...cartItems, { ...product, quantity: 1, addons: defaultAddons }]);
+      // Initialize with an empty addons array, ready for customization
+      setCartItems([...cartItems, { ...product, quantity: 1, addons: [] }]);
     }
   };
 
-  // --- MODIFICATION: This function now performs the API call to the backend ---
   const handleInitialCashSubmit = async (e) => {
     e.preventDefault();
     const amount = parseFloat(initialCash);
@@ -192,7 +192,6 @@ function Menu() {
         throw new Error('Authentication token not found. Please log in again.');
       }
       
-      // The backend expects 'x-www-form-urlencoded', so we use FormData.
       const formData = new FormData();
       formData.append('initial_cash', amount);
 
@@ -200,7 +199,6 @@ function Menu() {
         method: 'POST',
         headers: { 
           'Authorization': `Bearer ${token}` 
-          // 'Content-Type' is not set here; the browser sets it automatically with the boundary for FormData
         },
         body: formData,
       });
@@ -210,7 +208,6 @@ function Menu() {
         throw new Error(errorData.detail || 'Failed to submit initial cash.');
       }
       
-      // If the API call is successful, close the modal.
       console.log(`Initial cash of ₱${amount.toFixed(2)} submitted successfully.`);
       setShowInitialCashModal(false);
       
@@ -221,11 +218,7 @@ function Menu() {
 
   const ProductList = ({ products, addToCart }) => (
     <div className="menu-product-grid">
-      {/* The .map() function where the error occurs */}
       {products.map(product => (
-        // --- THIS IS THE FIX ---
-        // We create a unique key by combining the product's category and name.
-        // This changes the key from "Matcha" to something like "Hot Drinks-Matcha", which is unique.
         <div key={`${product.category}-${product.name}`} className="menu-product-item">
           {product.status === 'Unavailable' && (
             <div className="menu-product-unavailable-overlay">
@@ -257,13 +250,10 @@ function Menu() {
     </div>
   );
 
-
   const renderMainContent = () => {
     if (isLoading) return <div className="menu-status-container">Loading Products...</div>;
-    // We prioritize showing the login/auth error over other messages
     if (error && error.includes("Authorization Error")) return <div className="menu-status-container">{error}</div>;
     if (error && error.includes("session is invalid")) return <div className="menu-status-container">{error}</div>;
-    // Show a different error if it's just about product fetching
     if (error) return <div className="menu-status-container">Error: {error}</div>;
     if (filteredProducts.length > 0) {
       return (
@@ -358,7 +348,6 @@ function Menu() {
         setOrderType={setOrderType}
         paymentMethod={paymentMethod}
         setPaymentMethod={setPaymentMethod}
-        addonPrices={{ espressoShots: 50, seaSaltCream: 30, syrupSauces: 20 }}
       />
     </div>
   );

@@ -13,6 +13,7 @@ import {
 
 const SALES_API_URL = 'http://127.0.0.1:9000';
 const DISCOUNTS_API_URL = 'http://127.0.0.1:9002';
+const PRODUCTS_API_URL = 'http://127.0.0.1:8001'; // <-- NEW: API URL for products
 
 const CartPanel = ({
   cartItems,
@@ -22,20 +23,20 @@ const CartPanel = ({
   setOrderType,
   paymentMethod,
   setPaymentMethod,
-  addonPrices
 }) => {
-  // Define drink categories
-  const drinkCategories = [
-    'Barista Choice', 'Specialty Coffee', 'Premium Coffee', 'Non-Coffee',
-    'Frappe', 'Sparkling Series', 'Milktea'
-  ];
-
-  const isDrinkItem = (item) => drinkCategories.includes(item.category);
+  // --- REMOVED: Hardcoded drink categories are no longer needed ---
 
   // Component states
   const [showAddonsModal, setShowAddonsModal] = useState(false);
   const [selectedItemIndex, setSelectedItemIndex] = useState(null);
-  const [addons, setAddons] = useState({ espressoShots: 0, seaSaltCream: 0, syrupSauces: 0 });
+  
+  // --- MODIFIED: Addons state is now an array to handle dynamic data ---
+  const [addons, setAddons] = useState([]); 
+  
+  // --- NEW: States for fetching and storing available add-ons ---
+  const [availableAddons, setAvailableAddons] = useState([]);
+  const [isAddonsLoading, setIsAddonsLoading] = useState(false);
+
   const [showDiscountsModal, setShowDiscountsModal] = useState(false);
   const [appliedDiscounts, setAppliedDiscounts] = useState([]);
   const [stagedDiscounts, setStagedDiscounts] = useState([]);
@@ -47,38 +48,26 @@ const CartPanel = ({
   const [error, setError] = useState(null);
   const [showConfirmation, setShowConfirmation] = useState(false);
 
-  // Fetch active discounts from the backend when the cart is opened
   useEffect(() => {
     const fetchDiscounts = async () => {
-      if (!isCartOpen) {
-        return;
-      }
-
+      if (!isCartOpen) return;
       setIsLoading(true);
       setError(null);
-      
       const token = localStorage.getItem('authToken');
       if (!token) {
         setError("Authentication error. Please log in to view discounts.");
         setIsLoading(false);
         return;
       }
-
       try {
         const response = await fetch(`${DISCOUNTS_API_URL}/api/discounts/`, {
-          headers: {
-            'Authorization': `Bearer ${token}`
-          }
+          headers: { 'Authorization': `Bearer ${token}` }
         });
-
         if (!response.ok) {
             const errorData = await response.json();
             throw new Error(errorData.detail || 'Failed to fetch discounts. Please log in again.');
         }
-
         const data = await response.json();
-
-        // --- MODIFIED: Adapt to the richer data structure from your backend ---
         const mappedAndFilteredDiscounts = data
           .filter(d => d.status === 'active')
           .map(d => ({
@@ -87,69 +76,63 @@ const CartPanel = ({
             type: d.type === 'fixed_amount' ? 'fixed' : d.type,
             value: parseFloat(d.discount.replace(/[^0-9.]/g, '')),
             minAmount: d.minSpend || 0,
-            // --- NEW: Store the applicability rules from the backend ---
             applicationType: d.application_type,
             applicableProducts: d.applicable_products,
             applicableCategories: d.applicable_categories,
           }));
-
         setAvailableDiscounts(mappedAndFilteredDiscounts);
-
       } catch (err) {
         setError(err.message);
-        console.error("Error fetching discounts:", err);
       } finally {
         setIsLoading(false);
       }
     };
-    
     fetchDiscounts();
-
   }, [isCartOpen]);
 
-  // --- NEW: Helper function to check if a discount is applicable to the current cart ---
   const isDiscountApplicable = (discount) => {
     const subtotal = getSubtotal();
-    
-    // 1. Check minimum spend first.
-    if (subtotal < discount.minAmount) {
-      return false;
-    }
-
-    // 2. Check the application type based on the rules.
+    if (subtotal < discount.minAmount) return false;
     switch (discount.applicationType) {
-      case 'all_products':
-        return true;
-      
-      case 'specific_products':
-        // Returns true if at least one item in the cart matches a product in the discount's list.
-        return cartItems.some(cartItem => 
-          discount.applicableProducts.includes(cartItem.name)
-        );
-        
-      case 'specific_categories':
-        // Returns true if at least one item in the cart matches a category in the discount's list.
-        return cartItems.some(cartItem => 
-          discount.applicableCategories.includes(cartItem.category)
-        );
-
-      default:
-        // If the application type is unknown, it's not applicable.
-        return false;
+      case 'all_products': return true;
+      case 'specific_products': return cartItems.some(item => discount.applicableProducts.includes(item.name));
+      case 'specific_categories': return cartItems.some(item => discount.applicableCategories.includes(item.category));
+      default: return false;
     }
   };
 
+  // --- MODIFICATION: Fetches available add-ons for the selected product ---
+  const openAddonsModal = async (itemIndex) => {
+    const item = cartItems[itemIndex];
+    if (!item || !item.id) return;
 
-  const openAddonsModal = (itemIndex) => {
     setSelectedItemIndex(itemIndex);
-    setAddons(cartItems[itemIndex].addons || { espressoShots: 0, seaSaltCream: 0, syrupSauces: 0 });
+    setIsAddonsLoading(true);
     setShowAddonsModal(true);
+
+    const token = localStorage.getItem('authToken');
+    try {
+        const response = await fetch(`${PRODUCTS_API_URL}/is_products/products/${item.id}/available_addons`, {
+            headers: { 'Authorization': `Bearer ${token}` }
+        });
+        if (!response.ok) throw new Error('Could not fetch add-ons.');
+        
+        const data = await response.json();
+        setAvailableAddons(data);
+        setAddons(item.addons || []); // Pre-populate with current addons
+    } catch (error) {
+        console.error("Failed to fetch available add-ons:", error);
+        closeAddonsModal();
+    } finally {
+        setIsAddonsLoading(false);
+    }
   };
 
   const closeAddonsModal = () => {
     setShowAddonsModal(false);
     setSelectedItemIndex(null);
-    setAddons({ espressoShots: 0, seaSaltCream: 0, syrupSauces: 0 });
+    setAddons([]);
+    setAvailableAddons([]);
   };
 
   const openDiscountsModal = () => {
@@ -168,46 +151,35 @@ const CartPanel = ({
     setStagedDiscounts([]);
   };
 
-  // --- MODIFIED: This function now enforces the applicability rules ---
   const toggleStagedDiscount = (discountId) => {
     const discount = availableDiscounts.find(d => d.id === discountId);
-    
-    // If the discount is not found or is not applicable, do nothing.
-    // This prevents the user from checking the box.
-    if (!discount || !isDiscountApplicable(discount)) {
-      return; 
-    }
+    if (!discount || !isDiscountApplicable(discount)) return; 
+    setStagedDiscounts(prev => prev.includes(discountId) ? prev.filter(id => id !== discountId) : [...prev, discountId]);
+  };
 
-    // If the check passes, proceed with the original logic.
-    setStagedDiscounts(prev => {
-      if (prev.includes(discountId)) {
-        return prev.filter(id => id !== discountId);
-      } else {
-        return [...prev, discountId];
-      }
+  // --- MODIFICATION: Handles updates for the new addons array structure ---
+  const updateAddons = (addonId, addonName, price, quantity) => {
+    setAddons(prev => {
+        const existingIndex = prev.findIndex(a => a.addonId === addonId);
+        let newAddons = [...prev];
+        if (quantity <= 0) {
+            return newAddons.filter(a => a.addonId !== addonId);
+        }
+        if (existingIndex > -1) {
+            newAddons[existingIndex] = { ...newAddons[existingIndex], quantity };
+        } else {
+            newAddons.push({ addonId, addonName, price, quantity });
+        }
+        return newAddons;
     });
   };
 
-  const updateAddons = (addonType, value) => {
-    setAddons(prev => ({ ...prev, [addonType]: Math.max(0, value) }));
-  };
-
+  // --- MODIFICATION: Saves the addons array to the cart item ---
   const saveAddons = () => {
     if (selectedItemIndex !== null) {
-      const currentItem = cartItems[selectedItemIndex];
-      const isSameAddons = (a, b) => (a.espressoShots === b.espressoShots && a.seaSaltCream === b.seaSaltCream && a.syrupSauces === b.syrupSauces);
-      const existingIndex = cartItems.findIndex((item, index) => (index !== selectedItemIndex && item.name === currentItem.name && isSameAddons(item.addons || { espressoShots: 0, seaSaltCream: 0, syrupSauces: 0 }, addons)));
-
-      if (existingIndex !== -1) {
-        const updatedCart = [...cartItems];
-        updatedCart[existingIndex].quantity += currentItem.quantity;
-        updatedCart.splice(selectedItemIndex, 1);
-        setCartItems(updatedCart);
-      } else {
-        const updatedCart = [...cartItems];
-        updatedCart[selectedItemIndex].addons = { ...addons };
-        setCartItems(updatedCart);
-      }
+      const updatedCart = [...cartItems];
+      updatedCart[selectedItemIndex].addons = addons;
+      setCartItems(updatedCart);
     }
     closeAddonsModal();
   };
@@ -223,32 +195,30 @@ const CartPanel = ({
     }
   }, [isCartOpen, setCartItems, setPaymentMethod, setOrderType]);
 
-  const getAddonPrice = (addon, quantity) => (addonPrices?.[addon] || 0) * quantity;
+  // --- MODIFICATION: Calculates price from the addons array ---
   const getTotalAddonsPrice = (itemAddons) => {
-    if (!itemAddons) return 0;
-    return Object.entries(itemAddons).reduce((total, [addon, quantity]) => total + getAddonPrice(addon, quantity), 0);
+    if (!Array.isArray(itemAddons)) return 0;
+    return itemAddons.reduce((total, addon) => total + (addon.price * addon.quantity), 0);
   };
+  
   const getSubtotal = () => cartItems.reduce((acc, item) => (acc + (item.price * item.quantity) + (getTotalAddonsPrice(item.addons) * item.quantity)), 0);
 
-  // --- MODIFIED: Create a single, reusable function for discount calculation ---
   const calculateDiscount = (discountList) => {
     const subtotal = getSubtotal();
-    let totalDiscount = discountList.reduce((acc, discountId) => {
+    return Math.min(subtotal, discountList.reduce((acc, discountId) => {
         const discount = availableDiscounts.find(d => d.id === discountId);
-        // Only include the discount in the calculation if it's currently applicable.
         if (discount && isDiscountApplicable(discount)) {
             if (discount.type === 'percentage') return acc + (subtotal * parseFloat(discount.value)) / 100;
             if (discount.type === 'fixed') return acc + parseFloat(discount.value);
         }
         return acc;
-    }, 0);
-    return Math.min(totalDiscount, subtotal);
+    }, 0));
   };
 
   const getDiscount = () => calculateDiscount(appliedDiscounts);
   const getStagedDiscount = () => calculateDiscount(stagedDiscounts);
-
   const getTotal = () => Math.max(0, getSubtotal() - getDiscount());
+
   const updateQuantity = (index, amount) => {
     setCartItems(prev => {
         const updated = [...prev];
@@ -256,6 +226,7 @@ const CartPanel = ({
         return updated[index].quantity <= 0 ? updated.filter((_, i) => i !== index) : updated;
     });
   };
+
   const removeFromCart = (index) => setCartItems(prev => prev.filter((_, i) => i !== index));
   
   const handleProcessTransaction = () => {
@@ -283,64 +254,40 @@ const CartPanel = ({
   const confirmTransaction = async (gcashRef = null) => {
     setIsProcessing(true);
     setError(null);
-    
     const token = localStorage.getItem('authToken');
     if (!token) {
         alert("Authentication error. Please log in again.");
         setIsProcessing(false);
         return;
     }
-
-    const appliedDiscountNames = appliedDiscounts.map(discountId => {
-        const discount = availableDiscounts.find(d => d.id === discountId);
-        return discount ? discount.name : null;
-    }).filter(name => name !== null);
-
+    const appliedDiscountNames = appliedDiscounts.map(id => availableDiscounts.find(d => d.id === id)?.name).filter(Boolean);
     const saleData = {
-        cartItems: cartItems.map(item => ({...item, addons: item.addons || {}})),
-        orderType: orderType,
-        paymentMethod: paymentMethod,
-        appliedDiscounts: appliedDiscountNames,
-        gcashReference: gcashRef
+        cartItems: cartItems.map(item => ({...item, addons: item.addons || [] })),
+        orderType, paymentMethod, appliedDiscounts: appliedDiscountNames, gcashReference: gcashRef
     };
-
-    console.log("Submitting the following data to backend:", JSON.stringify(saleData, null, 2));
 
     try {
         const response = await fetch(`${SALES_API_URL}/auth/sales/`, {
             method: 'POST',
-            headers: {
-                'Content-Type': 'application/json',
-                'Authorization': `Bearer ${token}`
-            },
+            headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
             body: JSON.stringify(saleData)
         });
-
         const responseData = await response.json();
-        if (!response.ok) {
-          throw new Error(responseData.detail || 'Failed to process transaction.');
-        }
-
+        if (!response.ok) throw new Error(responseData.detail || 'Failed to process transaction.');
         setShowTransactionSummary(false);
         setShowGCashReference(false);
         setShowConfirmation(true);
-        // Clear cart after successful transaction
         setCartItems([]);
         setAppliedDiscounts([]);
-
     } catch (err) {
         setError(err.message);
         alert(`Error: ${err.message}`);
-        console.error("Transaction failed:", err);
     } finally {
         setIsProcessing(false);
     }
   };
 
-  const getAppliedDiscountNames = () => appliedDiscounts.map(discountId => {
-    const discount = availableDiscounts.find(d => d.id === discountId);
-    return discount ? discount.name : '';
-  }).filter(name => name !== '');
+  const getAppliedDiscountNames = () => appliedDiscounts.map(id => availableDiscounts.find(d => d.id === id)?.name).filter(Boolean);
 
   return (
     <>
@@ -353,20 +300,25 @@ const CartPanel = ({
                 </div>
                 <div className="cart-items">
                     {cartItems.length > 0 ? (cartItems.map((item, index) => (
-                        <div key={`${item.name}-${index}`} className="cart-item">
+                        <div key={`${item.id}-${index}`} className="cart-item">
                             <img src={item.image} alt={item.name} />
                             <div className="item-details">
                                 <div className="item-name">{item.name}</div>
-                                {isDrinkItem(item) && (
+                                
+                                {/* --- MODIFICATION: Conditionally render link based on backend flag --- */}
+                                {item.hasAddons && (
                                     <div className="addons-link" onClick={() => openAddonsModal(index)}>Add ons</div>
                                 )}
-                                {item.addons && getTotalAddonsPrice(item.addons) > 0 && (
+                                
+                                {/* --- MODIFICATION: Dynamically display addon summary from array --- */}
+                                {item.addons && item.addons.length > 0 && (
                                     <div className="addons-summary">
-                                        {item.addons.espressoShots > 0 && <span>+{item.addons.espressoShots} Espresso</span>}
-                                        {item.addons.seaSaltCream > 0 && <span>+{item.addons.seaSaltCream} Sea Salt Cream</span>}
-                                        {item.addons.syrupSauces > 0 && <span>+{item.addons.syrupSauces} Syrups</span>}
+                                        {item.addons.map(addon => (
+                                            <span key={addon.addonId}>+{addon.quantity} {addon.addonName}</span>
+                                        ))}
                                     </div>
                                 )}
+
                                 <div className="flex-spacer" />
                                 <div className="qty-price">
                                     <button onClick={() => updateQuantity(index, -1)}><FiMinus /></button>
@@ -380,19 +332,14 @@ const CartPanel = ({
                             </button>
                         </div>
                     ))) : (
-                        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', height: '200px', color: '#999', fontSize: '14px' }}>
+                        <div style={{ textAlign: 'center', padding: '80px 20px', color: '#999' }}>
                             Your cart is empty.
                         </div>
                     )}
                 </div>
                 <div className="discount-section">
                     <div className="discount-input-wrapper" onClick={openDiscountsModal}>
-                        <input 
-                            type="text" 
-                            placeholder="Discounts and Promotions" 
-                            value={getAppliedDiscountNames().join(', ')} 
-                            readOnly 
-                        />
+                        <input type="text" placeholder="Discounts and Promotions" value={getAppliedDiscountNames().join(', ')} readOnly />
                     </div>
                     <div className="summary">
                         <div className="line"><span>Subtotal:</span><span>₱{getSubtotal().toFixed(2)}</span></div>
@@ -405,12 +352,10 @@ const CartPanel = ({
                     <h3>Payment Method</h3>
                     <div className="payment-options">
                         <button className={`cash ${paymentMethod === 'Cash' ? 'active' : ''}`} onClick={() => setPaymentMethod('Cash')}>
-                            <FontAwesomeIcon icon={faMoneyBills} />
-                            <span>Cash</span>
+                            <FontAwesomeIcon icon={faMoneyBills} /><span>Cash</span>
                         </button>
                         <button className={`gcash ${paymentMethod === 'GCash' ? 'active' : ''}`} onClick={() => setPaymentMethod('GCash')}>
-                            <FontAwesomeIcon icon={faQrcode} />
-                            <span>GCash</span>
+                            <FontAwesomeIcon icon={faQrcode} /><span>GCash</span>
                         </button>
                     </div>
                 </div>
@@ -420,14 +365,15 @@ const CartPanel = ({
             </div>
         </div>
 
-        {/* Modal Components */}
+        {/* --- MODIFICATION: Pass new dynamic props to AddonsModal --- */}
         <AddonsModal
           showAddonsModal={showAddonsModal}
           closeAddonsModal={closeAddonsModal}
           addons={addons}
+          availableAddons={availableAddons}
+          isLoading={isAddonsLoading}
           updateAddons={updateAddons}
           saveAddons={saveAddons}
-          addonPrices={addonPrices}
         />
 
         <DiscountsModal
@@ -441,8 +387,6 @@ const CartPanel = ({
           applyDiscounts={applyDiscounts}
           getStagedDiscount={getStagedDiscount}
           getSubtotal={getSubtotal}
-          // Note: isDiscountApplicable is not passed to the modal
-          // because the enforcement happens in the toggleStagedDiscount handler
         />
 
         <TransactionSummaryModal

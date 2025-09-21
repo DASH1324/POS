@@ -73,29 +73,44 @@ async def get_current_session_sales_metrics(
             )
             session_row = await cursor.fetchone()
 
-            # If no active session, return all zeros
             if not session_row:
                 return SalesMetricsResponse(totalSales=0.0, cashSales=0.0, gcashSales=0.0, itemsSold=0)
 
             session_start_time = session_row.SessionStart
 
-            # --- THIS IS THE FIX ---
             # Step 2: Calculate sales made only AFTER the session started
+            # THIS QUERY IS NOW CORRECTED TO INCLUDE ADDON PRICES
             sql = """
+                WITH ItemTotalPrices AS (
+                    SELECT
+                        si.SaleID,
+                        si.Quantity,
+                        -- Calculate total price for one item line, including addons
+                        (si.UnitPrice * si.Quantity) + ISNULL(SUM(a.Price * sia.Quantity), 0) AS LineTotal
+                    FROM SaleItems si
+                    LEFT JOIN SaleItemAddons sia ON si.SaleItemID = sia.SaleItemID
+                    LEFT JOIN Addons a ON sia.AddonID = a.AddonID
+                    GROUP BY si.SaleItemID, si.SaleID, si.UnitPrice, si.Quantity
+                )
                 SELECT
-                    ISNULL(SUM(si.UnitPrice * si.Quantity), 0) AS TotalSales,
-                    ISNULL(SUM(CASE WHEN s.PaymentMethod = 'Cash' THEN si.UnitPrice * si.Quantity ELSE 0 END), 0) AS CashSales,
-                    ISNULL(SUM(CASE WHEN s.PaymentMethod = 'GCash' THEN si.UnitPrice * si.Quantity ELSE 0 END), 0) AS GcashSales,
-                    ISNULL(SUM(si.Quantity), 0) AS ItemsSold
-                FROM Sales AS s
-                JOIN SaleItems AS si ON s.SaleID = si.SaleID
+                    ISNULL(SUM(itp.LineTotal), 0) AS TotalSales,
+                    ISNULL(SUM(CASE WHEN s.PaymentMethod = 'Cash' THEN itp.LineTotal ELSE 0 END), 0) AS CashSales,
+                    ISNULL(SUM(CASE WHEN s.PaymentMethod = 'GCash' THEN itp.LineTotal ELSE 0 END), 0) AS GcashSales,
+                    -- ItemsSold calculation remains the same, summing the quantity of main items
+                    ISNULL((SELECT SUM(Quantity) FROM SaleItems WHERE SaleID IN (
+                        SELECT SaleID FROM Sales WHERE Status = 'completed' AND CashierName = ? AND CreatedAt >= ?
+                    )), 0) AS ItemsSold
+                FROM Sales s
+                JOIN ItemTotalPrices itp ON s.SaleID = itp.SaleID
                 WHERE 
                     s.Status = 'completed'
                     AND s.CashierName = ?
                     AND s.CreatedAt >= ?;
             """
             
-            await cursor.execute(sql, request.cashierName, session_start_time)
+            # Parameters need to be duplicated for the subquery and the main query
+            params = (request.cashierName, session_start_time, request.cashierName, session_start_time)
+            await cursor.execute(sql, params)
             row = await cursor.fetchone()
             
             if row:
@@ -105,7 +120,6 @@ async def get_current_session_sales_metrics(
                     gcashSales=float(row.GcashSales),
                     itemsSold=int(row.ItemsSold)
                 )
-            # This 'else' is unlikely to be hit due to ISNULL, but is safe to have
             return SalesMetricsResponse(totalSales=0.0, cashSales=0.0, gcashSales=0.0, itemsSold=0)
 
     except Exception as e:
@@ -123,7 +137,6 @@ async def get_current_session_sales_metrics(
     summary="Get ALL of Today's Sales Metrics for a Specific Cashier"
 )
 async def get_todays_sales_metrics(
-    # ... (This endpoint remains unchanged) ...
     request: SalesMetricsRequest,
     current_user: dict = Depends(get_current_active_user)
 ):
@@ -138,21 +151,36 @@ async def get_todays_sales_metrics(
     try:
         conn = await get_db_connection()
         async with conn.cursor() as cursor:
+            # THIS QUERY IS NOW CORRECTED TO INCLUDE ADDON PRICES
             sql = """
+                WITH ItemTotalPrices AS (
+                    SELECT
+                        si.SaleID,
+                        si.Quantity,
+                        (si.UnitPrice * si.Quantity) + ISNULL(SUM(a.Price * sia.Quantity), 0) AS LineTotal
+                    FROM SaleItems si
+                    LEFT JOIN SaleItemAddons sia ON si.SaleItemID = sia.SaleItemID
+                    LEFT JOIN Addons a ON sia.AddonID = a.AddonID
+                    GROUP BY si.SaleItemID, si.SaleID, si.UnitPrice, si.Quantity
+                )
                 SELECT
-                    ISNULL(SUM(si.UnitPrice * si.Quantity), 0) AS TotalSales,
-                    ISNULL(SUM(CASE WHEN s.PaymentMethod = 'Cash' THEN si.UnitPrice * si.Quantity ELSE 0 END), 0) AS CashSales,
-                    ISNULL(SUM(CASE WHEN s.PaymentMethod = 'GCash' THEN si.UnitPrice * si.Quantity ELSE 0 END), 0) AS GcashSales,
-                    ISNULL(SUM(si.Quantity), 0) AS ItemsSold
-                FROM Sales AS s
-                JOIN SaleItems AS si ON s.SaleID = si.SaleID
+                    ISNULL(SUM(itp.LineTotal), 0) AS TotalSales,
+                    ISNULL(SUM(CASE WHEN s.PaymentMethod = 'Cash' THEN itp.LineTotal ELSE 0 END), 0) AS CashSales,
+                    ISNULL(SUM(CASE WHEN s.PaymentMethod = 'GCash' THEN itp.LineTotal ELSE 0 END), 0) AS GcashSales,
+                    ISNULL((SELECT SUM(Quantity) FROM SaleItems WHERE SaleID IN (
+                        SELECT SaleID FROM Sales WHERE Status = 'completed' AND CashierName = ? AND CAST(CreatedAt AS DATE) = CAST(GETDATE() AS DATE)
+                    )), 0) AS ItemsSold
+                FROM Sales s
+                JOIN ItemTotalPrices itp ON s.SaleID = itp.SaleID
                 WHERE 
                     s.Status = 'completed'
                     AND s.CashierName = ?
                     AND CAST(s.CreatedAt AS DATE) = CAST(GETDATE() AS DATE);
             """
             
-            await cursor.execute(sql, request.cashierName)
+            # Parameter is used in the subquery and main query
+            params = (request.cashierName, request.cashierName)
+            await cursor.execute(sql, params)
             row = await cursor.fetchone()
             
             if row:

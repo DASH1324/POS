@@ -1,5 +1,3 @@
-# FILE: cancelled_order.py
-
 from fastapi import APIRouter, HTTPException, status, Depends
 from fastapi.security import OAuth2PasswordBearer
 from pydantic import BaseModel
@@ -16,8 +14,6 @@ from datetime import datetime
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
-# --- Ensure the database module can be found
-# This assumes 'database.py' is in the parent directory of the directory containing this router file.
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 from database import get_db_connection
 
@@ -25,7 +21,6 @@ from database import get_db_connection
 oauth2_scheme = OAuth2PasswordBearer(tokenUrl="http://127.0.0.1:4000/auth/token")
 USER_SERVICE_ME_URL = "http://localhost:4000/auth/users/me"
 
-# --- Define the new router for cancelled orders ---
 router_cancelled_order = APIRouter(
     prefix="/auth/cancelled_orders",
     tags=["Cancelled Orders"]
@@ -33,10 +28,6 @@ router_cancelled_order = APIRouter(
 
 # --- Authorization Helper Function ---
 async def get_current_active_user(token: str = Depends(oauth2_scheme)):
-    """
-    Validates the token, fetches user data, and attaches the raw
-    token to the returned user dictionary for inter-service calls.
-    """
     async with httpx.AsyncClient() as client:
         try:
             response = await client.get(USER_SERVICE_ME_URL, headers={"Authorization": f"Bearer {token}"})
@@ -50,7 +41,6 @@ async def get_current_active_user(token: str = Depends(oauth2_scheme)):
             raise HTTPException(status_code=status.HTTP_503_SERVICE_UNAVAILABLE, detail="Could not connect to the authentication service.")
 
 # --- Pydantic Models ---
-# Models required for the response structure.
 class ProcessingSaleItem(BaseModel):
     name: str
     quantity: int
@@ -70,7 +60,6 @@ class ProcessingOrder(BaseModel):
     GCashReferenceNumber: Optional[str] = None
     orderItems: List[ProcessingSaleItem]
 
-# Model for the request body of the new endpoint.
 class CancelledOrderRequest(BaseModel):
     cashierName: str
 
@@ -84,7 +73,6 @@ async def get_todays_cancelled_orders(
     request: CancelledOrderRequest,
     current_user: dict = Depends(get_current_active_user)
 ):
-    # Only Admin and Manager roles can access this endpoint
     allowed_roles = ["admin", "manager", "cashier"]
     if current_user.get("userRole") not in allowed_roles:
         raise HTTPException(
@@ -96,12 +84,13 @@ async def get_todays_cancelled_orders(
     try:
         conn = await get_db_connection()
         async with conn.cursor() as cursor:
-            # SQL query to get cancelled orders for a specific cashier for today
+            # --- START: CORRECTED SQL QUERY ---
+            # The invalid 'si.Addons' column has been removed.
             sql = """
                 SELECT
                     s.SaleID, s.OrderType, s.PaymentMethod, s.CreatedAt, s.CashierName,
                     s.TotalDiscountAmount, s.Status, s.GCashReferenceNumber,
-                    si.SaleItemID, si.ItemName, si.Quantity, si.UnitPrice, si.Category, si.Addons
+                    si.SaleItemID, si.ItemName, si.Quantity, si.UnitPrice, si.Category
                 FROM Sales AS s
                 JOIN CancelledOrders AS co ON s.SaleID = co.SaleID
                 LEFT JOIN SaleItems AS si ON s.SaleID = si.SaleID
@@ -110,10 +99,11 @@ async def get_todays_cancelled_orders(
                 AND CAST(co.CancelledAt AS DATE) = CAST(GETDATE() AS DATE)
                 ORDER BY co.CancelledAt DESC;
             """
+            # --- END: CORRECTED SQL QUERY ---
+            
             await cursor.execute(sql, request.cashierName)
             rows = await cursor.fetchall()
             
-            # Dictionary to aggregate order items under the same order ID
             orders_dict: Dict[int, dict] = {}
             item_subtotals: Dict[int, Decimal] = {}
             
@@ -138,18 +128,46 @@ async def get_todays_cancelled_orders(
                     item_quantity = row.Quantity or 0
                     item_price = row.UnitPrice or Decimal('0.0')
                     orders_dict[sale_id]["items"] += item_quantity
-                    item_subtotals[sale_id] += item_price * item_quantity
+                    
+                    # Calculate subtotal including addons for the final total
+                    item_total = item_price * item_quantity
+                    
+                    # --- START: NEW ADDON FETCHING LOGIC ---
+                    addons_data = {}
+                    addons_total_price = Decimal('0.0')
+                    
+                    # Query the database to get addons for the current sale item
+                    addons_sql = """
+                        SELECT a.AddonName, a.Price, sia.Quantity
+                        FROM SaleItemAddons sia
+                        JOIN Addons a ON sia.AddonID = a.AddonID
+                        WHERE sia.SaleItemID = ?
+                    """
+                    await cursor.execute(addons_sql, row.SaleItemID)
+                    addon_rows = await cursor.fetchall()
+                    
+                    for addon_row in addon_rows:
+                        addon_price = Decimal(str(addon_row.Price)) * addon_row.Quantity
+                        addons_total_price += addon_price
+                        addons_data[addon_row.AddonName] = {
+                            "price": float(addon_row.Price),
+                            "quantity": addon_row.Quantity
+                        }
+                    
+                    # Add the addon total to the subtotal for this order
+                    item_subtotals[sale_id] += item_total + addons_total_price
+                    # --- END: NEW ADDON FETCHING LOGIC ---
+                    
                     orders_dict[sale_id]["orderItems"].append(
                         ProcessingSaleItem(
                             name=row.ItemName,
                             quantity=item_quantity,
                             price=float(item_price),
                             category=row.Category,
-                            addons=json.loads(row.Addons) if row.Addons else {}
+                            addons=addons_data # Use the addon data we just fetched
                         )
                     )
 
-            # Format the aggregated data into the final response list
             response_list = []
             for sale_id, order_data in orders_dict.items():
                 subtotal = item_subtotals.get(sale_id, Decimal('0.0'))

@@ -12,8 +12,22 @@ function OrderPanel({ order, onClose, isOpen, isStore, onUpdateStatus }) {
 
   if (!order) return null;
 
+  // --- START: MODIFIED LOGIC ---
   const subtotal = order.orderItems.reduce((sum, item) => sum + (item.price * item.quantity), 0);
-  const discount = subtotal - order.total;
+
+  let actualDiscount = 0;
+  let addOnsCost = 0;
+  // Calculate the difference between the final total and the sum of base item prices
+  const difference = order.total - subtotal;
+
+  if (difference < 0) {
+    // If total is LESS than subtotal, it's a real discount
+    actualDiscount = -difference; // Make it a positive number for display
+  } else if (difference > 0) {
+    // If total is MORE than subtotal, it's an add-on cost
+    addOnsCost = difference;
+  }
+  // --- END: MODIFIED LOGIC ---
 
   const handleStoreCancel = () => {
     setEnteredPin("");
@@ -31,21 +45,14 @@ function OrderPanel({ order, onClose, isOpen, isStore, onUpdateStatus }) {
   };
 
   const handlePrintReceipt = () => setShowReceiptModal(true);
-  const confirmPrintReceipt = () => { 
-    setShowReceiptModal(false); 
+  const confirmPrintReceipt = () => {
+    setShowReceiptModal(false);
     const printContents = document.getElementById("orderpanel-print-section").innerHTML;
     const originalContents = document.body.innerHTML;
     document.body.innerHTML = printContents;
     window.print();
     document.body.innerHTML = originalContents;
     window.location.reload();
-  };
-
-  const getDiscountDisplay = () => {
-    if (discount > 0) {
-        return `Discount Applied`;
-    }
-    return 'None';
   };
 
   // Renders the correct set of action buttons based on the order's state
@@ -113,7 +120,6 @@ function OrderPanel({ order, onClose, isOpen, isStore, onUpdateStatus }) {
             );
         }
     } else {
-        // *** CHANGE IS HERE ***
         // Online orders can ONLY be cancelled when they are 'PENDING'
         if (status === 'PENDING') {
             cancelAction = (
@@ -130,7 +136,7 @@ function OrderPanel({ order, onClose, isOpen, isStore, onUpdateStatus }) {
              <button className="orderpanel-btn orderpanel-btn-print" onClick={handlePrintReceipt}>Print Receipt</button>
         );
     }
-    
+
     // Return all applicable buttons in the desired order
     return (
         <>
@@ -179,17 +185,41 @@ function OrderPanel({ order, onClose, isOpen, isStore, onUpdateStatus }) {
           ))}
         </div>
 
+        {/* --- START: UPDATED DISPLAY LOGIC --- */}
         <div className="orderpanel-summary">
             <div className="orderpanel-promotions">
                 <span className="orderpanel-promotions-label">Discounts and Promotions used:</span>
-                <span className="orderpanel-promotions-value">{getDiscountDisplay()}</span>
+                <span className="orderpanel-promotions-value">{actualDiscount > 0 ? 'Discount Applied' : 'None'}</span>
             </div>
             <div className="orderpanel-calculation">
-                <div className="orderpanel-calc-row"><span className="orderpanel-calc-label">Subtotal:</span><span className="orderpanel-calc-value">₱{subtotal.toFixed(2)}</span></div>
-                <div className="orderpanel-calc-row"><span className="orderpanel-calc-label">Discount:</span><span className="orderpanel-calc-value">- ₱{discount.toFixed(2)}</span></div>
-                <div className="orderpanel-calc-row orderpanel-total-row"><span className="orderpanel-calc-label">Total:</span><span className="orderpanel-calc-value">₱{order.total.toFixed(2)}</span></div>
+                <div className="orderpanel-calc-row">
+                    <span className="orderpanel-calc-label">Subtotal:</span>
+                    <span className="orderpanel-calc-value">₱{subtotal.toFixed(2)}</span>
+                </div>
+                
+                {/* Conditionally render Add-ons cost if it exists */}
+                {addOnsCost > 0 && (
+                    <div className="orderpanel-calc-row">
+                        <span className="orderpanel-calc-label">Add-ons:</span>
+                        <span className="orderpanel-calc-value">+ ₱{addOnsCost.toFixed(2)}</span>
+                    </div>
+                )}
+
+                {/* Conditionally render Discount if it exists */}
+                {actualDiscount > 0 && (
+                    <div className="orderpanel-calc-row">
+                        <span className="orderpanel-calc-label">Discount:</span>
+                        <span className="orderpanel-calc-value">- ₱{actualDiscount.toFixed(2)}</span>
+                    </div>
+                )}
+
+                <div className="orderpanel-calc-row orderpanel-total-row">
+                    <span className="orderpanel-calc-label">Total:</span>
+                    <span className="orderpanel-calc-value">₱{order.total.toFixed(2)}</span>
+                </div>
             </div>
         </div>
+        {/* --- END: UPDATED DISPLAY LOGIC --- */}
 
         <div className="orderpanel-actions">
             {renderActionButtons()}
@@ -210,7 +240,7 @@ function OrderPanel({ order, onClose, isOpen, isStore, onUpdateStatus }) {
                 value={enteredPin}
                 onChange={(e) => {
                   const value = e.target.value;
-                  if (/^\d*$/.test(value)) { 
+                  if (/^\d*$/.test(value)) {
                     setEnteredPin(value);
                     setPinError("");
                   }
@@ -244,11 +274,18 @@ function OrderPanel({ order, onClose, isOpen, isStore, onUpdateStatus }) {
                     </div>
                   ))}
                 </div>
+                {/* --- START: UPDATED RECEIPT SUMMARY --- */}
                 <div className="orderpanel-receipt-summary">
                   <div className="orderpanel-receipt-line"><span>Subtotal:</span><span>₱{subtotal.toFixed(2)}</span></div>
-                  <div className="orderpanel-receipt-line"><span>Discount:</span><span>- ₱{discount.toFixed(2)}</span></div>
+                  {addOnsCost > 0 && (
+                    <div className="orderpanel-receipt-line"><span>Add-ons:</span><span>+ ₱{addOnsCost.toFixed(2)}</span></div>
+                  )}
+                  {actualDiscount > 0 && (
+                    <div className="orderpanel-receipt-line"><span>Discount:</span><span>- ₱{actualDiscount.toFixed(2)}</span></div>
+                  )}
                   <div className="orderpanel-receipt-line orderpanel-receipt-total"><strong>Total:</strong><strong>₱{order.total.toFixed(2)}</strong></div>
                 </div>
+                {/* --- END: UPDATED RECEIPT SUMMARY --- */}
                 <div className="orderpanel-receipt-footer">
                   <div className="orderpanel-thankyou">*** THANK YOU ***</div>
                   <div className="orderpanel-served-by">Cashier</div>

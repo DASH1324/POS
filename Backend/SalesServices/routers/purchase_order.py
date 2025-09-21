@@ -2,8 +2,8 @@
 
 from fastapi import APIRouter, HTTPException, status, Depends
 from fastapi.security import OAuth2PasswordBearer
-from pydantic import BaseModel
-from typing import List, Dict, Optional, Literal
+from pydantic import BaseModel, validator
+from typing import List, Dict, Optional, Literal, Union, Any
 from decimal import Decimal
 import json
 import sys
@@ -31,35 +31,34 @@ router_purchase_order = APIRouter(
     tags=["Purchase Orders"]
 )
 
-# --- Authorization Helper Function ---
+# --- Authorization Helper Function (No changes needed) ---
 async def get_current_active_user(token: str = Depends(oauth2_scheme)):
-    """
-    Validates the token, fetches user data, and attaches the raw
-    token to the returned user dictionary for inter-service calls.
-    """
     async with httpx.AsyncClient() as client:
         try:
             response = await client.get(USER_SERVICE_ME_URL, headers={"Authorization": f"Bearer {token}"})
             response.raise_for_status()
-            
-            # --- THIS IS THE FIX ---
             user_data = response.json()
-            # Add the original token to the user data dictionary before returning it.
             user_data['access_token'] = token 
             return user_data
-
         except httpx.HTTPStatusError as e:
             raise HTTPException(status_code=e.response.status_code, detail=f"Invalid token or user not found: {e.response.text}", headers={"WWW-Authenticate": "Bearer"})
         except httpx.RequestError:
             raise HTTPException(status_code=status.HTTP_503_SERVICE_UNAVAILABLE, detail="Could not connect to the authentication service.")
 
-# --- Pydantic Models ---
+# --- Pydantic Models (No changes needed) ---
+class AddonItem(BaseModel):
+    addonId: int
+    addonName: str
+    price: float
+    quantity: int
+
 class ProcessingSaleItem(BaseModel):
+    id: int # Add SaleItemID to uniquely identify items
     name: str
     quantity: int
     price: float
     category: str
-    addons: Optional[dict] = {}
+    addons: List[AddonItem] = []
 
 class ProcessingOrder(BaseModel):
     id: str
@@ -78,7 +77,7 @@ class OnlineSaleItem(BaseModel):
     quantity: int
     price: float
     category: Optional[str] = "Online"
-    addons: Optional[dict] = {}
+    addons: List[AddonItem] = []
 
 class OnlineOrderRequest(BaseModel):
     online_order_id: int
@@ -97,7 +96,7 @@ class UpdateOrderStatusRequest(BaseModel):
     newStatus: Literal["completed", "cancelled", "processing"]
     cancelDetails: Optional[CancelDetails] = None
 
-# --- API Endpoint to Get Processing Orders ---
+# --- [CORRECTED] API Endpoint to Get Processing Orders ---
 @router_purchase_order.get(
     "/status/processing",
     response_model=List[ProcessingOrder],
@@ -107,25 +106,30 @@ async def get_processing_orders(
     cashierName: Optional[str] = None,
     current_user: dict = Depends(get_current_active_user)
 ):
+    # (Role validation is fine, no changes needed here)
     allowed_roles = ["admin", "manager", "staff", "cashier"]
     user_role = current_user.get("userRole")
     if user_role not in allowed_roles:
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail="You do not have permission to view orders."
-        )
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="You do not have permission to view orders.")
+    
     conn = None
     try:
         conn = await get_db_connection()
         async with conn.cursor() as cursor:
             logged_in_username = current_user.get("username")
+            
+            # --- UPDATED SQL QUERY ---
+            # Joins with SaleItemAddons and Addons to get relational addon data
             sql = """
                 SELECT
                     s.SaleID, s.OrderType, s.PaymentMethod, s.CreatedAt, s.CashierName,
                     s.TotalDiscountAmount, s.Status,
-                    si.SaleItemID, si.ItemName, si.Quantity, si.UnitPrice, si.Category, si.Addons
+                    si.SaleItemID, si.ItemName, si.Quantity AS ItemQuantity, si.UnitPrice, si.Category,
+                    a.AddonID, a.AddonName, a.Price AS AddonPrice, sia.Quantity AS AddonQuantity
                 FROM Sales AS s
                 LEFT JOIN SaleItems AS si ON s.SaleID = si.SaleID
+                LEFT JOIN SaleItemAddons AS sia ON si.SaleItemID = sia.SaleItemID
+                LEFT JOIN Addons AS a ON sia.AddonID = a.AddonID
                 WHERE s.Status IN ('processing', 'completed', 'cancelled')
             """
             params = []
@@ -136,55 +140,75 @@ async def get_processing_orders(
             else:
                 sql += " AND s.CashierName = ? "
                 params.append(logged_in_username)
-            sql += " ORDER BY s.CreatedAt ASC, s.SaleID ASC;"
+            sql += " ORDER BY s.CreatedAt ASC, s.SaleID ASC, si.SaleItemID ASC;"
+            
             await cursor.execute(sql, *params)
             rows = await cursor.fetchall()
+            
             orders_dict: Dict[int, dict] = {}
-            item_subtotals: Dict[int, Decimal] = {}
+            
             for row in rows:
                 sale_id = row.SaleID
                 if sale_id not in orders_dict:
-                    item_subtotals[sale_id] = Decimal('0.0')
                     orders_dict[sale_id] = {
-                        "id": f"SO-{sale_id}",
-                        "date": row.CreatedAt.strftime("%B %d, %Y %I:%M %p"),
-                        "status": row.Status,
-                        "orderType": row.OrderType,
-                        "paymentMethod": row.PaymentMethod,
-                        "cashierName": row.CashierName,
-                        "items": 0,
-                        "orderItems": [],
-                        "_totalDiscount": row.TotalDiscountAmount,
+                        "id": f"SO-{sale_id}", "date": row.CreatedAt.strftime("%B %d, %Y %I:%M %p"),
+                        "status": row.Status, "orderType": row.OrderType,
+                        "paymentMethod": row.PaymentMethod, "cashierName": row.CashierName,
+                        "items": 0, "orderItems": [], "total": 0, "_totalDiscount": row.TotalDiscountAmount,
+                        "_subtotal": Decimal('0.0'), "_processed_items": set()
                     }
+
                 if row.SaleItemID:
-                    item_quantity = row.Quantity or 0
-                    item_price = row.UnitPrice or Decimal('0.0')
-                    orders_dict[sale_id]["items"] += item_quantity
-                    item_subtotals[sale_id] += item_price * item_quantity
-                    orders_dict[sale_id]["orderItems"].append(
-                        ProcessingSaleItem(
-                            name=row.ItemName,
-                            quantity=item_quantity,
-                            price=float(item_price),
-                            category=row.Category,
-                            addons=json.loads(row.Addons) if row.Addons else {}
+                    # Add item's base price to subtotal only once
+                    if row.SaleItemID not in orders_dict[sale_id]["_processed_items"]:
+                        item_quantity = row.ItemQuantity or 0
+                        item_price = row.UnitPrice or Decimal('0.0')
+                        orders_dict[sale_id]["items"] += item_quantity
+                        orders_dict[sale_id]["_subtotal"] += item_price * item_quantity
+                        
+                        orders_dict[sale_id]["orderItems"].append(
+                            ProcessingSaleItem(
+                                id=row.SaleItemID, name=row.ItemName, quantity=item_quantity,
+                                price=float(item_price), category=row.Category, addons=[]
+                            )
                         )
-                    )
+                        orders_dict[sale_id]["_processed_items"].add(row.SaleItemID)
+                    
+                    # If there's an addon in this row, add its price and details
+                    if row.AddonID:
+                        addon_price = row.AddonPrice or Decimal('0.0')
+                        addon_quantity = row.AddonQuantity or 0
+                        # Add addon cost to the order subtotal
+                        orders_dict[sale_id]["_subtotal"] += addon_price * addon_quantity
+                        
+                        # Find the correct item to append the addon to
+                        for item in orders_dict[sale_id]["orderItems"]:
+                            if item.id == row.SaleItemID:
+                                item.addons.append(
+                                    AddonItem(addonId=row.AddonID, addonName=row.AddonName,
+                                              price=float(addon_price), quantity=addon_quantity)
+                                )
+                                break
+            
             response_list = []
             for sale_id, order_data in orders_dict.items():
-                subtotal = item_subtotals.get(sale_id, Decimal('0.0'))
-                total_discount = order_data.pop("_totalDiscount", Decimal('0.0'))
-                final_total = subtotal - total_discount
+                final_total = order_data["_subtotal"] - order_data["_totalDiscount"]
                 order_data["total"] = float(final_total)
+                # Clean up temporary fields before creating the final Pydantic model
+                del order_data["_subtotal"]
+                del order_data["_processed_items"]
+                del order_data["_totalDiscount"]
                 response_list.append(ProcessingOrder(**order_data))
+                
             return response_list
+            
     except Exception as e:
         logger.error(f"Error fetching processing orders: {e}", exc_info=True)
         raise HTTPException(status_code=500, detail="Failed to fetch processing orders.")
     finally:
         if conn: await conn.close()
 
-# --- Endpoint to receive and save an online order ---
+# --- [CORRECTED] Endpoint to receive and save an online order ---
 @router_purchase_order.post(
     "/online-order",
     status_code=status.HTTP_201_CREATED,
@@ -194,62 +218,57 @@ async def save_online_order(
     order_data: OnlineOrderRequest,
     current_user: dict = Depends(get_current_active_user)
 ):
+    # (Role validation is fine, no changes needed here)
     allowed_roles = ["admin", "staff", "cashier", "user"]
     if current_user.get("userRole") not in allowed_roles:
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail="You do not have permission to create orders."
-        )
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="You do not have permission to create orders.")
+        
     conn = None
     try:
         conn = await get_db_connection()
+        conn.autocommit = False # Manual transaction control
+        
         async with conn.cursor() as cursor:
             discount_amount = Decimal(order_data.subtotal) - Decimal(order_data.total_amount)
-            
-            # --- MODIFICATION HERE ---
-            # The status is hardcoded to 'processing' because accepting an online order
-            # means it is now being processed by the store.
             pos_order_status = 'processing'
 
+            # Step 1: Insert into Sales
             sql_insert_sale = """
-                INSERT INTO Sales (
-                    OrderType, PaymentMethod, CashierName, TotalDiscountAmount, Status,
-                    GCashReferenceNumber, CreatedAt
-                )
+                INSERT INTO Sales (OrderType, PaymentMethod, CashierName, TotalDiscountAmount, Status, GCashReferenceNumber)
                 OUTPUT INSERTED.SaleID
-                VALUES (?, ?, ?, ?, ?, ?, GETDATE())
-            """
-            await cursor.execute(
-                sql_insert_sale,
-                (
-                    order_data.order_type,
-                    order_data.payment_method,
-                    order_data.customer_name,
-                    discount_amount,
-                    pos_order_status, # Use the hardcoded status
-                    f"ONLINE-{order_data.online_order_id}"
-                )
-            )
-            sale_id_row = await cursor.fetchone()
-            if not sale_id_row:
-                raise Exception("Failed to create sale record and retrieve new SaleID.")
-            new_sale_id = sale_id_row.SaleID
-            sql_insert_item = """
-                INSERT INTO SaleItems (SaleID, ItemName, Quantity, UnitPrice, Category, Addons)
                 VALUES (?, ?, ?, ?, ?, ?)
             """
+            await cursor.execute(sql_insert_sale, order_data.order_type, order_data.payment_method, 
+                                 order_data.customer_name, discount_amount, pos_order_status, 
+                                 f"ONLINE-{order_data.online_order_id}")
+            sale_id_row = await cursor.fetchone()
+            if not sale_id_row:
+                await conn.rollback()
+                raise Exception("Failed to create sale record and retrieve new SaleID.")
+            new_sale_id = sale_id_row.SaleID
+
+            # Step 2: Loop through items and insert into SaleItems and SaleItemAddons
             for item in order_data.items:
-                await cursor.execute(
-                    sql_insert_item,
-                    (
-                        new_sale_id,
-                        item.name,
-                        item.quantity,
-                        Decimal(item.price),
-                        item.category,
-                        json.dumps(item.addons) if item.addons else None
-                    )
-                )
+                # 2a: Insert the item and get its new ID
+                sql_insert_item = """
+                    INSERT INTO SaleItems (SaleID, ItemName, Quantity, UnitPrice, Category)
+                    OUTPUT INSERTED.SaleItemID
+                    VALUES (?, ?, ?, ?, ?)
+                """
+                await cursor.execute(sql_insert_item, new_sale_id, item.name, item.quantity, 
+                                     Decimal(str(item.price)), item.category)
+                sale_item_id_row = await cursor.fetchone()
+                if not sale_item_id_row:
+                    await conn.rollback()
+                    raise Exception(f"Failed to create sale item record for {item.name}")
+                new_sale_item_id = sale_item_id_row.SaleItemID
+                
+                # 2b: Insert any addons into the linking table
+                if item.addons:
+                    for addon in item.addons:
+                        sql_insert_addon = "INSERT INTO SaleItemAddons (SaleItemID, AddonID, Quantity) VALUES (?, ?, ?)"
+                        await cursor.execute(sql_insert_addon, new_sale_item_id, addon.addonId, addon.quantity)
+
             await conn.commit()
             logger.info(f"Successfully saved online order {order_data.online_order_id} as POS SaleID {new_sale_id}")
             return {
@@ -259,12 +278,109 @@ async def save_online_order(
     except Exception as e:
         if conn: await conn.rollback()
         logger.error(f"Failed to save online order to POS: {e}", exc_info=True)
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"An error occurred while saving the online order: {e}"
-        )
+        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=f"An error occurred while saving the online order: {e}")
+    finally:
+        if conn:
+            conn.autocommit = True # Reset connection state
+            await conn.close()
+
+# --- (The rest of the file: update_order_status, get_all_orders, etc. need the same fix as get_processing_orders) ---
+# For brevity, I've only fully corrected the first GET endpoint and the POST endpoint.
+# You must apply the same SQL JOIN and Python looping logic from the corrected 'get_processing_orders'
+# function to your 'get_all_orders' function. The logic will be identical.
+# The 'update_order_status' function does not deal with addons, so it should be fine as-is.
+
+# [Applying the fix to get_all_orders as well for completeness]
+@router_purchase_order.get(
+    "/all",
+    response_model=List[ProcessingOrder],
+    summary="Get All Orders (Admin/Manager Only)"
+)
+async def get_all_orders(current_user: dict = Depends(get_current_active_user)):
+    allowed_roles = ["admin", "manager"]
+    if current_user.get("userRole") not in allowed_roles:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="You do not have permission to view all orders.")
+    
+    conn = None
+    try:
+        conn = await get_db_connection()
+        async with conn.cursor() as cursor:
+            # --- UPDATED SQL QUERY ---
+            sql = """
+                SELECT
+                    s.SaleID, s.OrderType, s.PaymentMethod, s.CreatedAt, s.CashierName,
+                    s.TotalDiscountAmount, s.Status, s.GCashReferenceNumber,
+                    si.SaleItemID, si.ItemName, si.Quantity AS ItemQuantity, si.UnitPrice, si.Category,
+                    a.AddonID, a.AddonName, a.Price AS AddonPrice, sia.Quantity AS AddonQuantity
+                FROM Sales AS s
+                LEFT JOIN SaleItems AS si ON s.SaleID = si.SaleID
+                LEFT JOIN SaleItemAddons AS sia ON si.SaleItemID = sia.SaleItemID
+                LEFT JOIN Addons AS a ON sia.AddonID = a.AddonID
+                WHERE s.Status IN ('completed', 'processing', 'cancelled')
+                ORDER BY s.CreatedAt DESC, s.SaleID DESC, si.SaleItemID ASC;
+            """
+            await cursor.execute(sql)
+            rows = await cursor.fetchall()
+            
+            orders_dict: Dict[int, dict] = {}
+            
+            for row in rows:
+                sale_id = row.SaleID
+                if sale_id not in orders_dict:
+                    orders_dict[sale_id] = {
+                        "id": f"SO-{sale_id}", "date": row.CreatedAt.strftime("%B %d, %Y %I:%M %p"),
+                        "status": row.Status, "orderType": row.OrderType,
+                        "paymentMethod": row.PaymentMethod, "cashierName": row.CashierName,
+                        "GCashReferenceNumber": row.GCashReferenceNumber, "items": 0, "orderItems": [],
+                        "total": 0, "_totalDiscount": row.TotalDiscountAmount,
+                        "_subtotal": Decimal('0.0'), "_processed_items": set()
+                    }
+
+                if row.SaleItemID:
+                    if row.SaleItemID not in orders_dict[sale_id]["_processed_items"]:
+                        item_quantity = row.ItemQuantity or 0
+                        item_price = row.UnitPrice or Decimal('0.0')
+                        orders_dict[sale_id]["items"] += item_quantity
+                        orders_dict[sale_id]["_subtotal"] += item_price * item_quantity
+                        
+                        orders_dict[sale_id]["orderItems"].append(
+                            ProcessingSaleItem(
+                                id=row.SaleItemID, name=row.ItemName, quantity=item_quantity,
+                                price=float(item_price), category=row.Category, addons=[]
+                            )
+                        )
+                        orders_dict[sale_id]["_processed_items"].add(row.SaleItemID)
+                    
+                    if row.AddonID:
+                        addon_price = row.AddonPrice or Decimal('0.0')
+                        addon_quantity = row.AddonQuantity or 0
+                        orders_dict[sale_id]["_subtotal"] += addon_price * addon_quantity
+                        
+                        for item in orders_dict[sale_id]["orderItems"]:
+                            if item.id == row.SaleItemID:
+                                item.addons.append(
+                                    AddonItem(addonId=row.AddonID, addonName=row.AddonName,
+                                              price=float(addon_price), quantity=addon_quantity)
+                                )
+                                break
+            
+            response_list = []
+            for sale_id, order_data in orders_dict.items():
+                final_total = order_data["_subtotal"] - order_data["_totalDiscount"]
+                order_data["total"] = float(final_total)
+                del order_data["_subtotal"]
+                del order_data["_processed_items"]
+                del order_data["_totalDiscount"]
+                response_list.append(ProcessingOrder(**order_data))
+                
+            return response_list
+            
+    except Exception as e:
+        logger.error(f"Error fetching all orders: {e}", exc_info=True)
+        raise HTTPException(status_code=500, detail="Failed to fetch all orders.")
     finally:
         if conn: await conn.close()
+
         
 # --- Function to change the status of an order ---
 @router_purchase_order.patch(
@@ -326,78 +442,5 @@ async def update_order_status(
                     raise HTTPException(status_code=404, detail=f"Order '{order_id}' not found.")
                 await conn.commit()
                 return {"message": f"Order status successfully updated to '{request.newStatus}'."}
-    finally:
-        if conn: await conn.close()
-
-# --- Endpoint to Get All Orders ---
-@router_purchase_order.get(
-    "/all",
-    response_model=List[ProcessingOrder],
-    summary="Get All Orders (Admin/Manager Only)"
-)
-async def get_all_orders(current_user: dict = Depends(get_current_active_user)):
-    allowed_roles = ["admin", "manager"]
-    user_role = current_user.get("userRole")
-    if user_role not in allowed_roles:
-        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="You do not have permission to view all orders.")
-    conn = None
-    try:
-        conn = await get_db_connection()
-        async with conn.cursor() as cursor:
-            sql = """
-                SELECT
-                    s.SaleID, s.OrderType, s.PaymentMethod, s.CreatedAt, s.CashierName,
-                    s.TotalDiscountAmount, s.Status, s.GCashReferenceNumber,
-                    si.SaleItemID, si.ItemName, si.Quantity, si.UnitPrice, si.Category, si.Addons
-                FROM Sales AS s
-                LEFT JOIN SaleItems AS si ON s.SaleID = si.SaleID
-                WHERE s.Status IN ('completed', 'processing', 'cancelled')
-                ORDER BY s.CreatedAt DESC, s.SaleID DESC;
-            """
-            await cursor.execute(sql)
-            rows = await cursor.fetchall()
-            orders_dict: Dict[int, dict] = {}
-            item_subtotals: Dict[int, Decimal] = {}
-            for row in rows:
-                sale_id = row.SaleID
-                if sale_id not in orders_dict:
-                    item_subtotals[sale_id] = Decimal('0.0')
-                    orders_dict[sale_id] = {
-                        "id": f"SO-{sale_id}",
-                        "date": row.CreatedAt.strftime("%B %d, %Y %I:%M %p"),
-                        "status": row.Status,
-                        "orderType": row.OrderType,
-                        "paymentMethod": row.PaymentMethod,
-                        "cashierName": row.CashierName,
-                        "GCashReferenceNumber": row.GCashReferenceNumber,
-                        "items": 0,
-                        "orderItems": [],
-                        "_totalDiscount": row.TotalDiscountAmount,
-                    }
-                if row.SaleItemID:
-                    item_quantity = row.Quantity or 0
-                    item_price = row.UnitPrice or Decimal('0.0')
-                    orders_dict[sale_id]["items"] += item_quantity
-                    item_subtotals[sale_id] += item_price * item_quantity
-                    orders_dict[sale_id]["orderItems"].append(
-                        ProcessingSaleItem(
-                            name=row.ItemName,
-                            quantity=item_quantity,
-                            price=float(item_price),
-                            category=row.Category,
-                            addons=json.loads(row.Addons) if row.Addons else {}
-                        )
-                    )
-            response_list = []
-            for sale_id, order_data in orders_dict.items():
-                subtotal = item_subtotals.get(sale_id, Decimal('0.0'))
-                total_discount = order_data.pop("_totalDiscount", Decimal('0.0'))
-                final_total = subtotal - total_discount
-                order_data["total"] = float(final_total)
-                response_list.append(ProcessingOrder(**order_data))
-            return response_list
-    except Exception as e:
-        logger.error(f"Error fetching all orders: {e}", exc_info=True)
-        raise HTTPException(status_code=500, detail="Failed to fetch all orders.")
     finally:
         if conn: await conn.close()

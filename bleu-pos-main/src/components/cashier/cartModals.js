@@ -3,16 +3,23 @@ import { useNavigate } from 'react-router-dom';
 import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
 import { faPercent } from '@fortawesome/free-solid-svg-icons';
 
-// Add-ons Modal Component
+// --- MODIFICATION: AddonsModal is now fully dynamic ---
 export const AddonsModal = ({
   showAddonsModal,
   closeAddonsModal,
   addons,
+  availableAddons,
+  isLoading,
   updateAddons,
   saveAddons,
-  addonPrices
 }) => {
   if (!showAddonsModal) return null;
+
+  // Helper to find the quantity of a currently selected addon
+  const getQuantity = (addonId) => {
+    const found = addons.find(a => a.addonId === addonId);
+    return found ? found.quantity : 0;
+  };
 
   return (
     <div className="modal-overlay" onClick={closeAddonsModal}>
@@ -22,39 +29,28 @@ export const AddonsModal = ({
           <button className="close-modal" onClick={closeAddonsModal}>×</button>
         </div>
         <div className="addons-content">
-          <div className="addon-item">
-            <div className="addon-info">
-              <span className="addon-name">Espresso Shots</span>
-              <span className="addon-price">+₱{addonPrices.espressoShots} each</span>
-            </div>
-            <div className="addon-controls">
-              <button onClick={() => updateAddons('espressoShots', addons.espressoShots - 1)}>−</button>
-              <span>{addons.espressoShots}</span>
-              <button onClick={() => updateAddons('espressoShots', addons.espressoShots + 1)}>+</button>
-            </div>
-          </div>
-          <div className="addon-item">
-            <div className="addon-info">
-              <span className="addon-name">Sea Salt Cream</span>
-              <span className="addon-price">+₱{addonPrices.seaSaltCream} each</span>
-            </div>
-            <div className="addon-controls">
-              <button onClick={() => updateAddons('seaSaltCream', addons.seaSaltCream - 1)}>−</button>
-              <span>{addons.seaSaltCream}</span>
-              <button onClick={() => updateAddons('seaSaltCream', addons.seaSaltCream + 1)}>+</button>
-            </div>
-          </div>
-          <div className="addon-item">
-            <div className="addon-info">
-              <span className="addon-name">Syrups/Sauces</span>
-              <span className="addon-price">+₱{addonPrices.syrupSauces} each</span>
-            </div>
-            <div className="addon-controls">
-              <button onClick={() => updateAddons('syrupSauces', addons.syrupSauces - 1)}>−</button>
-              <span>{addons.syrupSauces}</span>
-              <button onClick={() => updateAddons('syrupSauces', addons.syrupSauces + 1)}>+</button>
-            </div>
-          </div>
+          {isLoading ? (
+            <p style={{ textAlign: 'center' }}>Loading Add-ons...</p>
+          ) : availableAddons.length > 0 ? (
+            availableAddons.map((availAddon) => {
+              const currentQuantity = getQuantity(availAddon.AddOnID);
+              return (
+                <div key={availAddon.AddOnID} className="addon-item">
+                  <div className="addon-info">
+                    <span className="addon-name">{availAddon.AddOnName}</span>
+                    <span className="addon-price">+₱{availAddon.Price.toFixed(2)} each</span>
+                  </div>
+                  <div className="addon-controls">
+                    <button onClick={() => updateAddons(availAddon.AddOnID, availAddon.AddOnName, availAddon.Price, Math.max(0, currentQuantity - 1))}>−</button>
+                    <span>{currentQuantity}</span>
+                    <button onClick={() => updateAddons(availAddon.AddOnID, availAddon.AddOnName, availAddon.Price, currentQuantity + 1)}>+</button>
+                  </div>
+                </div>
+              );
+            })
+          ) : (
+            <p style={{ textAlign: 'center', color: '#888' }}>No add-ons available for this item.</p>
+          )}
         </div>
         <div className="modal-footer-addons">
           <button className="addon-save-btn" onClick={saveAddons}>Save Add-ons</button>
@@ -64,7 +60,8 @@ export const AddonsModal = ({
   );
 };
 
-// Discounts Modal Component
+
+// Discounts Modal Component (No changes needed)
 export const DiscountsModal = ({
   showDiscountsModal,
   closeDiscountsModal,
@@ -135,7 +132,7 @@ export const DiscountsModal = ({
   );
 };
 
-// Transaction Summary Modal Component
+// --- MODIFICATION: TransactionSummaryModal now renders addons dynamically ---
 export const TransactionSummaryModal = ({
   showTransactionSummary,
   setShowTransactionSummary,
@@ -145,7 +142,6 @@ export const TransactionSummaryModal = ({
   appliedDiscounts,
   availableDiscounts,
   getTotalAddonsPrice,
-  addonPrices,
   getSubtotal,
   getDiscount,
   getTotal,
@@ -160,7 +156,7 @@ export const TransactionSummaryModal = ({
   }).filter(name => name !== '');
 
   return (
-<div className="trnsSummary-modal-overlay" onClick={() => setShowTransactionSummary(false)}>
+    <div className="trnsSummary-modal-overlay" onClick={() => setShowTransactionSummary(false)}>
       <div className="trnsSummary-transaction-summary-modal" onClick={(e) => e.stopPropagation()}>
         <div className="trnsSummary-modal-header">
           <h3>Transaction Summary</h3>
@@ -193,17 +189,14 @@ export const TransactionSummaryModal = ({
                     <span className="trnsSummary-quantity">Qty: {item.quantity}</span>
                     <span className="trnsSummary-base-price">₱{item.price.toFixed(0)} each</span>
                   </div>
-                  {item.addons && getTotalAddonsPrice(item.addons) > 0 && (
+                  {/* Updated addon rendering logic */}
+                  {item.addons && item.addons.length > 0 && (
                     <div className="trnsSummary-item-addons">
-                      {item.addons.espressoShots > 0 && (
-                        <span>• {item.addons.espressoShots} Espresso Shot(s) (+₱{(addonPrices.espressoShots * item.addons.espressoShots).toFixed(0)})</span>
-                      )}
-                      {item.addons.seaSaltCream > 0 && (
-                        <span>• {item.addons.seaSaltCream} Sea Salt Cream (+₱{(addonPrices.seaSaltCream * item.addons.seaSaltCream).toFixed(0)})</span>
-                      )}
-                      {item.addons.syrupSauces > 0 && (
-                        <span>• {item.addons.syrupSauces} Syrup/Sauce(s) (+₱{(addonPrices.syrupSauces * item.addons.syrupSauces).toFixed(0)})</span>
-                      )}
+                      {item.addons.map(addon => (
+                        <span key={addon.addonId}>
+                          • {addon.quantity} {addon.addonName} (+₱{(addon.price * addon.quantity).toFixed(0)})
+                        </span>
+                      ))}
                     </div>
                   )}
                 </div>
@@ -261,11 +254,11 @@ export const TransactionSummaryModal = ({
         </div>
       </div>
     </div>
-
   );
 };
 
-// GCash Reference Modal Component
+
+// GCash Reference Modal Component (No changes needed)
 export const GCashReferenceModal = ({
   showGCashReference,
   setShowGCashReference,
@@ -319,7 +312,7 @@ export const GCashReferenceModal = ({
   );
 };
 
-// Order Confirmation Modal Component
+// Order Confirmation Modal Component (No changes needed)
 export const OrderConfirmationModal = ({
   showConfirmation,
   setShowConfirmation
@@ -327,12 +320,6 @@ export const OrderConfirmationModal = ({
   const navigate = useNavigate();
 
   if (!showConfirmation) return null;
-
-  const handleClose = () => {
-    setShowConfirmation(false);
-    // Optionally navigate to a different page or refresh
-    // navigate('/dashboard');
-  };
 
   return (
     <div className="order-confirmation-overlay">
