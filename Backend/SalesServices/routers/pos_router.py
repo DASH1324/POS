@@ -231,3 +231,116 @@ async def create_sale(
         if conn:
             conn.autocommit = True # Reset autocommit for the connection pool
             await conn.close()
+
+
+# Add this new endpoint to your pos_router.py
+
+@router_sales.get("/status/{status}")
+async def get_orders_by_status(
+    status: str,
+    token: str = Depends(oauth2_scheme),
+    current_user: dict = Depends(get_current_active_user)
+):
+    """
+    Fetch orders by status with proper add-ons and discount calculations
+    """
+    if current_user.get("userRole") not in ["admin", "manager", "staff", "cashier"]:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Access denied.")
+    
+    conn = None
+    try:
+        conn = await get_db_connection()
+        async with conn.cursor() as cursor:
+            # Main query to get sales with basic info
+            sql_sales = """
+                SELECT s.SaleID, s.OrderType, s.PaymentMethod, s.CreatedAt, s.CashierName, 
+                       s.TotalDiscountAmount, s.Status, s.GCashReferenceNumber
+                FROM Sales s 
+                WHERE s.Status = ?
+                ORDER BY s.CreatedAt DESC
+            """
+            await cursor.execute(sql_sales, status)
+            sales = await cursor.fetchall()
+            
+            orders = []
+            for sale in sales:
+                sale_id = sale.SaleID
+                
+                # Get sale items
+                sql_items = """
+                    SELECT si.ItemName, si.Quantity, si.UnitPrice, si.Category, si.SaleItemID
+                    FROM SaleItems si
+                    WHERE si.SaleID = ?
+                """
+                await cursor.execute(sql_items, sale_id)
+                items = await cursor.fetchall()
+                
+                # Calculate subtotal from items (base prices only)
+                item_subtotal = Decimal('0.0')
+                order_items = []
+                total_addons_cost = Decimal('0.0')
+                
+                for item in items:
+                    item_total = Decimal(str(item.UnitPrice)) * item.Quantity
+                    item_subtotal += item_total
+                    
+                    # Get add-ons for this item
+                    sql_addons = """
+                        SELECT a.AddonName, a.Price, sia.Quantity
+                        FROM SaleItemAddons sia
+                        JOIN Addons a ON sia.AddonID = a.AddonID
+                        WHERE sia.SaleItemID = ?
+                    """
+                    await cursor.execute(sql_addons, item.SaleItemID)
+                    item_addons = await cursor.fetchall()
+                    
+                    # Calculate add-ons cost for this item
+                    item_addons_cost = Decimal('0.0')
+                    addons_list = []
+                    for addon in item_addons:
+                        addon_cost = Decimal(str(addon.Price)) * addon.Quantity
+                        item_addons_cost += addon_cost
+                        total_addons_cost += addon_cost
+                        addons_list.append({
+                            'name': addon.AddonName,
+                            'price': float(addon.Price),
+                            'quantity': addon.Quantity
+                        })
+                    
+                    order_items.append({
+                        'name': item.ItemName,
+                        'quantity': item.Quantity,
+                        'price': float(item.UnitPrice),
+                        'category': item.Category,
+                        'addons': addons_list
+                    })
+                
+                # Get actual discount amount (already stored in Sales table)
+                total_discount = Decimal(str(sale.TotalDiscountAmount))
+                
+                # Calculate final total
+                final_total = item_subtotal + total_addons_cost - total_discount
+                
+                orders.append({
+                    'id': sale_id,
+                    'orderType': sale.OrderType,
+                    'paymentMethod': sale.PaymentMethod,
+                    'date': sale.CreatedAt.isoformat(),
+                    'status': sale.Status,
+                    'cashierName': sale.CashierName,
+                    'gcashReference': sale.GCashReferenceNumber,
+                    'orderItems': order_items,
+                    'subtotal': float(item_subtotal),
+                    'addOns': float(total_addons_cost),  # Actual add-ons cost
+                    'discount': float(total_discount),   # Actual discount amount
+                    'total': float(final_total)
+                })
+            
+            return orders
+            
+    except Exception as e:
+        logger.error(f"Error fetching orders by status: {e}", exc_info=True)
+        raise HTTPException(status_code=500, detail="Failed to fetch orders")
+    finally:
+        if conn:
+            await conn.close()

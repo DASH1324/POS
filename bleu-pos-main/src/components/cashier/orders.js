@@ -49,27 +49,51 @@ function Orders() {
       const token = localStorage.getItem('authToken');
       if (!token) throw new Error("Authentication error: You must be logged in to view orders.");
       const headers = { 'Authorization': `Bearer ${token}` };
-      const [storeResponse, onlineResponse] = await Promise.allSettled([
-        fetch(`${SALES_API_BASE_URL}/auth/purchase_orders/status/processing`, { headers }),
-        fetch(`${ONLINE_API_BASE_URL}/cart/admin/orders/manage`, { headers })
+
+      // --- START: MODIFIED CODE ---
+      // Define all statuses to fetch for store orders
+      const storeStatusesToFetch = ['processing', 'completed', 'cancelled'];
+
+      // Create an array of fetch promises for each store status
+      const storeFetchPromises = storeStatusesToFetch.map(status =>
+        fetch(`${SALES_API_BASE_URL}/auth/sales/status/${status}`, { headers })
+      );
+
+      // Fetch online orders and all store order statuses concurrently
+      const [onlineResponse, ...storeResponsesSettled] = await Promise.allSettled([
+        fetch(`${ONLINE_API_BASE_URL}/cart/admin/orders/manage`, { headers }),
+        ...storeFetchPromises
       ]);
+      // --- END: MODIFIED CODE ---
+
       let newStoreOrders = [];
       let newOnlineOrders = [];
       let errors = [];
-      if (storeResponse.status === 'fulfilled' && storeResponse.value.ok) {
-        const data = await storeResponse.value.json();
-        const orders = Array.isArray(data) ? data : [];
-        newStoreOrders = orders.map(order => ({
+
+      // --- START: MODIFIED CODE to process multiple store responses ---
+      // Process all the settled promises for store orders
+      for (const storeResponse of storeResponsesSettled) {
+        if (storeResponse.status === 'fulfilled' && storeResponse.value.ok) {
+          const data = await storeResponse.value.json();
+          const orders = Array.isArray(data) ? data : [];
+          const mappedOrders = orders.map(order => ({
             id: order.id, customerName: 'In-Store', date: new Date(order.date), orderType: order.orderType,
             paymentMethod: order.paymentMethod || 'N/A', total: order.total, status: order.status ? order.status.toUpperCase() : 'UNKNOWN',
             items: order.orderItems ? order.orderItems.reduce((acc, item) => acc + item.quantity, 0) : 0,
             orderItems: order.orderItems ? order.orderItems.map(item => ({...item, size: item.size || 'Standard', extras: item.extras || []})) : [],
             source: 'store',
+            discount: order.discount || order.appliedDiscount || 0,
+            addOns: order.addOns || order.appliedAddOns || order.addons || 0,
           })).filter(o => o.orderType === 'Dine in' || o.orderType === 'Take out');
-      } else {
-        errors.push("Failed to load store orders.");
-        console.error("Store Order Fetch Error:", storeResponse.reason || (storeResponse.value && storeResponse.value.statusText));
+          
+          newStoreOrders.push(...mappedOrders); // Append orders from this status fetch
+        } else {
+          errors.push("Failed to load some store orders.");
+          console.error("Store Order Fetch Error:", storeResponse.reason || (storeResponse.value && storeResponse.value.statusText));
+        }
       }
+      // --- END: MODIFIED CODE ---
+
       if (onlineResponse.status === 'fulfilled' && onlineResponse.value.ok) {
         const data = await onlineResponse.value.json();
         const orders = Array.isArray(data) ? data : [];
@@ -95,11 +119,13 @@ function Orders() {
                 items: totalQuantity,
                 orderItems: parsedItems,
                 source: 'online',
+                discount: order.discount || order.applied_discount || 0,
+                addOns: order.addOns || order.applied_addons || order.addon_cost || 0,
             };
         });
-    } else {
-        errors.push("Failed to load online orders.");
-        console.error("Online Order Fetch Error:", onlineResponse.reason || (onlineResponse.value && onlineResponse.value.statusText));
+      } else {
+          errors.push("Failed to load online orders.");
+          console.error("Online Order Fetch Error:", onlineResponse.reason || (onlineResponse.value && onlineResponse.value.statusText));
       }
       if (errors.length > 0) setError(errors.join(' '));
       const processAndSort = (orders) => orders.map(o => ({ ...o, localDateString: getLocalDateString(o.date), dateDisplay: o.date.toLocaleString("en-US", { month: "long", day: "2-digit", year: "numeric", hour: "numeric", minute: "2-digit", hour12: true })})).sort((a, b) => b.date - a.date);

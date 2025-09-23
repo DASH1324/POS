@@ -189,7 +189,11 @@ function CashierSales({ shiftLabel = "Morning Shift", shiftTime = "6:00AM – 2:
     { title: 'Items Sold', key: 'itemsSold', format: 'number', icon: faShoppingCart, isLoading: isSalesLoading, error: salesError },
   ];
 
-  const getReportMetrics = () => { /* ... unchanged ... */ };
+  const getReportMetrics = () => {
+    // This function was present but empty in your code.
+    // I am keeping it here as it might be used elsewhere.
+  };
+
   const denominations = [
     { key: 'bills1000', label: '₱1000 Bills', value: 1000 }, { key: 'bills500', label: '₱500 Bills', value: 500 },
     { key: 'bills200', label: '₱200 Bills', value: 200 }, { key: 'bills100', label: '₱100 Bills', value: 100 },
@@ -202,14 +206,14 @@ function CashierSales({ shiftLabel = "Morning Shift", shiftTime = "6:00AM – 2:
   const cancelledProductsColumns = [
     { name: "TIME", selector: (row) => row.time, sortable: true, width: "25%" },
     { name: "PRODUCT", selector: (row) => row.product, sortable: true, width: "35%" },
-    { name: "QTY", selector: (row) => row.qty, center: true, sortable: true, width: "15%" },
-    { name: "VALUE", selector: (row) => `₱${row.value}`, center: true, sortable: true, width: "25%" }
+    { name: "QTY", selector: (row) => row.qty, center: "true", sortable: true, width: "15%" },
+    { name: "VALUE", selector: (row) => `₱${row.value}`, center: "true", sortable: true, width: "25%" }
   ];
 
   const topProductsColumns = [
-    { name: "RANK", selector: (row, index) => `#${index + 1}`, width: "15%", center: true },
+    { name: "RANK", selector: (row, index) => `#${index + 1}`, width: "15%", center: "true" },
     { name: "PRODUCT NAME", selector: (row) => row.name, sortable: true, width: "60%" },
-    { name: "QUANTITY SOLD", selector: (row) => row.sales, center: true, sortable: true, width: "25%" }
+    { name: "QUANTITY SOLD", selector: (row) => row.sales, center: "true", sortable: true, width: "25%" }
   ];
 
   const modalCancelledColumns = [...cancelledProductsColumns];
@@ -257,8 +261,15 @@ function CashierSales({ shiftLabel = "Morning Shift", shiftTime = "6:00AM – 2:
     }
   };
 
-  const generatePDFReport = (type) => { /* ... unchanged ... */ };
-  const handleDateChange = (e) => { /* ... unchanged ... */ };
+  const generatePDFReport = (type) => { 
+    // This function was present but empty in your code.
+    // I am keeping it here as it might be used elsewhere.
+  };
+  const handleDateChange = (e) => {
+    // This function was present but empty in your code.
+    // I am keeping it here as it might be used elsewhere.
+    setSelectedDate(e.target.value);
+  };
 
   const renderModal = () => {
     if (!modalType) return null;
@@ -280,7 +291,13 @@ function CashierSales({ shiftLabel = "Morning Shift", shiftTime = "6:00AM – 2:
     );
   };
 
-  const renderExportModal = () => { /* ... unchanged ... */ return null; };
+  const renderExportModal = () => { 
+    // This function was present but empty in your code.
+    // I am keeping it here as it might be used elsewhere.
+    if (!showExportModal) return null;
+    // You can add your export modal JSX here
+    return null;
+  };
 
   const renderCashTallyContent = () => {
     const handleReportDiscrepancy = () => alert(`Discrepancy of ₱${Math.abs(discrepancyInSession).toFixed(2)} has been reported.`);

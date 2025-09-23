@@ -13,7 +13,7 @@ import {
 
 const SALES_API_URL = 'http://127.0.0.1:9000';
 const DISCOUNTS_API_URL = 'http://127.0.0.1:9002';
-const PRODUCTS_API_URL = 'http://127.0.0.1:8001'; // <-- NEW: API URL for products
+const PRODUCTS_API_URL = 'http://127.0.0.1:8001';
 
 const CartPanel = ({
   cartItems,
@@ -24,16 +24,10 @@ const CartPanel = ({
   paymentMethod,
   setPaymentMethod,
 }) => {
-  // --- REMOVED: Hardcoded drink categories are no longer needed ---
-
   // Component states
   const [showAddonsModal, setShowAddonsModal] = useState(false);
   const [selectedItemIndex, setSelectedItemIndex] = useState(null);
-  
-  // --- MODIFIED: Addons state is now an array to handle dynamic data ---
-  const [addons, setAddons] = useState([]); 
-  
-  // --- NEW: States for fetching and storing available add-ons ---
+  const [addons, setAddons] = useState([]);
   const [availableAddons, setAvailableAddons] = useState([]);
   const [isAddonsLoading, setIsAddonsLoading] = useState(false);
 
@@ -101,7 +95,6 @@ const CartPanel = ({
     }
   };
 
-  // --- MODIFICATION: Fetches available add-ons for the selected product ---
   const openAddonsModal = async (itemIndex) => {
     const item = cartItems[itemIndex];
     if (!item || !item.id) return;
@@ -157,7 +150,6 @@ const CartPanel = ({
     setStagedDiscounts(prev => prev.includes(discountId) ? prev.filter(id => id !== discountId) : [...prev, discountId]);
   };
 
-  // --- MODIFICATION: Handles updates for the new addons array structure ---
   const updateAddons = (addonId, addonName, price, quantity) => {
     setAddons(prev => {
         const existingIndex = prev.findIndex(a => a.addonId === addonId);
@@ -174,7 +166,6 @@ const CartPanel = ({
     });
   };
 
-  // --- MODIFICATION: Saves the addons array to the cart item ---
   const saveAddons = () => {
     if (selectedItemIndex !== null) {
       const updatedCart = [...cartItems];
@@ -195,7 +186,6 @@ const CartPanel = ({
     }
   }, [isCartOpen, setCartItems, setPaymentMethod, setOrderType]);
 
-  // --- MODIFICATION: Calculates price from the addons array ---
   const getTotalAddonsPrice = (itemAddons) => {
     if (!Array.isArray(itemAddons)) return 0;
     return itemAddons.reduce((total, addon) => total + (addon.price * addon.quantity), 0);
@@ -222,8 +212,25 @@ const CartPanel = ({
   const updateQuantity = (index, amount) => {
     setCartItems(prev => {
         const updated = [...prev];
-        updated[index].quantity += amount;
-        return updated[index].quantity <= 0 ? updated.filter((_, i) => i !== index) : updated;
+        const currentItem = updated[index];
+        const newQuantity = currentItem.quantity + amount;
+        
+        if (newQuantity <= 0) {
+            // Remove item if quantity becomes 0 or negative
+            return updated.filter((_, i) => i !== index);
+        } else {
+            // Update quantity and scale add-ons proportionally
+            const updatedItem = {
+                ...currentItem,
+                quantity: newQuantity
+            };
+            
+            // If item has add-ons, we don't need to scale them - the display calculation handles this
+            // The add-ons array represents the add-ons per single unit, and we multiply by quantity in display
+            
+            updated[index] = updatedItem;
+            return updated;
+        }
     });
   };
 
@@ -289,6 +296,25 @@ const CartPanel = ({
 
   const getAppliedDiscountNames = () => appliedDiscounts.map(id => availableDiscounts.find(d => d.id === id)?.name).filter(Boolean);
 
+  // Helper function to generate unique display text for items with add-ons
+  const getItemDisplayName = (item) => {
+    let displayName = item.name;
+    if (item.addons && item.addons.length > 0) {
+      const addonText = item.addons.map(addon => `+${addon.quantity} ${addon.addonName}`).join(', ');
+      displayName += ` (${addonText})`;
+    }
+    return displayName;
+  };
+
+  // Helper function to get addon summary for display (scaled by quantity)
+  const getAddonsSummary = (itemAddons, quantity = 1) => {
+    if (!Array.isArray(itemAddons) || itemAddons.length === 0) return null;
+    return itemAddons.map(addon => {
+      const totalAddonQuantity = addon.quantity * quantity;
+      return `+${totalAddonQuantity} ${addon.addonName}`;
+    }).join(', ');
+  };
+
   return (
     <>
         <div className={`cart-panel ${isCartOpen ? 'open' : ''}`}>
@@ -300,22 +326,20 @@ const CartPanel = ({
                 </div>
                 <div className="cart-items">
                     {cartItems.length > 0 ? (cartItems.map((item, index) => (
-                        <div key={`${item.id}-${index}`} className="cart-item">
+                        <div key={item.cartId || `${item.id}-${index}`} className="cart-item">
                             <img src={item.image} alt={item.name} />
                             <div className="item-details">
                                 <div className="item-name">{item.name}</div>
                                 
-                                {/* --- MODIFICATION: Conditionally render link based on backend flag --- */}
+                                {/* Show add-ons link only if product supports add-ons */}
                                 {item.hasAddons && (
                                     <div className="addons-link" onClick={() => openAddonsModal(index)}>Add ons</div>
                                 )}
                                 
-                                {/* --- MODIFICATION: Dynamically display addon summary from array --- */}
+                                {/* Display current add-ons for this specific item */}
                                 {item.addons && item.addons.length > 0 && (
                                     <div className="addons-summary">
-                                        {item.addons.map(addon => (
-                                            <span key={addon.addonId}>+{addon.quantity} {addon.addonName}</span>
-                                        ))}
+                                        <span>{getAddonsSummary(item.addons, item.quantity)}</span>
                                     </div>
                                 )}
 
@@ -365,7 +389,6 @@ const CartPanel = ({
             </div>
         </div>
 
-        {/* --- MODIFICATION: Pass new dynamic props to AddonsModal --- */}
         <AddonsModal
           showAddonsModal={showAddonsModal}
           closeAddonsModal={closeAddonsModal}

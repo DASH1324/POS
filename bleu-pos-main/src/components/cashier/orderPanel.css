@@ -521,3 +521,49 @@
     margin: 0;
   }
 }
+
+/* Add these styles to your orderPanel.css file */
+
+.orderpanel-item-addons {
+  margin-top: 4px;
+  font-size: 12px;
+  color: #666;
+  font-style: italic;
+}
+
+.orderpanel-addon {
+  margin-left: 8px;
+}
+
+.orderpanel-receipt-addon {
+  font-size: 12px;
+  color: #666;
+  font-style: italic;
+}
+
+/* Add this to your orderPanel.css file */
+
+@media print {
+  /* Hide everything on the page by default */
+  body * {
+    visibility: hidden;
+  }
+
+  /* Make the receipt container and everything inside it visible */
+  .orderpanel-receipt-print, .orderpanel-receipt-print * {
+    visibility: visible;
+  }
+
+  /* Position the receipt at the top-left of the printed page */
+  .orderpanel-receipt-print {
+    position: absolute;
+    left: 0;
+    top: 0;
+    width: 100%;
+  }
+
+  /* Optional: Hide the print/cancel buttons in the modal when printing */
+  .orderpanel-modal-buttons {
+    display: none;
+  }
+}

@@ -3,8 +3,9 @@ import Navbar from '../navbar';
 import CartPanel from './cartPanel.js';
 import './menu.css';
 
-const API_BASE_URL = 'http://127.0.0.1:9001/api'; 
+const API_BASE_URL = 'http://127.0.0.1:9001/api';
 const PRODUCTS_API_URL = 'http://127.0.0.1:8001';
+const MERCHANDISE_API_URL = 'http://127.0.0.1:8002/merchandise/';
 
 function Menu() {
   // State for UI and Cart
@@ -12,13 +13,15 @@ function Menu() {
   const [cartItems, setCartItems] = useState([]);
   const [isCartOpen, setIsCartOpen] = useState(false);
 
-  // Initial cash modal states are maintained
+  // Initial cash modal states
   const [showInitialCashModal, setShowInitialCashModal] = useState(false);
   const [initialCash, setInitialCash] = useState('');
   const [initialCashError, setInitialCashError] = useState('');
 
   // State for data fetching, loading, and errors
   const [products, setProducts] = useState([]);
+  const [merchandise, setMerchandise] = useState([]);
+  const [showMerchandise, setShowMerchandise] = useState(false);
   const [categories, setCategories] = useState({});
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState(null);
@@ -89,9 +92,8 @@ function Menu() {
 
         const placeholderImage = 'https://images.unsplash.com/photo-1509042239860-f550ce710b93';
         
-        // --- MODIFICATION: Capture ProductID and HasAddOns from the backend response ---
         const mappedProducts = apiDetails.map(p => ({
-          id: p.ProductID,          // <-- ADDED: Store the product ID
+          id: p.ProductID,
           name: p.ProductName,
           description: p.Description,
           price: p.Price,
@@ -99,7 +101,7 @@ function Menu() {
           status: p.Status,
           image: imageMap[p.ProductName] || placeholderImage, 
           sizes: p.Sizes,
-          hasAddons: p.HasAddOns,   // <-- ADDED: Store the flag for addon availability
+          hasAddons: p.HasAddOns,
         }));
         setProducts(mappedProducts);
 
@@ -122,6 +124,36 @@ function Menu() {
     initializeData(activeToken, activeUsername);
 
   }, []);
+
+  const fetchMerchandise = async () => {
+    setIsLoading(true);
+    setError(null);
+    const token = localStorage.getItem('authToken');
+    if (!token) {
+      setError("Authorization Error. Please log in.");
+      setIsLoading(false);
+      return;
+    }
+    try {
+      const response = await fetch(MERCHANDISE_API_URL, {
+        headers: { 'Authorization': `Bearer ${token}` },
+      });
+      if (response.status === 401) {
+        throw new Error("Your session is invalid or has expired. Please log in again.");
+      }
+      if (!response.ok) {
+        throw new Error('Failed to fetch merchandise.');
+      }
+      const data = await response.json();
+      setMerchandise(data);
+      setShowMerchandise(true);
+      setSelectedFilter({ type: 'merchandise', value: 'Merchandise' });
+    } catch (e) {
+      setError(e.message);
+    } finally {
+      setIsLoading(false);
+    }
+  };
   
   const checkCashierSession = async (token, cashierName) => {
     try {
@@ -159,21 +191,54 @@ function Menu() {
 
   const filteredProducts = filterProducts();
 
-  // --- MODIFICATION: Updated addToCart to use an array for addons ---
-  const addToCart = (product) => {
-    if (product.status === 'Unavailable') return;
-    
-    // We only merge items if the product being added has no custom addons selected yet.
-    // An item with addons will always be treated as a unique entry.
-    const existingIndex = cartItems.findIndex(item => item.id === product.id && (!item.addons || item.addons.length === 0));
-    
-    if (existingIndex !== -1) {
-      const updatedCart = [...cartItems];
-      updatedCart[existingIndex].quantity += 1;
-      setCartItems(updatedCart);
+  // CORRECTED: Smart addToCart function that combines items without add-ons
+  const addToCart = (item, type = 'product') => {
+    if (item.Status === 'Not Available' || item.status === 'Unavailable') return;
+  
+    if (type === 'product') {
+      // For products, check if an identical item (same product, no add-ons) already exists
+      const existingIndex = cartItems.findIndex(cartItem => 
+        cartItem.id === item.id && 
+        cartItem.type === 'product' && 
+        (!cartItem.addons || cartItem.addons.length === 0)
+      );
+
+      if (existingIndex !== -1) {
+        // If identical item exists (no add-ons), increment quantity
+        const updatedCart = [...cartItems];
+        updatedCart[existingIndex].quantity += 1;
+        setCartItems(updatedCart);
+      } else {
+        // Create new cart item
+        const newCartItem = { 
+          ...item, 
+          quantity: 1, 
+          type: 'product', 
+          addons: [],
+          cartId: Date.now() + Math.random()
+        };
+        setCartItems(prev => [...prev, newCartItem]);
+      }
     } else {
-      // Initialize with an empty addons array, ready for customization
-      setCartItems([...cartItems, { ...product, quantity: 1, addons: [] }]);
+      // For merchandise, always check if it already exists and increment quantity
+      const existingIndex = cartItems.findIndex(cartItem => 
+        cartItem.id === item.MerchandiseID && cartItem.type === 'merchandise'
+      );
+    
+      if (existingIndex !== -1) {
+        const updatedCart = [...cartItems];
+        updatedCart[existingIndex].quantity += 1;
+        setCartItems(updatedCart);
+      } else {
+        setCartItems(prev => [...prev, { 
+          id: item.MerchandiseID, 
+          name: item.MerchandiseName, 
+          price: 0, 
+          quantity: 1, 
+          type: 'merchandise',
+          cartId: Date.now() + Math.random()
+        }]);
+      }
     }
   };
 
@@ -250,11 +315,50 @@ function Menu() {
     </div>
   );
 
+  const MerchandiseList = ({ merchandise, addToCart }) => (
+    <div className="menu-product-grid">
+      {merchandise.map(item => (
+        <div key={item.MerchandiseID} className="menu-product-item">
+          {item.Status === 'Not Available' && (
+            <div className="menu-product-unavailable-overlay">
+              <span>Not Available</span>
+            </div>
+          )}
+          <div className="menu-product-main">
+            <div className="menu-product-details">
+              <div className="menu-product-title">{item.MerchandiseName}</div>
+              <div className="menu-product-category">Quantity: {item.MerchandiseQuantity}</div>
+            </div>
+          </div>
+          <button
+            className="menu-add-button"
+            onClick={() => addToCart(item, 'merchandise')}
+            disabled={item.Status === 'Not Available'}
+          >
+            Add Merchandise
+          </button>
+        </div>
+      ))}
+    </div>
+  );  
+
   const renderMainContent = () => {
-    if (isLoading) return <div className="menu-status-container">Loading Products...</div>;
+    if (isLoading) return <div className="menu-status-container">Loading...</div>;
     if (error && error.includes("Authorization Error")) return <div className="menu-status-container">{error}</div>;
     if (error && error.includes("session is invalid")) return <div className="menu-status-container">{error}</div>;
     if (error) return <div className="menu-status-container">Error: {error}</div>;
+    if (showMerchandise) {
+      return (
+        <>
+          <div className="menu-product-list-header">
+            <h2 className="menu-selected-category-title">Merchandise</h2>
+          </div>
+          <div className="menu-product-grid-container">
+            <MerchandiseList merchandise={merchandise} addToCart={addToCart} />
+          </div>
+        </>
+      );
+    }
     if (filteredProducts.length > 0) {
       return (
         <>
@@ -311,24 +415,39 @@ function Menu() {
         <div className="menu-category-sidebar">
           <div className="menu-category-group">
             <div className={`menu-all-products-btn ${selectedFilter.type === 'all' ? 'active' : ''}`}
-              onClick={() => setSelectedFilter({ type: 'all', value: 'All Products' })}>
+              onClick={() => {
+                setShowMerchandise(false);
+                setSelectedFilter({ type: 'all', value: 'All Products' });
+              }}>
               ALL PRODUCTS
             </div>
           </div>
           {Object.entries(categories).map(([group, items]) => (
             <div className="menu-category-group" key={group}>
               <div className={`menu-group-title ${selectedFilter.type === 'group' && selectedFilter.value === group ? 'active' : ''}`}
-                onClick={() => setSelectedFilter({ type: 'group', value: group })}>
+                onClick={() => {
+                  setShowMerchandise(false);
+                  setSelectedFilter({ type: 'group', value: group });
+                }}>
                 {group}
               </div>
               {items.map(item => (
                 <div key={item} className={`menu-category-item ${selectedFilter.type === 'item' && selectedFilter.value === item ? 'active' : ''}`}
-                  onClick={() => setSelectedFilter({ type: 'item', value: item })}>
+                  onClick={() => {
+                    setShowMerchandise(false);
+                    setSelectedFilter({ type: 'item', value: item });
+                  }}>
                   {item}
                 </div>
               ))}
             </div>
           ))}
+          <div className="menu-category-group">
+            <div className={`menu-all-products-btn ${selectedFilter.type === 'merchandise' ? 'active' : ''}`}
+              onClick={fetchMerchandise}>
+              MERCHANDISE
+            </div>
+          </div>
         </div>
 
         <div className={`menu-main-content ${isCartOpen ? 'menu-cart-open' : ''}`}>
