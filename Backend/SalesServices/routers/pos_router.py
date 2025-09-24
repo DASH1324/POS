@@ -25,6 +25,7 @@ USER_SERVICE_ME_URL = "http://localhost:4000/auth/users/me"
 # --- URLs for Inventory Deduction Endpoints ---
 INGREDIENTS_DEDUCT_URL = "http://127.0.0.1:8002/ingredients/deduct-from-sale"
 MATERIALS_DEDUCT_URL = "http://127.0.0.1:8002/materials/deduct-from-sale"
+MERCHANDISE_DEDUCT_URL = "http://127.0.0.1:8002/merchandise/deduct-from-sale"
 
 router_sales = APIRouter(prefix="/auth/sales", tags=["sales"])
 
@@ -42,6 +43,7 @@ class SaleItem(BaseModel):
     price: float
     category: str
     addons: List[AddonDetail]
+    type: Optional[str] = "product"  # Add type field to distinguish products from merchandise
 
 class Sale(BaseModel):
     cartItems: List[SaleItem]
@@ -90,6 +92,21 @@ async def trigger_inventory_deduction(url: str, cart_items: List[SaleItem], toke
                 error_text = e.response.text
         logger.critical(f"{inventory_type.upper()}-SYNC-FAILURE: Sale processed, but failed to deduct. Error: {error_text}")
 
+# --- New helper function to separate items by type ---
+def separate_cart_items_by_type(cart_items: List[SaleItem]):
+    """Separates cart items into products and merchandise"""
+    products = []
+    merchandise = []
+    
+    for item in cart_items:
+        # Check if item type is explicitly set to merchandise or if category indicates merchandise
+        if hasattr(item, 'type') and item.type == 'merchandise' or item.category == 'Merchandise':
+            merchandise.append(item)
+        else:
+            products.append(item)
+    
+    return products, merchandise
+
 # --- Helper function for calculations ---
 async def calculate_totals_and_discounts(sale_data: Sale, cursor):
     subtotal = Decimal('0.0')
@@ -126,7 +143,6 @@ async def calculate_totals_and_discounts(sale_data: Sale, cursor):
     return subtotal, final_discount, applied_discounts_details
 
 # --- API Endpoint to Create a Sale ---
-# --- API Endpoint to Create a Sale ---
 @router_sales.post("/", status_code=status.HTTP_201_CREATED)
 async def create_sale(
     sale: Sale, 
@@ -135,7 +151,7 @@ async def create_sale(
 ):
     """
     Processes a new sale, records it in the database with an initial 'processing' status,
-    and triggers inventory deduction. The entire process is a single transaction.
+    and triggers inventory deduction for ingredients, materials, and merchandise as needed.
     """
     if current_user.get("userRole") not in ["admin", "manager", "staff", "cashier"]:
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="You do not have permission to create a sale.")
@@ -149,15 +165,12 @@ async def create_sale(
             subtotal, total_discount, discount_details = await calculate_totals_and_discounts(sale, cursor)
             cashier_name = current_user.get("username", "SystemUser")
 
-            # --- START: THE ONLY CHANGE IS ON THIS LINE ---
-            # The status is now set to 'processing' by default upon creation.
+            # Create sale record with processing status
             sql_sale = """
                 INSERT INTO Sales (OrderType, PaymentMethod, CashierName, TotalDiscountAmount, GCashReferenceNumber, Status) 
                 OUTPUT INSERTED.SaleID 
                 VALUES (?, ?, ?, ?, ?, 'processing') 
             """
-            # --- END: THE ONLY CHANGE IS ON THIS LINE ---
-
             await cursor.execute(sql_sale, sale.orderType, sale.paymentMethod, cashier_name, total_discount, sale.gcashReference)
             sale_id_row = await cursor.fetchone()
             if not sale_id_row or not sale_id_row[0]:
@@ -203,9 +216,17 @@ async def create_sale(
             # Step 4: If all DB operations are successful, commit the transaction
             await conn.commit()
             
-        # Step 5: Trigger external services AFTER the sale is successfully committed
-        await trigger_inventory_deduction(INGREDIENTS_DEDUCT_URL, cart_items=sale.cartItems, token=token, inventory_type="Ingredient")
-        await trigger_inventory_deduction(MATERIALS_DEDUCT_URL, cart_items=sale.cartItems, token=token, inventory_type="Material")
+        # Step 5: Separate items by type and trigger appropriate deductions
+        products, merchandise = separate_cart_items_by_type(sale.cartItems)
+        
+        # Trigger deductions for products (ingredients and materials)
+        if products:
+            await trigger_inventory_deduction(INGREDIENTS_DEDUCT_URL, cart_items=products, token=token, inventory_type="Ingredient")
+            await trigger_inventory_deduction(MATERIALS_DEDUCT_URL, cart_items=products, token=token, inventory_type="Material")
+        
+        # Trigger deductions for merchandise
+        if merchandise:
+            await trigger_inventory_deduction(MERCHANDISE_DEDUCT_URL, cart_items=merchandise, token=token, inventory_type="Merchandise")
             
         final_total = subtotal - total_discount
         return {

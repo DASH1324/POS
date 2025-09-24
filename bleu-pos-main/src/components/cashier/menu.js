@@ -135,7 +135,7 @@ function Menu() {
       return;
     }
     try {
-      const response = await fetch(MERCHANDISE_API_URL, {
+      const response = await fetch(`${MERCHANDISE_API_URL}menu`, {
         headers: { 'Authorization': `Bearer ${token}` },
       });
       if (response.status === 401) {
@@ -191,53 +191,52 @@ function Menu() {
 
   const filteredProducts = filterProducts();
 
-  // CORRECTED: Smart addToCart function that combines items without add-ons
   const addToCart = (item, type = 'product') => {
-    if (item.Status === 'Not Available' || item.status === 'Unavailable') return;
-  
-    if (type === 'product') {
-      // For products, check if an identical item (same product, no add-ons) already exists
-      const existingIndex = cartItems.findIndex(cartItem => 
-        cartItem.id === item.id && 
-        cartItem.type === 'product' && 
-        (!cartItem.addons || cartItem.addons.length === 0)
-      );
+  if (item.Status === 'Not Available' || item.status === 'Unavailable') return;
 
-      if (existingIndex !== -1) {
-        // If identical item exists (no add-ons), increment quantity
-        const updatedCart = [...cartItems];
-        updatedCart[existingIndex].quantity += 1;
-        setCartItems(updatedCart);
-      } else {
-        // Create new cart item
-        const newCartItem = { 
-          ...item, 
-          quantity: 1, 
-          type: 'product', 
-          addons: [],
-          cartId: Date.now() + Math.random()
-        };
-        setCartItems(prev => [...prev, newCartItem]);
-      }
+  if (type === 'product') {
+    const existingIndex = cartItems.findIndex(cartItem => 
+      cartItem.id === item.id && 
+      cartItem.type === 'product' && 
+      (!cartItem.addons || cartItem.addons.length === 0)
+    );
+
+    if (existingIndex !== -1) {
+      const updatedCart = [...cartItems];
+      updatedCart[existingIndex].quantity += 1;
+      setCartItems(updatedCart);
     } else {
-      // For merchandise, always check if it already exists and increment quantity
-      const existingIndex = cartItems.findIndex(cartItem => 
-        cartItem.id === item.MerchandiseID && cartItem.type === 'merchandise'
-      );
-    
-      if (existingIndex !== -1) {
-        const updatedCart = [...cartItems];
-        updatedCart[existingIndex].quantity += 1;
-        setCartItems(updatedCart);
-      } else {
-        setCartItems(prev => [...prev, { 
-          id: item.MerchandiseID, 
-          name: item.MerchandiseName, 
-          price: 0, 
-          quantity: 1, 
-          type: 'merchandise',
-          cartId: Date.now() + Math.random()
-        }]);
+      const newCartItem = { 
+        ...item, 
+        quantity: 1, 
+        type: 'product', 
+        addons: [],
+        cartId: Date.now() + Math.random()
+      };
+      setCartItems(prev => [...prev, newCartItem]);
+    }
+  } else if (type === 'merchandise') {
+    const existingIndex = cartItems.findIndex(cartItem => 
+      cartItem.id === item.MerchandiseID && cartItem.type === 'merchandise'
+    );
+  
+    if (existingIndex !== -1) {
+      const updatedCart = [...cartItems];
+      updatedCart[existingIndex].quantity += 1;
+      setCartItems(updatedCart);
+    } else {
+      // Create merchandise cart item with proper structure for POS system
+      setCartItems(prev => [...prev, { 
+        id: item.MerchandiseID, 
+        name: item.MerchandiseName, 
+        price: item.MerchandisePrice, 
+        quantity: 1, 
+        type: 'merchandise',        // Explicitly set type as merchandise
+        image: item.MerchandiseImage,
+        category: 'Merchandise',    // Set category as Merchandise
+        addons: [],                 // Empty addons array as required by backend
+        cartId: Date.now() + Math.random()
+      }]);
       }
     }
   };
@@ -315,32 +314,40 @@ function Menu() {
     </div>
   );
 
-  const MerchandiseList = ({ merchandise, addToCart }) => (
-    <div className="menu-product-grid">
-      {merchandise.map(item => (
-        <div key={item.MerchandiseID} className="menu-product-item">
-          {item.Status === 'Not Available' && (
-            <div className="menu-product-unavailable-overlay">
-              <span>Not Available</span>
+  const MerchandiseList = ({ merchandise, addToCart }) => {
+    const placeholderImage = 'https://via.placeholder.com/150'; // A generic placeholder
+
+    return (
+      <div className="menu-product-grid">
+        {merchandise.map(item => (
+          <div key={item.MerchandiseID} className="menu-product-item">
+            {item.Status === 'Not Available' && (
+              <div className="menu-product-unavailable-overlay">
+                <span>Not Available</span>
+              </div>
+            )}
+            <div className="menu-product-main">
+              <div className="menu-product-img-container">
+                <img src={item.MerchandiseImage || placeholderImage} alt={item.MerchandiseName} />
+              </div>
+              <div className="menu-product-details">
+                <div className="menu-product-title">{item.MerchandiseName}</div>
+                <div className="menu-product-category">Quantity: {item.MerchandiseQuantity}</div>
+                <div className="menu-product-price">₱{item.MerchandisePrice.toFixed(2)}</div>
+              </div>
             </div>
-          )}
-          <div className="menu-product-main">
-            <div className="menu-product-details">
-              <div className="menu-product-title">{item.MerchandiseName}</div>
-              <div className="menu-product-category">Quantity: {item.MerchandiseQuantity}</div>
-            </div>
+            <button
+              className="menu-add-button"
+              onClick={() => addToCart(item, 'merchandise')}
+              disabled={item.Status === 'Not Available'}
+            >
+              Add Merchandise
+            </button>
           </div>
-          <button
-            className="menu-add-button"
-            onClick={() => addToCart(item, 'merchandise')}
-            disabled={item.Status === 'Not Available'}
-          >
-            Add Merchandise
-          </button>
-        </div>
-      ))}
-    </div>
-  );  
+        ))}
+      </div>
+    );
+  };
 
   const renderMainContent = () => {
     if (isLoading) return <div className="menu-status-container">Loading...</div>;

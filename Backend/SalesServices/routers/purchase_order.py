@@ -281,14 +281,8 @@ async def save_online_order(
         raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=f"An error occurred while saving the online order: {e}")
     finally:
         if conn:
-            conn.autocommit = True # Reset connection state
+            conn.autocommit = True 
             await conn.close()
-
-# --- (The rest of the file: update_order_status, get_all_orders, etc. need the same fix as get_processing_orders) ---
-# For brevity, I've only fully corrected the first GET endpoint and the POST endpoint.
-# You must apply the same SQL JOIN and Python looping logic from the corrected 'get_processing_orders'
-# function to your 'get_all_orders' function. The logic will be identical.
-# The 'update_order_status' function does not deal with addons, so it should be fine as-is.
 
 # [Applying the fix to get_all_orders as well for completeness]
 @router_purchase_order.get(
@@ -383,6 +377,8 @@ async def get_all_orders(current_user: dict = Depends(get_current_active_user)):
 
         
 # --- Function to change the status of an order ---
+# In purchase_order_router.py
+
 @router_purchase_order.patch(
     "/{order_id}/status",
     status_code=status.HTTP_200_OK,
@@ -396,51 +392,118 @@ async def update_order_status(
     allowed_roles = ["admin", "manager", "staff", "cashier"]
     if current_user.get("userRole") not in allowed_roles:
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Permission denied.")
+    
     try:
         parsed_id = int(order_id.split('-')[-1])
     except (ValueError, IndexError):
         raise HTTPException(status_code=400, detail="Invalid order ID format.")
+    
     conn = await get_db_connection()
     try:
         async with conn.cursor() as cursor:
             if request.newStatus == 'cancelled':
                 if not request.cancelDetails or not request.cancelDetails.managerUsername:
                     raise HTTPException(status_code=400, detail="Manager username required for cancellation.")
+                
                 items_to_restock = []
+                # --- NEW: A list to hold addon information ---
+                addons_to_restock = []
+                
                 try:
                     await cursor.execute("UPDATE Sales SET Status = ?, UpdatedAt = GETDATE() WHERE SaleID = ?", (request.newStatus, parsed_id))
                     if cursor.rowcount == 0:
                         raise HTTPException(status_code=404, detail=f"Order '{order_id}' not found.")
+                    
                     await cursor.execute("INSERT INTO CancelledOrders (SaleID, ManagerUsername, CancelledAt) VALUES (?, ?, GETDATE())", (parsed_id, request.cancelDetails.managerUsername))
-                    await cursor.execute("SELECT ItemName, Quantity, Category FROM SaleItems WHERE SaleID = ?", parsed_id)
+                    
+                    # --- MODIFIED: Fetch SaleItemID to look up addons later ---
+                    await cursor.execute("SELECT SaleItemID, ItemName, Quantity, Category FROM SaleItems WHERE SaleID = ?", parsed_id)
                     items_to_restock = await cursor.fetchall()
+
+                    # --- NEW: Loop through each main item to find its addons ---
+                    for item in items_to_restock:
+                        await cursor.execute("""
+                            SELECT a.AddonName, sia.Quantity AS AddonQuantity
+                            FROM SaleItemAddons sia
+                            JOIN Addons a ON sia.AddonID = a.AddonID
+                            WHERE sia.SaleItemID = ?
+                        """, item.SaleItemID)
+                        item_addons = await cursor.fetchall()
+                        
+                        for addon in item_addons:
+                            # The total quantity is the main item's quantity multiplied by the addon's quantity per item
+                            total_addon_quantity = item.Quantity * addon.AddonQuantity
+                            addons_to_restock.append({
+                                "addon_name": addon.AddonName,
+                                "quantity": total_addon_quantity
+                            })
+
                     await conn.commit()
                     logger.info(f"Order {order_id} successfully cancelled by {request.cancelDetails.managerUsername}.")
                 except Exception as db_exc:
                     await conn.rollback()
                     logger.error(f"DB error during cancellation for order {order_id}: {db_exc}", exc_info=True)
                     raise HTTPException(status_code=500, detail="Failed to save cancellation to DB.")
+                
                 if items_to_restock:
-                    cancelled_items_payload = {"cancelled_items": [{"product_name": item.ItemName, "quantity": item.Quantity, "category": item.Category} for item in items_to_restock]}
+                    product_items = []
+                    merchandise_items = []
+                    
+                    for item in items_to_restock:
+                        if item.Category == 'Merchandise':
+                            merchandise_items.append({"name": item.ItemName, "quantity": item.Quantity})
+                        else:
+                            product_items.append({"product_name": item.ItemName, "quantity": item.Quantity, "category": item.Category})
+                    
                     token = current_user['access_token']
                     headers = {"Authorization": f"Bearer {token}", "Content-Type": "application/json"}
-                    ingredients_url = "http://127.0.0.1:8002/ingredients/restock-from-cancelled-order"
-                    materials_url = "http://127.0.0.1:8002/materials/restock-from-cancelled-order"
+                    
                     async with httpx.AsyncClient() as client:
-                        tasks = [client.post(ingredients_url, json=cancelled_items_payload, headers=headers), client.post(materials_url, json=cancelled_items_payload, headers=headers)]
-                        results = await asyncio.gather(*tasks, return_exceptions=True)
-                        for i, res in enumerate(results):
-                            service = "Ingredients" if i == 0 else "Materials"
-                            if isinstance(res, Exception):
-                                logger.error(f"Restock call to {service} service failed for order {order_id}: {res}")
-                            elif res.status_code != 200:
-                                logger.error(f"Restock to {service} service for order {order_id} failed: {res.status_code} - {res.text}")
-                return {"message": "Order has been cancelled and inventory restock initiated."}
+                        tasks = []
+                        service_names = []
+                        
+                        if product_items or addons_to_restock:
+                            # --- MODIFIED: Add the new addons_to_restock list to the payload ---
+                            product_payload = {
+                                "cancelled_items": product_items,
+                                "cancelled_addons": addons_to_restock
+                            }
+                            ingredients_url = "http://127.0.0.1:8002/ingredients/restock-from-cancelled-order"
+                            materials_url = "http://127.0.0.1:8002/materials/restock-from-cancelled-order"
+                            
+                            tasks.extend([
+                                client.post(ingredients_url, json=product_payload, headers=headers),
+                                client.post(materials_url, json=product_payload, headers=headers)
+                            ])
+                            service_names.extend(["Ingredients", "Materials"])
+                        
+                        if merchandise_items:
+                            merchandise_payload = {"cartItems": merchandise_items}
+                            merchandise_url = "http://127.0.0.1:8002/merchandise/restock-from-cancelled-order"
+                            tasks.append(client.post(merchandise_url, json=merchandise_payload, headers=headers))
+                            service_names.append("Merchandise")
+                        
+                        if tasks:
+                            results = await asyncio.gather(*tasks, return_exceptions=True)
+                            
+                            for i, res in enumerate(results):
+                                service = service_names[i]
+                                if isinstance(res, Exception):
+                                    logger.error(f"Restock call to {service} service failed for order {order_id}: {res}")
+                                elif res.status_code != 200:
+                                    logger.error(f"Restock to {service} service for order {order_id} failed: {res.status_code} - {res.text}")
+                                else:
+                                    logger.info(f"Successfully restocked {service} for order {order_id}")
+                
+                return {"message": "Order has been cancelled and inventory restock initiated for all item types."}
+            
             else:
                 await cursor.execute("UPDATE Sales SET Status = ?, UpdatedAt = GETDATE() WHERE SaleID = ?", (request.newStatus, parsed_id))
                 if cursor.rowcount == 0:
                     raise HTTPException(status_code=404, detail=f"Order '{order_id}' not found.")
                 await conn.commit()
                 return {"message": f"Order status successfully updated to '{request.newStatus}'."}
+    
     finally:
-        if conn: await conn.close()
+        if conn: 
+            await conn.close()

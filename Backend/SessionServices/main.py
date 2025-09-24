@@ -1,16 +1,11 @@
-# FILE: main.py
-
 import sys
 import os
 
-# --- This path fix is correct and ensures Python can find your 'routers' package ---
 sys.path.append(os.path.dirname(os.path.abspath(__file__)))
-# ----------------------------------------------------------------------------------
 
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
-# --- STEP 1: Import the new cash_tally router alongside your session router ---
 from routers.session import router as session_router
 from routers.cash_tally import router_cash_tally
 
@@ -20,12 +15,10 @@ app = FastAPI(
     version="1.0.0"
 )
 
-# --- STEP 2: Include both routers, giving them the same /api prefix ---
 app.include_router(session_router, prefix="/api")
-app.include_router(router_cash_tally, prefix="/api") # The router's internal prefix is /auth/cash_tally
+app.include_router(router_cash_tally, prefix="/api") 
 
 
-# --- Your CORS middleware (no changes needed) ---
 app.add_middleware(
     CORSMiddleware,
     allow_origins=[
@@ -44,13 +37,11 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# --- Health check endpoint (no changes needed) ---
 @app.get("/", tags=["Health Check"])
 def read_root():
     return {"status": "ok", "message": "Session and Tally Service is running."}
 
 
-# --- Uvicorn runner (no changes needed) ---
 if __name__ == "__main__":
     import uvicorn
     
