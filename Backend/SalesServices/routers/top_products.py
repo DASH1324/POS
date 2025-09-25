@@ -1,4 +1,4 @@
-# FILE: top_products.py - FINAL VERSION
+# FILE: top_products.py - UPDATED WITH PRODUCT/MERCHANDISE FILTER
 
 from fastapi import APIRouter, HTTPException, status, Depends
 from pydantic import BaseModel
@@ -40,17 +40,26 @@ async def get_current_active_user(token: str = Depends(oauth2_scheme)):
 # --- Pydantic Models ---
 class TopProductsRequest(BaseModel):
     cashierName: str
-    orderType: Optional[str] = "All" # NEW: Added orderType filter
+    orderType: Optional[str] = "All"
+    productType: Optional[str] = "All"  # NEW: Added product type filter
 
 class TopProductItem(BaseModel):
     name: str
     sales: int
 
+# --- Helper to generate WHERE clause for product types ---
+def get_product_type_condition(product_type: str) -> str:
+    if product_type == "Products":
+        return "AND si.Category != 'merchandise'"
+    elif product_type == "Merchandise":
+        return "AND si.Category = 'merchandise'"
+    return ""  # For 'All'
+
 # --- API Endpoint to Get Today's Top Selling Products for a Cashier ---
 @router_top_products.post(
     "/today",
     response_model=List[TopProductItem],
-    summary="Get today's top selling products for a specific cashier, with optional order type filter"
+    summary="Get today's top selling products for a specific cashier, with optional order type and product type filters"
 )
 async def get_top_products_today(
     request: TopProductsRequest,
@@ -86,6 +95,10 @@ async def get_top_products_today(
                 base_sql += " AND s.OrderType IN ('Dine in', 'Take out')"
             elif request.orderType == "Online":
                 base_sql += " AND s.OrderType IN ('Pick up', 'Delivery')"
+            
+            # NEW: Add the product type filter condition
+            product_type_condition = get_product_type_condition(request.productType)
+            base_sql += product_type_condition
             
             # Finalize the query
             final_sql = base_sql + """

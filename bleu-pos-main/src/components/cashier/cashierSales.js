@@ -1,4 +1,4 @@
-// FILE: cashierSales.js - FINAL CORRECTED VERSION
+// FILE: cashierSales.js - UPDATED WITH DYNAMIC SECTION TITLES BASED ON PRODUCT FILTER
 
 import React, { useState, useMemo, useEffect } from 'react';
 import './cashierSales.css';
@@ -36,6 +36,7 @@ function CashierSales({ shiftLabel = "Morning Shift", shiftTime = "6:00AM – 2:
   const [selectedDate, setSelectedDate] = useState(new Date().toISOString().split('T')[0]);
   const [showExportModal, setShowExportModal] = useState(false);
   const [orderTypeFilter, setOrderTypeFilter] = useState('All');
+  const [productTypeFilter, setProductTypeFilter] = useState('All');
   const [initialCash, setInitialCash] = useState(0);
   const [loggedInUser, setLoggedInUser] = useState("Loading...");
   const [isLoading, setIsLoading] = useState(true);
@@ -59,6 +60,28 @@ function CashierSales({ shiftLabel = "Morning Shift", shiftTime = "6:00AM – 2:
     coins10: 0, coins5: 0, coins1: 0, cents25: 0, cents10: 0, cents05: 0
   });
 
+  // Helper function to get dynamic section titles based on product type filter
+  const getSectionTitles = () => {
+    switch (productTypeFilter) {
+      case 'Products':
+        return {
+          topSelling: 'Top Selling Products',
+          cancelled: 'Cancelled Products'
+        };
+      case 'Merchandise':
+        return {
+          topSelling: 'Top Selling Merchandise',
+          cancelled: 'Cancelled Merchandise'
+        };
+      case 'All':
+      default:
+        return {
+          topSelling: 'Top Selling Products and Merchandise',
+          cancelled: 'Cancelled Products and Merchandise'
+        };
+    }
+  };
+
   useEffect(() => {
     const username = localStorage.getItem('username');
     if (username) {
@@ -72,7 +95,11 @@ function CashierSales({ shiftLabel = "Morning Shift", shiftTime = "6:00AM – 2:
       try {
         const response = await fetch(`${SALES_METRICS_API_URL}/today`, {
           method: 'POST', headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
-          body: JSON.stringify({ cashierName: username, orderType: orderTypeFilter })
+          body: JSON.stringify({ 
+            cashierName: username, 
+            orderType: orderTypeFilter,
+            productType: productTypeFilter
+          })
         });
         if (!response.ok) throw new Error("Failed to fetch daily sales.");
         const data = await response.json();
@@ -87,7 +114,11 @@ function CashierSales({ shiftLabel = "Morning Shift", shiftTime = "6:00AM – 2:
         try {
           const response = await fetch(`${SALES_METRICS_API_URL}/current_session`, {
             method: 'POST', headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
-            body: JSON.stringify({ cashierName: username, orderType: orderTypeFilter })
+            body: JSON.stringify({ 
+              cashierName: username, 
+              orderType: orderTypeFilter,
+              productType: productTypeFilter
+            })
           });
           if (!response.ok) throw new Error("Failed to fetch session sales.");
           const data = await response.json();
@@ -120,9 +151,11 @@ function CashierSales({ shiftLabel = "Morning Shift", shiftTime = "6:00AM – 2:
         try {
             const response = await fetch(`${CANCELLED_ORDERS_API_URL}/today`, {
                 method: 'POST', headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}`},
-                // --- START: THIS IS THE CORRECTED LINE ---
-                body: JSON.stringify({ cashierName: username, orderType: orderTypeFilter })
-                // --- END: THIS IS THE CORRECTED LINE ---
+                body: JSON.stringify({ 
+                  cashierName: username, 
+                  orderType: orderTypeFilter,
+                  productType: productTypeFilter
+                })
             });
             if (!response.ok) throw new Error("Failed to fetch cancelled orders.");
             const data = await response.json();
@@ -137,7 +170,11 @@ function CashierSales({ shiftLabel = "Morning Shift", shiftTime = "6:00AM – 2:
         try {
             const response = await fetch(`${TOP_PRODUCTS_API_URL}/today`, {
                 method: 'POST', headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
-                body: JSON.stringify({ cashierName: username, orderType: orderTypeFilter })
+                body: JSON.stringify({ 
+                  cashierName: username, 
+                  orderType: orderTypeFilter,
+                  productType: productTypeFilter
+                })
             });
             if (!response.ok) throw new Error("Failed to fetch top products.");
             const data = await response.json();
@@ -158,7 +195,7 @@ function CashierSales({ shiftLabel = "Morning Shift", shiftTime = "6:00AM – 2:
       fetchSessionData();
       fetchSessionSalesMetrics();
     }
-  }, [activeTab, orderTypeFilter]);
+  }, [activeTab, orderTypeFilter, productTypeFilter]);
 
   const today = new Date();
   const formattedDate = date || today.toLocaleDateString('en-US', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' });
@@ -245,11 +282,13 @@ function CashierSales({ shiftLabel = "Morning Shift", shiftTime = "6:00AM – 2:
   const renderModal = () => {
     if (!modalType) return null;
     let modalTitle = ''; let data = []; let columns = [];
+    const sectionTitles = getSectionTitles();
+    
     switch (modalType) {
         case 'topProducts':
-            modalTitle = 'Top Selling Products'; data = topProducts; columns = topProductsColumns; break;
+            modalTitle = sectionTitles.topSelling; data = topProducts; columns = topProductsColumns; break;
         case 'cancelledOrders':
-            modalTitle = "Cancelled Products"; data = cancelledOrders; columns = modalCancelledColumns; break;
+            modalTitle = sectionTitles.cancelled; data = cancelledOrders; columns = modalCancelledColumns; break;
         default: return null;
     }
     return (
@@ -332,6 +371,8 @@ function CashierSales({ shiftLabel = "Morning Shift", shiftTime = "6:00AM – 2:
     ));
   };
 
+  // Get the current section titles based on filter
+  const sectionTitles = getSectionTitles();
 
   return (
     <div className="cashier-sales">
@@ -351,6 +392,15 @@ function CashierSales({ shiftLabel = "Morning Shift", shiftTime = "6:00AM – 2:
                   <option value="All">All</option>
                   <option value="Store">Store (Dine In/Take Out)</option>
                   <option value="Online">Online (Pick Up/Delivery)</option>
+                </select>
+              </div>
+              <div className="cashier-filter-item">
+                <FontAwesomeIcon icon={faFilter} />
+                <span>Product Type:</span>
+                <select value={productTypeFilter} onChange={(e) => setProductTypeFilter(e.target.value)} className="cashier-filter-select">
+                  <option value="All">All</option>
+                  <option value="Products">Products</option>
+                  <option value="Merchandise">Merchandise</option>
                 </select>
               </div>
               <div className="cashier-filter-item">
@@ -378,7 +428,7 @@ function CashierSales({ shiftLabel = "Morning Shift", shiftTime = "6:00AM – 2:
               </div>
               <div className="cashier-cancelled-section">
                 <div className="cashier-section-header">
-                  <h3>Cancelled Products</h3>
+                  <h3>{sectionTitles.cancelled}</h3>
                   <button className="cashier-view-all-btn" onClick={() => openModal('cancelledOrders')}>View All</button>
                 </div>
                 <div className="cashier-cancelled-table-container">
@@ -388,7 +438,7 @@ function CashierSales({ shiftLabel = "Morning Shift", shiftTime = "6:00AM – 2:
             </div>
             <div className="cashier-sales-side">
               <div className="cashier-section-header">
-                <h3>Top Selling Products</h3>
+                <h3>{sectionTitles.topSelling}</h3>
                 <button className="cashier-view-all-btn" onClick={() => openModal('topProducts')}>View All</button>
               </div>
               <div className="cashier-top-products">

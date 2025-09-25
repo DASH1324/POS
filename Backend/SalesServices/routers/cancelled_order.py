@@ -1,9 +1,7 @@
-# FILE: cancelled_orders.py - CORRECTED VERSION
+# FILE: cancelled_orders.py - UPDATED WITH PRODUCT/MERCHANDISE FILTER
 
 from fastapi import APIRouter, HTTPException, status, Depends
-# --- START: THIS IS THE FIX ---
-from fastapi.security import OAuth2PasswordBearer # Import OAuth2PasswordBearer here
-# --- END: THIS IS THE FIX ---
+from fastapi.security import OAuth2PasswordBearer
 from pydantic import BaseModel
 from typing import List, Dict, Optional
 from decimal import Decimal
@@ -67,12 +65,21 @@ class ProcessingOrder(BaseModel):
 class CancelledOrderRequest(BaseModel):
     cashierName: str
     orderType: Optional[str] = "All"
+    productType: Optional[str] = "All"  # NEW: Product type filter
+
+# --- Helper to generate WHERE clause for product types ---
+def get_product_type_condition(product_type: str) -> str:
+    if product_type == "Products":
+        return "AND si.Category != 'merchandise'"
+    elif product_type == "Merchandise":
+        return "AND si.Category = 'merchandise'"
+    return ""  # For 'All'
 
 # --- Endpoint to Get Today's Cancelled Orders for a Cashier ---
 @router_cancelled_order.post(
     "/today",
     response_model=List[ProcessingOrder],
-    summary="Get Today's Cancelled Orders for a Specific Cashier, with optional order type filter"
+    summary="Get Today's Cancelled Orders for a Specific Cashier, with optional order type and product type filters"
 )
 async def get_todays_cancelled_orders(
     request: CancelledOrderRequest,
@@ -105,10 +112,15 @@ async def get_todays_cancelled_orders(
             
             params = [request.cashierName]
             
+            # Add order type filter condition
             if request.orderType == "Store":
                 base_sql += " AND s.OrderType IN ('Dine in', 'Take out')"
             elif request.orderType == "Online":
                 base_sql += " AND s.OrderType IN ('Pick up', 'Delivery')"
+            
+            # NEW: Add product type filter condition
+            product_type_condition = get_product_type_condition(request.productType)
+            base_sql += product_type_condition
                 
             final_sql = base_sql + " ORDER BY co.CancelledAt DESC;"
             

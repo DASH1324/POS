@@ -1,4 +1,4 @@
-# FILE: sales.py
+# FILE: sales.py - UPDATED WITH PRODUCT/MERCHANDISE FILTER
 
 from fastapi import APIRouter, HTTPException, status, Depends
 from pydantic import BaseModel
@@ -41,7 +41,8 @@ async def get_current_active_user(token: str = Depends(oauth2_scheme)):
 # --- Pydantic Models ---
 class SalesMetricsRequest(BaseModel):
     cashierName: str
-    orderType: Optional[Literal['All', 'Store', 'Online']] = 'All' # NEW: Added orderType filter
+    orderType: Optional[Literal['All', 'Store', 'Online']] = 'All'
+    productType: Optional[Literal['All', 'Products', 'Merchandise']] = 'All'  # NEW: Added product type filter
 
 class SalesMetricsResponse(BaseModel):
     totalSales: float
@@ -55,6 +56,14 @@ def get_order_type_condition(order_type: str) -> str:
         return "AND s.OrderType IN ('Dine In', 'Take Out')"
     elif order_type == 'Online':
         return "AND s.OrderType IN ('Pick Up', 'Delivery')"
+    return "" # For 'All'
+
+# --- NEW: Helper to generate WHERE clause for product types ---
+def get_product_type_condition(product_type: str) -> str:
+    if product_type == 'Products':
+        return "AND si.Category != 'merchandise'"
+    elif product_type == 'Merchandise':
+        return "AND si.Category = 'merchandise'"
     return "" # For 'All'
 
 # --- NEW ENDPOINT FOR CURRENT SESSION METRICS ---
@@ -87,8 +96,9 @@ async def get_current_session_sales_metrics(
 
             session_start_time = session_row.SessionStart
             
-            # NEW: Generate dynamic WHERE clause for order type
+            # Generate dynamic WHERE clauses for filters
             order_type_condition = get_order_type_condition(request.orderType)
+            product_type_condition = get_product_type_condition(request.productType)  # NEW
             
             # Step 2: Calculate sales made only AFTER the session started
             sql = f"""
@@ -100,25 +110,40 @@ async def get_current_session_sales_metrics(
                     FROM SaleItems si
                     LEFT JOIN SaleItemAddons sia ON si.SaleItemID = sia.SaleItemID
                     LEFT JOIN Addons a ON sia.AddonID = a.AddonID
+                    JOIN Sales s ON si.SaleID = s.SaleID
+                    WHERE s.Status = 'completed' 
+                    AND s.CashierName = ? 
+                    AND s.CreatedAt >= ? 
+                    {order_type_condition}
+                    {product_type_condition}
                     GROUP BY si.SaleItemID, si.SaleID, si.UnitPrice, si.Quantity
                 )
                 SELECT
                     ISNULL(SUM(itp.LineTotal), 0) AS TotalSales,
                     ISNULL(SUM(CASE WHEN s.PaymentMethod = 'Cash' THEN itp.LineTotal ELSE 0 END), 0) AS CashSales,
                     ISNULL(SUM(CASE WHEN s.PaymentMethod = 'GCash' THEN itp.LineTotal ELSE 0 END), 0) AS GcashSales,
-                    ISNULL((SELECT SUM(Quantity) FROM SaleItems WHERE SaleID IN (
-                        SELECT SaleID FROM Sales s WHERE Status = 'completed' AND CashierName = ? AND CreatedAt >= ? {order_type_condition}
-                    )), 0) AS ItemsSold
+                    ISNULL((SELECT SUM(si2.Quantity) FROM SaleItems si2 
+                        JOIN Sales s2 ON si2.SaleID = s2.SaleID
+                        WHERE s2.Status = 'completed' 
+                        AND s2.CashierName = ? 
+                        AND s2.CreatedAt >= ?
+                        {order_type_condition.replace('s.', 's2.')}
+                        {product_type_condition.replace('si.', 'si2.')}
+                    ), 0) AS ItemsSold
                 FROM Sales s
                 JOIN ItemTotalPrices itp ON s.SaleID = itp.SaleID
                 WHERE 
                     s.Status = 'completed'
                     AND s.CashierName = ?
                     AND s.CreatedAt >= ?
-                    {order_type_condition};
+                    {order_type_condition}
             """
             
-            params = (request.cashierName, session_start_time, request.cashierName, session_start_time)
+            params = (
+                request.cashierName, session_start_time,  # For CTE filtering
+                request.cashierName, session_start_time,  # For ItemsSold subquery
+                request.cashierName, session_start_time   # For main query
+            )
             await cursor.execute(sql, params)
             row = await cursor.fetchone()
             
@@ -160,8 +185,9 @@ async def get_todays_sales_metrics(
     try:
         conn = await get_db_connection()
         async with conn.cursor() as cursor:
-            # NEW: Generate dynamic WHERE clause for order type
+            # Generate dynamic WHERE clauses for filters
             order_type_condition = get_order_type_condition(request.orderType)
+            product_type_condition = get_product_type_condition(request.productType)  # NEW
 
             sql = f"""
                 WITH ItemTotalPrices AS (
@@ -172,25 +198,40 @@ async def get_todays_sales_metrics(
                     FROM SaleItems si
                     LEFT JOIN SaleItemAddons sia ON si.SaleItemID = sia.SaleItemID
                     LEFT JOIN Addons a ON sia.AddonID = a.AddonID
+                    JOIN Sales s ON si.SaleID = s.SaleID
+                    WHERE s.Status = 'completed' 
+                    AND s.CashierName = ? 
+                    AND CAST(s.CreatedAt AS DATE) = CAST(GETDATE() AS DATE) 
+                    {order_type_condition}
+                    {product_type_condition}
                     GROUP BY si.SaleItemID, si.SaleID, si.UnitPrice, si.Quantity
                 )
                 SELECT
                     ISNULL(SUM(itp.LineTotal), 0) AS TotalSales,
                     ISNULL(SUM(CASE WHEN s.PaymentMethod = 'Cash' THEN itp.LineTotal ELSE 0 END), 0) AS CashSales,
                     ISNULL(SUM(CASE WHEN s.PaymentMethod = 'GCash' THEN itp.LineTotal ELSE 0 END), 0) AS GcashSales,
-                    ISNULL((SELECT SUM(Quantity) FROM SaleItems WHERE SaleID IN (
-                        SELECT SaleID FROM Sales s WHERE Status = 'completed' AND CashierName = ? AND CAST(CreatedAt AS DATE) = CAST(GETDATE() AS DATE) {order_type_condition}
-                    )), 0) AS ItemsSold
+                    ISNULL((SELECT SUM(si2.Quantity) FROM SaleItems si2 
+                        JOIN Sales s2 ON si2.SaleID = s2.SaleID
+                        WHERE s2.Status = 'completed' 
+                        AND s2.CashierName = ? 
+                        AND CAST(s2.CreatedAt AS DATE) = CAST(GETDATE() AS DATE)
+                        {order_type_condition.replace('s.', 's2.')}
+                        {product_type_condition.replace('si.', 'si2.')}
+                    ), 0) AS ItemsSold
                 FROM Sales s
                 JOIN ItemTotalPrices itp ON s.SaleID = itp.SaleID
                 WHERE 
                     s.Status = 'completed'
                     AND s.CashierName = ?
                     AND CAST(s.CreatedAt AS DATE) = CAST(GETDATE() AS DATE)
-                    {order_type_condition};
+                    {order_type_condition}
             """
             
-            params = (request.cashierName, request.cashierName)
+            params = (
+                request.cashierName,  # For CTE filtering
+                request.cashierName,  # For ItemsSold subquery
+                request.cashierName   # For main query
+            )
             await cursor.execute(sql, params)
             row = await cursor.fetchone()
             
