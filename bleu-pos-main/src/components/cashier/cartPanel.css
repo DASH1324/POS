@@ -1072,3 +1072,248 @@
     font-weight: bold;
     cursor: pointer;
 }
+
+/* PIN Modal Styles from orderPanel */
+.orderpanel-modal-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.4);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 1100;
+}
+
+.orderpanel-modal-content {
+  background: white;
+  padding: 24px;
+  border-radius: 8px;
+  width: 350px;
+  box-shadow: 0 2px 10px rgba(0, 0, 0, 0.1);
+}
+
+.orderpanel-modal-title {
+  margin-bottom: 10px;
+  font-size: 18px;
+  color: #333;
+}
+
+.orderpanel-modal-input {
+  width: 100%;
+  padding: 8px;
+  font-size: 14px;
+  margin-bottom: 10px;
+  border: 1px solid #ccc;
+  border-radius: 4px;
+}
+
+.orderpanel-modal-error {
+  color: red;
+  font-size: 12px;
+  margin-bottom: 5px;
+}
+
+.orderpanel-modal-buttons {
+  display: flex;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.orderpanel-modal-btn {
+  flex: 1;
+  padding: 8px 12px;
+  font-size: 14px;
+  border: none;
+  border-radius: 4px;
+  cursor: pointer;
+}
+
+.orderpanel-modal-confirm {
+  background-color: #28a745;
+  color: white;
+}
+
+.orderpanel-modal-cancel {
+  background-color: #dee2e6;
+  color: #333;
+}
+
+.orderpanel-modal-description {
+  font-size: 13px;
+  color: #555;
+  margin-bottom: 16px;
+}
+
+/* --- Manager PIN Modal --- */
+
+/* Modal Overlay: Dark, semi-transparent background */
+.modal-overlay {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background-color: rgba(0, 0, 0, 0.6);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 1000; /* Ensure it's on top of other content */
+  animation: fadeIn 0.3s ease;
+}
+
+/* The Modal itself */
+.pin-modal {
+  background-color: #ffffff;
+  border-radius: 12px;
+  box-shadow: 0 5px 15px rgba(0, 0, 0, 0.3);
+  width: 90%;
+  max-width: 400px;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+  animation: slideIn 0.3s ease-out;
+}
+
+/* Modal Header: Title and Close Button */
+.pin-modal .modal-header {
+  padding: 16px 24px;
+  border-bottom: 1px solid #e0e0e0;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.pin-modal .modal-header h3 {
+  margin: 0;
+  font-size: 1.25rem;
+  color: #333;
+}
+
+.pin-modal .close-modal {
+  background: none;
+  border: none;
+  font-size: 1.8rem;
+  font-weight: bold;
+  color: #888;
+  cursor: pointer;
+  padding: 0;
+  line-height: 1;
+}
+
+.pin-modal .close-modal:hover {
+  color: #000;
+}
+
+/* Modal Content: Description and Input Field */
+.pin-modal-content {
+  padding: 24px;
+  text-align: center;
+}
+
+.pin-modal-content p {
+  margin-top: 0;
+  margin-bottom: 20px;
+  color: #555;
+  font-size: 1rem;
+}
+
+/* The PIN input field */
+.pin-input {
+  width: 100%;
+  padding: 12px 0;
+  font-size: 2rem;
+  text-align: center;
+  letter-spacing: 0.5em; /* Spreads out the dots */
+  border: 2px solid #ccc;
+  border-radius: 8px;
+  box-sizing: border-box;
+  margin-bottom: 12px;
+  transition: border-color 0.2s;
+}
+
+.pin-input:focus {
+  border-color: #4B929D; /* Highlight color */
+  outline: none;
+}
+
+/* Hides the "reveal password" icon on Edge/Chrome */
+.pin-input::-ms-reveal,
+.pin-input::-ms-clear {
+  display: none;
+}
+.pin-input::-webkit-credentials-auto-fill-button {
+  visibility: hidden;
+  pointer-events: none;
+  position: absolute;
+  right: 0;
+}
+
+/* Error Message Styling */
+.pin-error-message {
+  color: #d9534f; /* A shade of red */
+  font-size: 0.9rem;
+  min-height: 1.2em; /* Prevents layout shift when message appears/disappears */
+  margin: 0;
+}
+
+/* Modal Footer: Action Buttons */
+.pin-modal-footer {
+  padding: 16px 24px;
+  background-color: #f9f9f9;
+  border-top: 1px solid #e0e0e0;
+  display: flex;
+  justify-content: flex-end;
+  gap: 12px;
+}
+
+/* General Button Styling */
+.pin-modal-footer button {
+  padding: 10px 20px;
+  border-radius: 8px;
+  border: none;
+  font-size: 1rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background-color 0.2s, box-shadow 0.2s;
+}
+
+/* Cancel Button */
+.pin-modal-footer .btn-cancel {
+  background-color: #f0f0f0;
+  border: 1px solid #ddd;
+  color: #555;
+}
+
+.pin-modal-footer .btn-cancel:hover {
+  background-color: #e0e0e0;
+}
+
+/* Confirm Button */
+.pin-modal-footer .btn-confirm {
+  background-color: #4B929D; /* Your primary color */
+  color: #ffffff;
+}
+
+.pin-modal-footer .btn-confirm:hover {
+  background-color: #3a7a85; /* Darker shade on hover */
+  box-shadow: 0 2px 5px rgba(0,0,0,0.15);
+}
+
+/* Disabled State for Buttons */
+.pin-modal-footer button:disabled {
+  background-color: #cccccc;
+  color: #888888;
+  cursor: not-allowed;
+  box-shadow: none;
+}
+
+/* --- Animations --- */
+@keyframes fadeIn {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+@keyframes slideIn {
+  from { transform: translateY(-30px); opacity: 0; }
+  to { transform: translateY(0); opacity: 1; }
+}

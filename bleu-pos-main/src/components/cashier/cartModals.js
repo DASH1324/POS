@@ -1,7 +1,76 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react'; // Added useEffect
 import { useNavigate } from 'react-router-dom';
 import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
 import { faPercent } from '@fortawesome/free-solid-svg-icons';
+
+// --- NEW: Manager PIN Modal Component ---
+export const ManagerPinModal = ({
+  show,
+  onClose,
+  onSubmit,
+  isProcessing,
+  error,
+  title = "Manager PIN Required",
+  description = "Please enter a manager's PIN to authorize this action."
+}) => {
+  const [pin, setPin] = useState('');
+
+  // Reset PIN when modal is closed
+  useEffect(() => {
+    if (!show) {
+      setPin('');
+    }
+  }, [show]);
+
+  const handlePinChange = (e) => {
+    const value = e.target.value;
+    // Allow only numeric input up to 6 digits
+    if (/^\d*$/.test(value) && value.length <= 6) {
+      setPin(value);
+    }
+  };
+
+  const handleSubmit = () => {
+    if (pin.length >= 4) {
+      onSubmit(pin);
+    }
+  };
+
+  if (!show) return null;
+
+  return (
+    <div className="modal-overlay" onClick={onClose}>
+      <div className="pin-modal" onClick={(e) => e.stopPropagation()}>
+        <div className="modal-header">
+          <h3>{title}</h3>
+          <button className="close-modal" onClick={onClose}>×</button>
+        </div>
+        <div className="pin-modal-content">
+          <p>{description}</p>
+          <input
+            type="password"
+            inputMode="numeric"
+            value={pin}
+            onChange={handlePinChange}
+            placeholder="Enter PIN"
+            className="pin-input"
+            autoFocus
+          />
+          {error && <p className="pin-error-message">{error}</p>}
+        </div>
+        <div className="pin-modal-footer">
+          <button onClick={onClose} disabled={isProcessing} className="btn-cancel">
+            Cancel
+          </button>
+          <button onClick={handleSubmit} disabled={isProcessing || pin.length < 4} className="btn-confirm">
+            {isProcessing ? 'Verifying...' : 'Confirm'}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+};
+
 
 // --- MODIFICATION: AddonsModal is now fully dynamic ---
 export const AddonsModal = ({
@@ -61,7 +130,7 @@ export const AddonsModal = ({
 };
 
 
-// Discounts Modal Component (No changes needed)
+// --- MODIFICATION: Discounts Modal now requires a manager PIN ---
 export const DiscountsModal = ({
   showDiscountsModal,
   closeDiscountsModal,
@@ -74,61 +143,129 @@ export const DiscountsModal = ({
   getStagedDiscount,
   applyDiscounts
 }) => {
+  const [showPinModal, setShowPinModal] = useState(false);
+  const [pinError, setPinError] = useState('');
+  const [isVerifyingPin, setIsVerifyingPin] = useState(false);
+
+  // This function is triggered when the "Apply Discounts" button is clicked
+  const handleDiscountRequest = () => {
+    // Only show the PIN modal if there are discounts to apply
+    if (stagedDiscounts.length > 0) {
+      setPinError(''); // Clear previous errors
+      setShowPinModal(true);
+    } else {
+      // If no discounts are selected, just close the modal
+      applyDiscounts();
+    }
+  };
+
+  // This function handles the PIN verification with the backend
+  const handlePinVerification = async (pin) => {
+    setIsVerifyingPin(true);
+    setPinError('');
+    try {
+      const token = localStorage.getItem('authToken');
+      const response = await fetch('http://127.0.0.1:4000/users/verify-pin', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`
+        },
+        body: JSON.stringify({ pin })
+      });
+
+      if (!response.ok) {
+        const errorData = await response.json();
+        throw new Error(errorData.detail || 'Invalid Manager PIN.');
+      }
+
+      // If PIN is correct, proceed to apply discounts
+      setShowPinModal(false);
+      applyDiscounts(); // This is the original function passed via props
+
+    } catch (err) {
+      setPinError(err.message);
+    } finally {
+      setIsVerifyingPin(false);
+    }
+  };
+  
+  // Hide internal PIN modal if the main discount modal is closed
+  useEffect(() => {
+    if (!showDiscountsModal) {
+      setShowPinModal(false);
+    }
+  }, [showDiscountsModal]);
+
   if (!showDiscountsModal) return null;
 
   return (
-    <div className="modal-overlay" onClick={closeDiscountsModal}>
-      <div className="discounts-modal" onClick={(e) => e.stopPropagation()}>
-        <div className="modal-header">
-          <h3>Apply Discounts</h3>
-          <button className="close-modal" onClick={closeDiscountsModal}>×</button>
-        </div>
-        <div className="discounts-content">
-          {isLoading && <p>Loading discounts...</p>}
-          {error && <p className="error-message">{error}</p>}
-          {!isLoading && !error && availableDiscounts.map(discount => {
-            const isStaged = stagedDiscounts.includes(discount.id);
-            const subtotal = getSubtotal();
-            const isEligible = !discount.minAmount || subtotal >= discount.minAmount;
-            
-            return (
-              <div 
-                key={discount.id} 
-                className={`discount-item ${isStaged ? 'selected' : ''} ${!isEligible ? 'disabled' : ''}`} 
-                onClick={() => isEligible && toggleStagedDiscount(discount.id)}
-              >
-                <div className="discount-checkbox">
-                  <input 
-                    type="checkbox" 
-                    checked={isStaged} 
-                    onChange={() => isEligible && toggleStagedDiscount(discount.id)} 
-                    disabled={!isEligible} 
-                  />
-                </div>
-                <div className="discount-info">
-                  <div className="discount-name">{discount.name}</div>
-                  <div className="discount-description">
-                    {discount.description}
-                    {!isEligible && discount.minAmount && (
-                      <span className="min-requirement"> (Min. ₱{discount.minAmount})</span>
-                    )}
+    <>
+      <div className="modal-overlay" onClick={closeDiscountsModal}>
+        <div className="discounts-modal" onClick={(e) => e.stopPropagation()}>
+          <div className="modal-header">
+            <h3>Apply Discounts</h3>
+            <button className="close-modal" onClick={closeDiscountsModal}>×</button>
+          </div>
+          <div className="discounts-content">
+            {isLoading && <p>Loading discounts...</p>}
+            {error && <p className="error-message">{error}</p>}
+            {!isLoading && !error && availableDiscounts.map(discount => {
+              const isStaged = stagedDiscounts.includes(discount.id);
+              const subtotal = getSubtotal();
+              const isEligible = !discount.minAmount || subtotal >= discount.minAmount;
+              
+              return (
+                <div 
+                  key={discount.id} 
+                  className={`discount-item ${isStaged ? 'selected' : ''} ${!isEligible ? 'disabled' : ''}`} 
+                  onClick={() => isEligible && toggleStagedDiscount(discount.id)}
+                >
+                  <div className="discount-checkbox">
+                    <input 
+                      type="checkbox" 
+                      checked={isStaged} 
+                      onChange={() => isEligible && toggleStagedDiscount(discount.id)} 
+                      disabled={!isEligible} 
+                    />
+                  </div>
+                  <div className="discount-info">
+                    <div className="discount-name">{discount.name}</div>
+                    <div className="discount-description">
+                      {discount.description}
+                      {!isEligible && discount.minAmount && (
+                        <span className="min-requirement"> (Min. ₱{discount.minAmount})</span>
+                      )}
+                    </div>
+                  </div>
+                  <div className="discount-icon">
+                    <FontAwesomeIcon icon={faPercent} />
                   </div>
                 </div>
-                <div className="discount-icon">
-                  <FontAwesomeIcon icon={faPercent} />
-                </div>
-              </div>
-            );
-          })}
-        </div>
-        <div className="modal-footer-discount">
-          <div className="discount-summary">
-            <span>Total Discount: ₱{getStagedDiscount().toFixed(0)}</span>
+              );
+            })}
           </div>
-          <button className="apply-btn" onClick={applyDiscounts}>Apply Discounts</button>
+          <div className="modal-footer-discount">
+            <div className="discount-summary">
+              <span>Total Discount: ₱{getStagedDiscount().toFixed(0)}</span>
+            </div>
+            {/* MODIFIED: This button now triggers the PIN modal flow */}
+            <button className="apply-btn" onClick={handleDiscountRequest}>Apply Discounts</button>
+          </div>
         </div>
       </div>
-    </div>
+
+      {/* Render the PIN modal when required */}
+      <ManagerPinModal
+        show={showPinModal}
+        onClose={() => setShowPinModal(false)}
+        onSubmit={handlePinVerification}
+        isProcessing={isVerifyingPin}
+        error={pinError}
+        title="Manager Authorization"
+        description="Please enter a manager PIN to apply discounts."
+      />
+    </>
   );
 };
 

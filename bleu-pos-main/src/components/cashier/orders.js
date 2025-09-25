@@ -51,7 +51,7 @@ function Orders() {
       const headers = { 'Authorization': `Bearer ${token}` };
 
       // Define all statuses to fetch for store orders
-      const storeStatusesToFetch = ['processing', 'completed', 'cancelled'];
+      const storeStatusesToFetch = ['processing', 'completed', 'cancelled', 'refunded'];
 
       // Create an array of fetch promises for each store status
       const storeFetchPromises = storeStatusesToFetch.map(status =>
@@ -488,6 +488,7 @@ function Orders() {
                   <option value="COMPLETED">Completed</option> 
                   <option value="PROCESSING">Processing</option> 
                   <option value="CANCELLED">Cancelled</option> 
+                  <option value="REFUNDED">Refunded</option> 
                 </> 
               ) 
               : (

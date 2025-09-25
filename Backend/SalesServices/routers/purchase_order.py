@@ -94,8 +94,12 @@ class CancelDetails(BaseModel):
     managerUsername: str
 
 class UpdateOrderStatusRequest(BaseModel):
-    newStatus: Literal["completed", "cancelled", "processing"]
+    newStatus: Literal["completed", "cancelled", "processing", "refunded"]
     cancelDetails: Optional[CancelDetails] = None
+
+class RefundOrderRequest(BaseModel):
+    managerUsername: str
+    refundReason: Optional[str] = "Customer requested refund"
 
 # --- API Endpoint to Get Processing Orders ---
 @router_purchase_order.get(
@@ -584,6 +588,117 @@ async def update_pos_status_for_online_order(
         if conn: await conn.rollback()
         logger.error(f"Error updating POS status for online order {online_order_id}: {e}", exc_info=True)
         raise HTTPException(status_code=500, detail="Failed to update the order status in the POS.")
+    finally:
+        if conn:
+            await conn.close()
+
+# --- New Endpoint to Process Refunds ---
+@router_purchase_order.post(
+    "/{order_id}/refund",
+    status_code=status.HTTP_200_OK,
+    summary="Process a refund for a completed order"
+)
+async def refund_order(
+    order_id: str,
+    request: RefundOrderRequest,
+    current_user: dict = Depends(get_current_active_user)
+):
+    """
+    Process a refund for a completed order.
+    Only allows refunding orders that have status 'completed'.
+    Requires manager authorization.
+    """
+    allowed_roles = ["admin", "manager", "cashier"]
+    if current_user.get("userRole") not in allowed_roles:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="You do not have permission to process refunds."
+        )
+    
+    try:
+        parsed_id = int(order_id.split('-')[-1])
+    except (ValueError, IndexError):
+        raise HTTPException(status_code=400, detail="Invalid order ID format.")
+    
+    conn = None
+    try:
+        conn = await get_db_connection()
+        async with conn.cursor() as cursor:
+            # First, verify the order exists and is completed
+            await cursor.execute(
+                "SELECT Status, CashierName, TotalDiscountAmount FROM Sales WHERE SaleID = ?", 
+                parsed_id
+            )
+            order_result = await cursor.fetchone()
+            
+            if not order_result:
+                raise HTTPException(
+                    status_code=404, 
+                    detail=f"Order '{order_id}' not found."
+                )
+            
+            current_status = order_result.Status.lower()
+            if current_status != 'completed':
+                raise HTTPException(
+                    status_code=400,
+                    detail=f"Only completed orders can be refunded. Current status: {current_status}"
+                )
+            
+            # --- START: Database transaction for refund ---
+            try:
+                # Update order status to refunded
+                await cursor.execute(
+                    "UPDATE Sales SET Status = 'refunded', UpdatedAt = GETDATE() WHERE SaleID = ?", 
+                    parsed_id
+                )
+                
+                # Insert into RefundedOrders table (create this table if it doesn't exist)
+                await cursor.execute("""
+                    IF NOT EXISTS (SELECT * FROM sysobjects WHERE name='RefundedOrders' AND xtype='U')
+                    BEGIN
+                        CREATE TABLE RefundedOrders (
+                            RefundID int IDENTITY(1,1) PRIMARY KEY,
+                            SaleID int NOT NULL,
+                            ManagerUsername nvarchar(100) NOT NULL,
+                            RefundReason nvarchar(500),
+                            RefundedAt datetime2 DEFAULT GETDATE(),
+                            FOREIGN KEY (SaleID) REFERENCES Sales(SaleID)
+                        )
+                    END
+                """)
+                
+                await cursor.execute(
+                    "INSERT INTO RefundedOrders (SaleID, ManagerUsername, RefundReason, RefundedAt) VALUES (?, ?, ?, GETDATE())",
+                    (parsed_id, request.managerUsername, request.refundReason)
+                )
+                
+                await conn.commit()
+                logger.info(f"Order {order_id} successfully refunded by {request.managerUsername}.")
+                
+            except Exception as db_exc:
+                await conn.rollback()
+                logger.error(f"DB error during refund for order {order_id}: {db_exc}", exc_info=True)
+                raise HTTPException(status_code=500, detail="Failed to process refund in database.")
+            # --- END: Database transaction for refund ---
+            
+            # --- MODIFICATION START ---
+            # The entire inventory restocking block has been removed as per the request.
+            # --- MODIFICATION END ---
+            
+            return {
+                "message": "Order has been successfully refunded.",
+                "order_id": order_id,
+                "refunded_by": request.managerUsername,
+                "refund_reason": request.refundReason
+            }
+    
+    except HTTPException:
+        # Re-raise HTTP exceptions as-is
+        raise
+    except Exception as e:
+        logger.error(f"Unexpected error during refund for order {order_id}: {e}", exc_info=True)
+        raise HTTPException(status_code=500, detail="An unexpected error occurred while processing the refund.")
+    
     finally:
         if conn:
             await conn.close()

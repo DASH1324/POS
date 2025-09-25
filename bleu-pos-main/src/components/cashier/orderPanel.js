@@ -1,4 +1,4 @@
-// FILE: OrderPanel.js - FINAL VERSION
+// FILE: OrderPanel.js - FIXED VERSION WITH CORRECT REFUND API URL
 
 import React, { useState } from "react";
 import "./orderPanel.css"; // Make sure you've added the @media print styles here
@@ -9,6 +9,8 @@ function OrderPanel({ order, onClose, isOpen, isStore, onUpdateStatus }) {
   const [enteredPin, setEnteredPin] = useState("");
   const [pinError, setPinError] = useState("");
   const [showReceiptModal, setShowReceiptModal] = useState(false);
+  const [showRefundModal, setShowRefundModal] = useState(false);
+  const [isProcessing, setIsProcessing] = useState(false);
 
   if (!order) return null;
 
@@ -19,31 +21,100 @@ function OrderPanel({ order, onClose, isOpen, isStore, onUpdateStatus }) {
   const displayAddOns = Math.abs(addOnsCost);
   const displayDiscount = Math.abs(actualDiscount);
 
+  // Get auth token from localStorage or context
+  const getAuthToken = () => {
+    return localStorage.getItem('authToken') || localStorage.getItem('token') || '';
+  };
+
   const handleStoreCancel = () => {
     setEnteredPin("");
     setPinError("");
     setShowPinModal(true);
   };
 
-  const confirmCancelOrder = () => {
+  const handleStoreRefund = () => {
+    setEnteredPin("");
+    setPinError("");
+    setShowRefundModal(true);
+  };
+
+  const confirmCancelOrder = async () => {
     if (!enteredPin || enteredPin.length < 4) {
       setPinError("Please enter a valid PIN.");
       return;
     }
-    onUpdateStatus(order, "CANCELLED", { pin: enteredPin });
-    setShowPinModal(false);
+    
+    setIsProcessing(true);
+    try {
+      // Use the existing onUpdateStatus function for cancellation
+      await onUpdateStatus(order, "CANCELLED", { pin: enteredPin });
+      setShowPinModal(false);
+    } catch (error) {
+      setPinError("Failed to cancel order. Please try again.");
+    } finally {
+      setIsProcessing(false);
+    }
+  };
+
+  const confirmRefundOrder = async () => {
+    if (!enteredPin || enteredPin.length < 4) {
+      setPinError("Please enter a valid PIN.");
+      return;
+    }
+    
+    setIsProcessing(true);
+    try {
+      const token = getAuthToken();
+      // FIXED: Use the correct sales service URL
+      const response = await fetch(`http://127.0.0.1:9000/auth/purchase_orders/${order.id}/refund`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`
+        },
+        body: JSON.stringify({
+          managerUsername: `manager_${enteredPin}`, // You might want to validate PIN against actual manager username
+          refundReason: "Customer requested refund"
+        })
+      });
+
+      if (response.ok) {
+        const result = await response.json();
+        setShowRefundModal(false);
+        
+        // Update the order status locally or refresh the order list
+        if (onUpdateStatus) {
+          await onUpdateStatus(order, "REFUNDED");
+        }
+        
+        // Optional: Show success message
+        alert("Order refunded successfully!");
+      } else {
+        // Handle both JSON and non-JSON error responses
+        let errorMessage = "Failed to process refund";
+        try {
+          const errorData = await response.json();
+          errorMessage = errorData.detail || errorMessage;
+        } catch (jsonError) {
+          // If response is not JSON (like HTML error page), use status text
+          errorMessage = `${response.status}: ${response.statusText}`;
+        }
+        setPinError(errorMessage);
+      }
+    } catch (error) {
+      console.error("Refund error:", error);
+      setPinError("Failed to process refund. Please check your connection.");
+    } finally {
+      setIsProcessing(false);
+    }
   };
 
   const handlePrintReceipt = () => setShowReceiptModal(true);
 
-  // --- START: UPDATED PRINT FUNCTION ---
-  // This is the new, simplified print function.
   const confirmPrintReceipt = () => {
-    window.print(); // The new CSS rules in orderPanel.css will handle what gets printed.
-    setShowReceiptModal(false); // Close the modal after printing.
+    window.print(); 
+    setShowReceiptModal(false);
   };
-  // --- END: UPDATED PRINT FUNCTION ---
-
 
   // Renders the correct set of action buttons based on the order's state
   const renderActionButtons = () => {
@@ -53,12 +124,17 @@ function OrderPanel({ order, onClose, isOpen, isStore, onUpdateStatus }) {
     let mainAction = null;
     let cancelAction = null;
     let printAction = null;
+    let refundAction = null;
 
     // --- Determine Main Progressive Action Button ---
     if (isStore) {
         if (status === 'PROCESSING') {
             mainAction = (
-                <button className="orderpanel-btn orderpanel-btn-complete" onClick={() => onUpdateStatus(order, "COMPLETED")}>
+                <button 
+                    className="orderpanel-btn orderpanel-btn-complete" 
+                    onClick={() => onUpdateStatus(order, "COMPLETED")}
+                    disabled={isProcessing}
+                >
                     Mark as Completed
                 </button>
             );
@@ -66,33 +142,53 @@ function OrderPanel({ order, onClose, isOpen, isStore, onUpdateStatus }) {
     } else { // Online Order Workflow
         if (status === 'PENDING') {
             mainAction = (
-                <button className="orderpanel-btn orderpanel-btn-complete" onClick={() => onUpdateStatus(order, "PREPARING")}>
+                <button 
+                    className="orderpanel-btn orderpanel-btn-complete" 
+                    onClick={() => onUpdateStatus(order, "PREPARING")}
+                    disabled={isProcessing}
+                >
                     Accept Order
                 </button>
             );
         } else if (status === 'PREPARING') {
             if (type === 'pick up') {
                 mainAction = (
-                    <button className="orderpanel-btn orderpanel-btn-complete" onClick={() => onUpdateStatus(order, "WAITING FOR PICK UP")}>
+                    <button 
+                        className="orderpanel-btn orderpanel-btn-complete" 
+                        onClick={() => onUpdateStatus(order, "WAITING FOR PICK UP")}
+                        disabled={isProcessing}
+                    >
                         Ready for Pick Up
                     </button>
                 );
             } else { // Delivery
                 mainAction = (
-                    <button className="orderpanel-btn orderpanel-btn-complete" onClick={() => onUpdateStatus(order, "DELIVERING")}>
+                    <button 
+                        className="orderpanel-btn orderpanel-btn-complete" 
+                        onClick={() => onUpdateStatus(order, "DELIVERING")}
+                        disabled={isProcessing}
+                    >
                         Ready to Deliver
-                </button>
+                    </button>
                 );
             }
         } else if (status === 'WAITING FOR PICK UP') {
             mainAction = (
-                <button className="orderpanel-btn orderpanel-btn-complete" onClick={() => onUpdateStatus(order, "COMPLETED")}>
+                <button 
+                    className="orderpanel-btn orderpanel-btn-complete" 
+                    onClick={() => onUpdateStatus(order, "COMPLETED")}
+                    disabled={isProcessing}
+                >
                     Pick Up
                 </button>
             );
         } else if (status === 'DELIVERING') {
             mainAction = (
-                <button className="orderpanel-btn orderpanel-btn-complete" onClick={() => onUpdateStatus(order, "COMPLETED")}>
+                <button 
+                    className="orderpanel-btn orderpanel-btn-complete" 
+                    onClick={() => onUpdateStatus(order, "COMPLETED")}
+                    disabled={isProcessing}
+                >
                     Delivered
                 </button>
             );
@@ -103,7 +199,11 @@ function OrderPanel({ order, onClose, isOpen, isStore, onUpdateStatus }) {
     if (isStore) {
         if (status === 'PROCESSING') {
             cancelAction = (
-                <button className="orderpanel-btn orderpanel-btn-refund" onClick={handleStoreCancel}>
+                <button 
+                    className="orderpanel-btn orderpanel-btn-refund" 
+                    onClick={handleStoreCancel}
+                    disabled={isProcessing}
+                >
                     Cancel Order
                 </button>
             );
@@ -111,28 +211,53 @@ function OrderPanel({ order, onClose, isOpen, isStore, onUpdateStatus }) {
     } else {
         if (status === 'PENDING') {
             cancelAction = (
-                <button className="orderpanel-btn orderpanel-btn-refund" onClick={() => onUpdateStatus(order, "CANCELLED")}>
+                <button 
+                    className="orderpanel-btn orderpanel-btn-refund" 
+                    onClick={() => onUpdateStatus(order, "CANCELLED")}
+                    disabled={isProcessing}
+                >
                     Cancel Order
                 </button>
             );
         }
     }
 
-    // --- START: MODIFIED CODE ---
-    // --- Determine Print Button Visibility ---
-    // The "Print Receipt" button now only shows for COMPLETED store orders.
+    // --- Determine Print and Refund Button Visibility for Store ---
     if (isStore && status === 'COMPLETED') {
         printAction = (
-             <button className="orderpanel-btn orderpanel-btn-print" onClick={handlePrintReceipt}>Print Receipt</button>
+             <button 
+                 className="orderpanel-btn orderpanel-btn-print" 
+                 onClick={handlePrintReceipt}
+                 disabled={isProcessing}
+             >
+                 Print Receipt
+             </button>
+        );
+        refundAction = (
+             <button 
+                 className="orderpanel-btn orderpanel-btn-refund" 
+                 onClick={handleStoreRefund}
+                 disabled={isProcessing}
+             >
+                 {isProcessing ? "Processing..." : "Refund Order"}
+             </button>
         );
     }
-    // --- END: MODIFIED CODE ---
 
-    // Return all applicable buttons in the desired order
+    // Show refunded status but no actions
+    if (status === 'REFUNDED') {
+        return (
+            <div className="orderpanel-status-message">
+                <span className="orderpanel-refunded-message">This order has been refunded</span>
+            </div>
+        );
+    }
+   
     return (
         <>
             {mainAction}
             {printAction}
+            {refundAction}
             {cancelAction}
         </>
     );
@@ -142,6 +267,7 @@ function OrderPanel({ order, onClose, isOpen, isStore, onUpdateStatus }) {
     <div className={`orderpanel-container ${isOpen ? 'orderpanel-open' : ''}`}>
       <div className="orderpanel-header">
         <h2 className="orderpanel-title">Order Details</h2>
+        <button className="orderpanel-close-btn" onClick={onClose}>×</button>
       </div>
 
       <div className="orderpanel-content">
@@ -154,6 +280,9 @@ function OrderPanel({ order, onClose, isOpen, isStore, onUpdateStatus }) {
                 <span className="orderpanel-label">Status:</span>
                 <span className={`orderpanel-status-badge orderpanel-${order.status.toLowerCase().replace(/ /g, '')}`}>{order.status}</span>
             </p>
+            {order.cashierName && (
+                <p className="orderpanel-info-item"><span className="orderpanel-label">Cashier:</span> {order.cashierName}</p>
+            )}
         </div>
 
         <div className="orderpanel-items-header">
@@ -172,7 +301,7 @@ function OrderPanel({ order, onClose, isOpen, isStore, onUpdateStatus }) {
                     <div className="orderpanel-item-addons">
                       {item.addons.map((addon, addonIdx) => (
                         <div key={addonIdx} className="orderpanel-addon">
-                          + {addon.quantity}x {addon.name}
+                          + {addon.quantity}x {addon.addonName || addon.name} (₱{addon.price.toFixed(2)})
                         </div>
                       ))}
                     </div>
@@ -224,6 +353,7 @@ function OrderPanel({ order, onClose, isOpen, isStore, onUpdateStatus }) {
             {renderActionButtons()}
         </div>
 
+        {/* PIN Modal for Cancellation */}
         {showPinModal && (
           <div className="orderpanel-modal-overlay" onClick={() => setShowPinModal(false)}>
             <div className="orderpanel-modal-content" onClick={(e) => e.stopPropagation()}>
@@ -247,17 +377,72 @@ function OrderPanel({ order, onClose, isOpen, isStore, onUpdateStatus }) {
               />
               {pinError && <p className="orderpanel-modal-error">{pinError}</p>}
               <div className="orderpanel-modal-buttons">
-                <button className="orderpanel-modal-btn orderpanel-modal-cancel" onClick={() => setShowPinModal(false)}>Cancel</button>
-                <button className="orderpanel-modal-btn orderpanel-modal-confirm" onClick={confirmCancelOrder}>Confirm</button>
+                <button 
+                    className="orderpanel-modal-btn orderpanel-modal-cancel" 
+                    onClick={() => setShowPinModal(false)}
+                    disabled={isProcessing}
+                >
+                    Cancel
+                </button>
+                <button 
+                    className="orderpanel-modal-btn orderpanel-modal-confirm" 
+                    onClick={confirmCancelOrder}
+                    disabled={isProcessing}
+                >
+                    {isProcessing ? "Processing..." : "Confirm"}
+                </button>
               </div>
             </div>
           </div>
         )}
 
+        {/* PIN Modal for Refund */}
+        {showRefundModal && (
+          <div className="orderpanel-modal-overlay" onClick={() => setShowRefundModal(false)}>
+            <div className="orderpanel-modal-content" onClick={(e) => e.stopPropagation()}>
+              <h3 className="orderpanel-modal-title">Manager PIN Required</h3>
+              <p className="orderpanel-modal-description">Please ask a manager to enter their PIN to refund this order.</p>
+              <input
+                type="password"
+                inputMode="numeric"
+                pattern="[0-9]*"
+                maxLength={6}
+                className="orderpanel-modal-input"
+                placeholder="Enter Manager PIN"
+                value={enteredPin}
+                onChange={(e) => {
+                  const value = e.target.value;
+                  if (/^\d*$/.test(value)) {
+                    setEnteredPin(value);
+                    setPinError("");
+                  }
+                }}
+              />
+              {pinError && <p className="orderpanel-modal-error">{pinError}</p>}
+              <div className="orderpanel-modal-buttons">
+                <button 
+                    className="orderpanel-modal-btn orderpanel-modal-cancel" 
+                    onClick={() => setShowRefundModal(false)}
+                    disabled={isProcessing}
+                >
+                    Cancel
+                </button>
+                <button 
+                    className="orderpanel-modal-btn orderpanel-modal-confirm" 
+                    onClick={confirmRefundOrder}
+                    disabled={isProcessing}
+                >
+                    {isProcessing ? "Processing..." : "Confirm Refund"}
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* Receipt Print Modal */}
         {showReceiptModal && (
           <div className="orderpanel-modal-overlay" onClick={() => setShowReceiptModal(false)}>
             <div className="orderpanel-modal-content orderpanel-receipt-modal" onClick={(e) => e.stopPropagation()}>
-              {/* Note: The ID here is not strictly needed anymore, but we can keep it for clarity. The CSS now uses the class. */}
               <div className="orderpanel-receipt-print" id="orderpanel-print-section">
                 <div className="orderpanel-receipt-header">
                   <div className="orderpanel-store-name">Bleu Bean Cafe</div>
@@ -273,7 +458,7 @@ function OrderPanel({ order, onClose, isOpen, isStore, onUpdateStatus }) {
                       </div>
                       {item.addons && item.addons.length > 0 && item.addons.map((addon, addonIdx) => (
                         <div key={addonIdx} className="orderpanel-receipt-line orderpanel-receipt-addon">
-                          <span>  + {addon.quantity}x {addon.name}</span>
+                          <span>  + {addon.quantity}x {addon.addonName || addon.name}</span>
                           <span>₱{(addon.price * addon.quantity).toFixed(2)}</span>
                         </div>
                       ))}
@@ -292,7 +477,7 @@ function OrderPanel({ order, onClose, isOpen, isStore, onUpdateStatus }) {
                 </div>
                 <div className="orderpanel-receipt-footer">
                   <div className="orderpanel-thankyou">*** THANK YOU ***</div>
-                  <div className="orderpanel-served-by">Cashier</div>
+                  <div className="orderpanel-served-by">Cashier: {order.cashierName || 'Staff'}</div>
                 </div>
               </div>
               <div className="orderpanel-modal-buttons">

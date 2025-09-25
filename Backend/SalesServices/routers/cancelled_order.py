@@ -200,3 +200,5 @@ async def get_todays_cancelled_orders(
         raise HTTPException(status_code=500, detail="Failed to fetch today's cancelled orders.")
     finally:
         if conn: await conn.close()
+
+
