@@ -1,8 +1,8 @@
-# FILE: top_products.py
+# FILE: top_products.py - FINAL VERSION
 
 from fastapi import APIRouter, HTTPException, status, Depends
 from pydantic import BaseModel
-from typing import List
+from typing import List, Optional
 import sys
 import os
 import httpx
@@ -40,16 +40,17 @@ async def get_current_active_user(token: str = Depends(oauth2_scheme)):
 # --- Pydantic Models ---
 class TopProductsRequest(BaseModel):
     cashierName: str
+    orderType: Optional[str] = "All" # NEW: Added orderType filter
 
 class TopProductItem(BaseModel):
     name: str
-    sales: int # This matches the 'sales' key in your frontend's static data
+    sales: int
 
 # --- API Endpoint to Get Today's Top Selling Products for a Cashier ---
 @router_top_products.post(
     "/today",
     response_model=List[TopProductItem],
-    summary="Get today's top selling products for a specific cashier"
+    summary="Get today's top selling products for a specific cashier, with optional order type filter"
 )
 async def get_top_products_today(
     request: TopProductsRequest,
@@ -63,11 +64,9 @@ async def get_top_products_today(
     try:
         conn = await get_db_connection()
         async with conn.cursor() as cursor:
-            # This query finds all completed sales for the cashier today,
-            # groups them by the item name, sums the quantity for each item,
-            # and orders them from most sold to least sold.
-            # TOP 10 limits the result to the best sellers.
-            sql = """
+            
+            # --- START: MODIFIED SQL LOGIC WITH FILTERING ---
+            base_sql = """
                 SELECT
                     TOP 10
                     si.ItemName,
@@ -78,16 +77,28 @@ async def get_top_products_today(
                     s.Status = 'completed'
                     AND s.CashierName = ?
                     AND CAST(s.CreatedAt AS DATE) = CAST(GETDATE() AS DATE)
+            """
+            
+            params = [request.cashierName]
+            
+            # Add the order type filter condition if it's not 'All'
+            if request.orderType == "Store":
+                base_sql += " AND s.OrderType IN ('Dine in', 'Take out')"
+            elif request.orderType == "Online":
+                base_sql += " AND s.OrderType IN ('Pick up', 'Delivery')"
+            
+            # Finalize the query
+            final_sql = base_sql + """
                 GROUP BY
                     si.ItemName
                 ORDER BY
                     TotalQuantitySold DESC;
             """
+            # --- END: MODIFIED SQL LOGIC WITH FILTERING ---
             
-            await cursor.execute(sql, request.cashierName)
+            await cursor.execute(final_sql, *params)
             rows = await cursor.fetchall()
             
-            # Format the database rows into the Pydantic response model
             top_products = [
                 TopProductItem(name=row.ItemName, sales=row.TotalQuantitySold)
                 for row in rows

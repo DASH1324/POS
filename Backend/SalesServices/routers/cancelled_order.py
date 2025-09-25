@@ -1,5 +1,9 @@
+# FILE: cancelled_orders.py - CORRECTED VERSION
+
 from fastapi import APIRouter, HTTPException, status, Depends
-from fastapi.security import OAuth2PasswordBearer
+# --- START: THIS IS THE FIX ---
+from fastapi.security import OAuth2PasswordBearer # Import OAuth2PasswordBearer here
+# --- END: THIS IS THE FIX ---
 from pydantic import BaseModel
 from typing import List, Dict, Optional
 from decimal import Decimal
@@ -62,12 +66,13 @@ class ProcessingOrder(BaseModel):
 
 class CancelledOrderRequest(BaseModel):
     cashierName: str
+    orderType: Optional[str] = "All"
 
 # --- Endpoint to Get Today's Cancelled Orders for a Cashier ---
 @router_cancelled_order.post(
     "/today",
     response_model=List[ProcessingOrder],
-    summary="Get Today's Cancelled Orders for a Specific Cashier"
+    summary="Get Today's Cancelled Orders for a Specific Cashier, with optional order type filter"
 )
 async def get_todays_cancelled_orders(
     request: CancelledOrderRequest,
@@ -84,9 +89,8 @@ async def get_todays_cancelled_orders(
     try:
         conn = await get_db_connection()
         async with conn.cursor() as cursor:
-            # --- START: CORRECTED SQL QUERY ---
-            # The invalid 'si.Addons' column has been removed.
-            sql = """
+            
+            base_sql = """
                 SELECT
                     s.SaleID, s.OrderType, s.PaymentMethod, s.CreatedAt, s.CashierName,
                     s.TotalDiscountAmount, s.Status, s.GCashReferenceNumber,
@@ -97,11 +101,18 @@ async def get_todays_cancelled_orders(
                 WHERE s.Status = 'cancelled'
                 AND s.CashierName = ?
                 AND CAST(co.CancelledAt AS DATE) = CAST(GETDATE() AS DATE)
-                ORDER BY co.CancelledAt DESC;
             """
-            # --- END: CORRECTED SQL QUERY ---
             
-            await cursor.execute(sql, request.cashierName)
+            params = [request.cashierName]
+            
+            if request.orderType == "Store":
+                base_sql += " AND s.OrderType IN ('Dine in', 'Take out')"
+            elif request.orderType == "Online":
+                base_sql += " AND s.OrderType IN ('Pick up', 'Delivery')"
+                
+            final_sql = base_sql + " ORDER BY co.CancelledAt DESC;"
+            
+            await cursor.execute(final_sql, *params)
             rows = await cursor.fetchall()
             
             orders_dict: Dict[int, dict] = {}
@@ -128,15 +139,11 @@ async def get_todays_cancelled_orders(
                     item_quantity = row.Quantity or 0
                     item_price = row.UnitPrice or Decimal('0.0')
                     orders_dict[sale_id]["items"] += item_quantity
-                    
-                    # Calculate subtotal including addons for the final total
                     item_total = item_price * item_quantity
                     
-                    # --- START: NEW ADDON FETCHING LOGIC ---
                     addons_data = {}
                     addons_total_price = Decimal('0.0')
                     
-                    # Query the database to get addons for the current sale item
                     addons_sql = """
                         SELECT a.AddonName, a.Price, sia.Quantity
                         FROM SaleItemAddons sia
@@ -154,9 +161,7 @@ async def get_todays_cancelled_orders(
                             "quantity": addon_row.Quantity
                         }
                     
-                    # Add the addon total to the subtotal for this order
                     item_subtotals[sale_id] += item_total + addons_total_price
-                    # --- END: NEW ADDON FETCHING LOGIC ---
                     
                     orders_dict[sale_id]["orderItems"].append(
                         ProcessingSaleItem(
@@ -164,7 +169,7 @@ async def get_todays_cancelled_orders(
                             quantity=item_quantity,
                             price=float(item_price),
                             category=row.Category,
-                            addons=addons_data # Use the addon data we just fetched
+                            addons=addons_data
                         )
                     )
 

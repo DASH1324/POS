@@ -1,0 +1,107 @@
+body {
+  background: #eaf6f8;
+  margin: 0;
+  font-family: 'Segoe UI', sans-serif;
+}
+
+.transaction-reports {
+  display: flex;
+  flex-direction: row;
+  height: 100vh;
+  overflow: hidden;
+}
+
+.transRep {
+  flex: 1;
+  padding-right: 60px;
+  padding-top: 20px;
+  box-sizing: border-box;
+  margin: 0 auto;
+  overflow-y: auto;
+}
+
+.transRepContents {
+  margin-top: 60px;
+}
+
+.transRep-filter-bar {
+  display: flex;
+  gap: 8px;
+  margin-top: 50px;
+  margin-bottom: 10px;
+  align-items: center;
+  flex-wrap: nowrap;
+  width: 100%;
+}
+
+.transRep-filter-bar select {
+  flex: 1;
+  min-width: 150px;
+  max-width: 300px;
+  font-size: 13px;
+  padding: 9px 8px;
+  border: 0.5px solid #EBEBEB;
+  border-radius: 6px;
+  border-color: black;
+  color: #555; 
+}
+
+.transaction-clear-btn {
+  padding: 8px 14px;
+  background-color: #d9534f;
+  color: white;
+  border: none;
+  border-radius: 6px;
+  cursor: pointer;
+  font-weight: 500;
+  font-size: 13px;
+  transition: background-color 0.3s;
+  white-space: nowrap;
+  flex-shrink: 0;
+  width: 110px;
+}
+
+.transaction-clear-btn:hover {
+    background-color: #c9302c;
+}
+
+.charts-container {
+  display: grid;
+  margin-top: 50px;
+  grid-template-columns: 1fr 1fr;
+  gap: 25px;
+}
+
+.chart-card {
+  background: white;
+  padding: 20px;
+  border-radius: 15px;
+  box-shadow: 2px 3px 3px 3px rgba(0,0,0,0.08);
+  height: auto;
+  min-height: 300px;
+}
+
+.chart-card h2 {
+  font-size: 18px;
+  font-weight: 600;
+  margin-top: 10px;
+  margin-bottom: 35px;
+  color: #333;
+}
+
+@media (max-width: 1024px) {
+  .charts-container {
+    grid-template-columns: 1fr;
+  }
+}
+
+@media (max-width: 768px) {
+  .transRep {
+    padding: 15px;
+    flex-direction: column;
+  }
+
+  .charts-container {
+    grid-template-columns: 1fr;
+  }
+}

@@ -1,0 +1,139 @@
+/* Backdrop */
+.logSpillage-modal-backdrop {
+    position: fixed;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    background-color: rgba(0, 0, 0, 0.5);
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    z-index: 1000;
+}
+
+/* Modal container */
+.logSpillage-modal-container {
+    background-color: #fff;
+    padding: 25px;
+    border-radius: 10px;
+    width: 400px;
+    max-height: 80vh;
+    overflow-y: auto;
+    position: relative;
+    box-shadow: 0 8px 16px rgba(0,0,0,0.2);
+}
+
+/* Modal header */
+.logSpillage-modal-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 20px;
+}
+
+.logSpillage-modal-header h2 {
+    margin: 0;
+    color: #4B929D;
+    font-size: 1.5rem;
+}
+
+/* Close button */
+.logSpillage-close-button {
+    font-size: 24px;
+    cursor: pointer;
+    color: #444;
+    background: none;
+    border: none;
+}
+
+/* Form */
+.logSpillage-form label {
+    display: block;
+    margin-bottom: 15px;
+    font-weight: 600;
+    color: #333;
+    font-size: 14px;
+}
+
+.logSpillage-form input,
+.logSpillage-form select,
+.logSpillage-form textarea {
+    box-sizing: border-box;
+    width: 100%;
+    padding: 8px 10px;
+    margin-top: 5px;
+    border: 1px solid #ccc;
+    border-radius: 6px;
+    font-size: 14px;
+    display: block;
+}
+
+.logSpillage-form textarea {
+    resize: vertical;
+    min-height: 100px;
+}
+
+/* Form rows (side-by-side fields) */
+.form-row {
+    display: flex;
+    gap: 14px;
+    flex-wrap: wrap;
+}
+
+/* Buttons */
+.logSpillage-button-container {
+    display: flex;
+    justify-content: flex-end;
+    margin-top: 30px;
+}
+
+.logSpillage-submit-button {
+    width: 30%;
+    padding: 10px;
+    background-color: #4B929D;
+    color: white;
+    font-weight: bold;
+    border: none;
+    border-radius: 6px;
+    cursor: pointer;
+    transition: background-color 0.3s;
+    margin-right: 10px;
+}
+
+.logSpillage-submit-button:hover {
+    background-color: #37717a;
+}
+
+.logSpillage-cancel-button {
+    width: 30%;
+    padding: 10px;
+    background-color: #cccccc;
+    color: #333333;
+    font-weight: bold;
+    border: none;
+    border-radius: 6px;
+    cursor: pointer;
+    transition: background-color 0.3s;
+}
+
+.logSpillage-cancel-button:hover {
+    background-color: #b3b3b3;
+}
+
+/* Required asterisk */
+.logSpillage-required-asterisk {
+    color: red;
+    margin-left: 2px;
+}
+
+/* Input error styles */
+.logSpillage-error {
+    border: 2px solid red;
+}
+
+.logSpillage-error-message {
+    color: red;
+    font-size: 0.8em;
+    margin-top: 5px;
+}

@@ -1,0 +1,17 @@
+import React from "react";
+import "./salesMonitoring.css";
+import Sidebar from "../sidebar/sidebar";
+import Header from "../header/header"; 
+
+function SalesMonitoring() {
+  return (
+    <div className='sales-monitoring'>
+        <Sidebar />
+        <div className='monitoring'>
+        <Header pageTitle="Sales Monitoring" />
+        </div>
+    </div>
+  )
+}
+
+export default SalesMonitoring

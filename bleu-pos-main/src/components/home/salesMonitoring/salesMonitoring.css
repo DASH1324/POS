@@ -1,0 +1,22 @@
+body {
+    background: #eaf6f8;
+    margin: 0;
+    font-family: 'Segoe UI', sans-serif;
+}
+
+.sales-monitoring {
+    display: flex;
+    flex-direction: row;
+    min-height: 100vh;
+}
+
+.monitoring {
+    flex: 1;
+    box-sizing: border-box;
+    width: 85%;
+    overflow: hidden; 
+    margin-top: 23px;
+    margin-left: 10px;
+    margin-right: 40px;
+    margin-bottom: 30px;
+}

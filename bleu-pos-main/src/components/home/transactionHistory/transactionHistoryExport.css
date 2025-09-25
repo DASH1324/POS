@@ -1,0 +1,217 @@
+.transaction-history-container {
+  font-family: Arial, sans-serif;
+  max-width: 1200px;
+  margin: 0 auto;
+  padding: 20px;
+  background-color: white;
+}
+
+/* Header Section */
+.header-section {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  margin-bottom: 30px;
+  margin-top: 20px;
+}
+
+.logo-section {
+  order: 2;
+}
+
+.logo {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+}
+
+.logo-image {
+  width: 200px;
+  height: 120px;
+}
+
+
+.bleu {
+  font-size: 24px;
+  font-weight: bold;
+  color: #2c5aa0;
+  font-family: 'Arial Black', Arial, sans-serif;
+}
+
+.bean-cafe {
+  font-size: 18px;
+  color: #2c5aa0;
+  font-weight: 600;
+  margin-top: -2px;
+}
+
+.title-section {
+  flex: 2;
+  text-align: left;
+  order: 1;
+}
+
+.report-title {
+  font-size: 28px;
+  font-weight: bold;
+  color: #333;
+  margin: 0 0 10px 0;
+  text-align: left;
+}
+
+.report-info {
+  text-align: left;
+}
+
+.report-info p {
+  margin: 2px 0;
+  font-size: 14px;
+  color: #666;
+}
+
+/* Table Container */
+.table-container {
+  overflow-x: auto;
+  border-radius: 8px;
+  box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+}
+
+
+.transaction-table {
+  width: 100%;
+  border-collapse: collapse;
+  background-color: white;
+  border-radius: 8px;
+  overflow: hidden;
+}
+
+/* Table Header */
+.table-header {
+  background-color: #20b2aa;
+  color: white;
+}
+
+.table-header th {
+  padding: 12px 8px;
+  text-align: left;
+  font-weight: bold;
+  font-size: 14px;
+  border: none;
+}
+
+/* Table Body */
+.transaction-table tbody tr {
+  border-bottom: 1px solid #e0e0e0;
+}
+
+.even-row {
+  background-color: white;
+}
+
+.odd-row {
+  background-color: #f8f9fa;
+}
+
+.transaction-table tbody tr:hover {
+  background-color: #e8f4f8;
+}
+
+.transaction-table td {
+  padding: 10px 8px;
+  font-size: 13px;
+  color: #333;
+  border: none;
+}
+
+/* Column-specific styling */
+.transaction-table td:nth-child(1) {
+  font-weight: 600;
+  color: #2c5aa0;
+}
+
+.transaction-table td:nth-child(5) {
+  text-align: center;
+}
+
+.transaction-table td:nth-child(7) {
+  font-weight: 600;
+  color: #2c5aa0;
+}
+
+/* Status styling */
+.transaction-table td:nth-child(9) {
+  font-weight: 500;
+}
+
+.transaction-table td:nth-child(9):contains('Completed') {
+  color: #28a745;
+}
+
+.transaction-table td:nth-child(9):contains('Processing') {
+  color: #ffc107;
+}
+
+/* Discount styling */
+.transaction-table td:nth-child(6):contains('Discount Applied') {
+  color: #dc3545;
+  font-weight: 500;
+}
+
+.transaction-table td:nth-child(6):contains('None') {
+  color: #6c757d;
+}
+
+/* Responsive design */
+@media (max-width: 768px) {
+  .header-section {
+    flex-direction: column;
+    align-items: center;
+    text-align: center;
+  }
+  
+  .title-section {
+    text-align: center;
+    margin-top: 20px;
+  }
+  
+  .report-title {
+    text-align: left;
+  }
+  
+  .report-info {
+    text-align: center;
+  }
+  
+  .transaction-table {
+    font-size: 12px;
+  }
+  
+  .table-header th,
+  .transaction-table td {
+    padding: 8px 4px;
+  }
+}
+
+/* Summary Section */
+.summary-section {
+  margin-top: 30px; 
+  text-align: left;
+}
+
+.summary-title {
+  font-size: 20px;
+  font-weight: bold;
+  color: #333;
+  margin: 0 0 15px 0;
+  text-align: left;
+}
+
+.summary-info {
+  text-align: left;
+}
+
+.summary-info p {
+  margin: 2px 0;
+  font-size: 14px;
+  color: #666;
+}

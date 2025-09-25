@@ -1,4 +1,4 @@
-// FILE: orders.js
+// FILE: orders.js - FINAL VERSION
 
 import React, { useState, useEffect, useCallback } from "react";
 import "./orders.css";
@@ -50,7 +50,6 @@ function Orders() {
       if (!token) throw new Error("Authentication error: You must be logged in to view orders.");
       const headers = { 'Authorization': `Bearer ${token}` };
 
-      // --- START: MODIFIED CODE ---
       // Define all statuses to fetch for store orders
       const storeStatusesToFetch = ['processing', 'completed', 'cancelled'];
 
@@ -64,23 +63,30 @@ function Orders() {
         fetch(`${ONLINE_API_BASE_URL}/cart/admin/orders/manage`, { headers }),
         ...storeFetchPromises
       ]);
-      // --- END: MODIFIED CODE ---
 
       let newStoreOrders = [];
       let newOnlineOrders = [];
       let errors = [];
 
-      // --- START: MODIFIED CODE to process multiple store responses ---
       // Process all the settled promises for store orders
       for (const storeResponse of storeResponsesSettled) {
         if (storeResponse.status === 'fulfilled' && storeResponse.value.ok) {
           const data = await storeResponse.value.json();
           const orders = Array.isArray(data) ? data : [];
           const mappedOrders = orders.map(order => ({
-            id: order.id, customerName: 'In-Store', date: new Date(order.date), orderType: order.orderType,
-            paymentMethod: order.paymentMethod || 'N/A', total: order.total, status: order.status ? order.status.toUpperCase() : 'UNKNOWN',
+            id: order.id, 
+            customerName: 'In-Store', 
+            date: new Date(order.date), 
+            orderType: order.orderType,
+            paymentMethod: order.paymentMethod || 'N/A', 
+            total: order.total, 
+            status: order.status ? order.status.toUpperCase() : 'UNKNOWN',
             items: order.orderItems ? order.orderItems.reduce((acc, item) => acc + item.quantity, 0) : 0,
-            orderItems: order.orderItems ? order.orderItems.map(item => ({...item, size: item.size || 'Standard', extras: item.extras || []})) : [],
+            orderItems: order.orderItems ? order.orderItems.map(item => ({
+              ...item, 
+              size: item.size || 'Standard', 
+              addons: item.addons || []
+            })) : [],
             source: 'store',
             discount: order.discount || order.appliedDiscount || 0,
             addOns: order.addOns || order.appliedAddOns || order.addons || 0,
@@ -92,10 +98,12 @@ function Orders() {
           console.error("Store Order Fetch Error:", storeResponse.reason || (storeResponse.value && storeResponse.value.statusText));
         }
       }
-      // --- END: MODIFIED CODE ---
 
       if (onlineResponse.status === 'fulfilled' && onlineResponse.value.ok) {
         const data = await onlineResponse.value.json();
+        // Added console.log to check the details received from the cart
+        console.log("Received Online Order Data from Cart API:", JSON.stringify(data, null, 2));
+        
         const orders = Array.isArray(data) ? data : [];
         newOnlineOrders = orders.map(order => {
             const parsedItems = Array.isArray(order.items) ? order.items.map(item => ({
@@ -103,7 +111,8 @@ function Orders() {
                 quantity: item.quantity,
                 price: item.price,
                 size: item.size || 'Standard', 
-                extras: item.extras || []
+                category: item.category, // Keep the actual category from the database
+                addons: item.addons || [] // Corrected: Was 'extras', now 'addons' with array default
             })) : [];
 
             const totalQuantity = parsedItems.reduce((sum, item) => sum + item.quantity, 0);
@@ -127,8 +136,22 @@ function Orders() {
           errors.push("Failed to load online orders.");
           console.error("Online Order Fetch Error:", onlineResponse.reason || (onlineResponse.value && onlineResponse.value.statusText));
       }
+      
       if (errors.length > 0) setError(errors.join(' '));
-      const processAndSort = (orders) => orders.map(o => ({ ...o, localDateString: getLocalDateString(o.date), dateDisplay: o.date.toLocaleString("en-US", { month: "long", day: "2-digit", year: "numeric", hour: "numeric", minute: "2-digit", hour12: true })})).sort((a, b) => b.date - a.date);
+      
+      const processAndSort = (orders) => orders.map(o => ({ 
+        ...o, 
+        localDateString: getLocalDateString(o.date), 
+        dateDisplay: o.date.toLocaleString("en-US", { 
+          month: "long", 
+          day: "2-digit", 
+          year: "numeric", 
+          hour: "numeric", 
+          minute: "2-digit", 
+          hour12: true 
+        })
+      })).sort((a, b) => b.date - a.date);
+      
       setStoreOrders(processAndSort(newStoreOrders));
       setOnlineOrders(processAndSort(newOnlineOrders));
     } catch (e) {
@@ -146,16 +169,41 @@ function Orders() {
   }, [fetchOrders]);
 
   const storeColumns = [
-    { name: "ORDER ID", selector: (row) => row.id, sortable: true, width: "25%" }, { name: "DATE & TIME", selector: (row) => row.dateDisplay, sortable: true, width: "30%" },
-    { name: "ITEMS", selector: (row) => `${row.items} Items`, sortable: true, width: "15%" }, { name: "TOTAL", selector: (row) => `₱${row.total.toFixed(2)}`, sortable: true, width: "15%" },
-    { name: "STATUS", selector: (row) => row.status, cell: (row) => (<span className={`orderpanel-status-badge orderpanel-${row.status.toLowerCase().replace(/\s+/g, '')}`}>{row.status}</span>), width: "15%" },
+    { name: "ORDER ID", selector: (row) => row.id, sortable: true, width: "25%" }, 
+    { name: "DATE & TIME", selector: (row) => row.dateDisplay, sortable: true, width: "30%" },
+    { name: "ITEMS", selector: (row) => `${row.items} Items`, sortable: true, width: "15%" }, 
+    { name: "TOTAL", selector: (row) => `₱${row.total.toFixed(2)}`, sortable: true, width: "15%" },
+    { 
+      name: "STATUS", 
+      selector: (row) => row.status, 
+      cell: (row) => (
+        <span className={`orderpanel-status-badge orderpanel-${row.status.toLowerCase().replace(/\s+/g, '')}`}>
+          {row.status}
+        </span>
+      ), 
+      width: "15%" 
+    },
   ];
+  
   const onlineColumns = [
-    { name: "ORDER ID", selector: (row) => row.id, sortable: true, width: "15%" }, { name: "CUSTOMER", selector: (row) => row.customerName, sortable: true, width: "20%" },
-    { name: "DATE & TIME", selector: (row) => row.dateDisplay, sortable: true, width: "25%" }, { name: "TOTAL", selector: (row) => `₱${row.total.toFixed(2)}`, sortable: true, width: "15%" },
-    { name: "TYPE", selector: (row) => row.orderType, sortable: true, width: "10%" }, { name: "STATUS", selector: (row) => row.status, cell: (row) => (<span className={`orderpanel-status-badge orderpanel-${row.status.toLowerCase().replace(/\s+/g, '')}`}>{row.status}</span>), width: "15%" },
+    { name: "ORDER ID", selector: (row) => row.id, sortable: true, width: "15%" }, 
+    { name: "CUSTOMER", selector: (row) => row.customerName, sortable: true, width: "20%" },
+    { name: "DATE & TIME", selector: (row) => row.dateDisplay, sortable: true, width: "25%" }, 
+    { name: "TOTAL", selector: (row) => `₱${row.total.toFixed(2)}`, sortable: true, width: "15%" },
+    { name: "TYPE", selector: (row) => row.orderType, sortable: true, width: "10%" }, 
+    { 
+      name: "STATUS", 
+      selector: (row) => row.status, 
+      cell: (row) => (
+        <span className={`orderpanel-status-badge orderpanel-${row.status.toLowerCase().replace(/\s+/g, '')}`}>
+          {row.status}
+        </span>
+      ), 
+      width: "15%" 
+    },
   ];
 
+  // --- START: UPDATED FUNCTION ---
   const handleUpdateStatus = async (orderToUpdate, newStatus, details) => {
     const token = localStorage.getItem('authToken');
     if (!token) {
@@ -178,7 +226,10 @@ function Orders() {
                 if (!pinResponse.ok) throw new Error(pinData.detail || "Invalid Manager PIN.");
 
                 const cancelUrl = `${SALES_API_BASE_URL}/auth/purchase_orders/${orderToUpdate.id}/status`;
-                const cancelBody = JSON.stringify({ newStatus: 'cancelled', cancelDetails: { managerUsername: pinData.managerUsername } });
+                const cancelBody = JSON.stringify({ 
+                  newStatus: 'cancelled', 
+                  cancelDetails: { managerUsername: pinData.managerUsername } 
+                });
                 const cancelResponse = await fetch(cancelUrl, { method: 'PATCH', headers, body: cancelBody });
                 if (!cancelResponse.ok) throw new Error((await cancelResponse.json()).detail || "Failed to cancel the store order.");
                 
@@ -204,30 +255,52 @@ function Orders() {
     
     // Handle all other status updates
     } else {
-      // ** CHANGE: This block now includes inventory deduction **
       // SPECIAL WORKFLOW: Accepting an online order (PENDING -> PREPARING)
       if (orderToUpdate.source === 'online' && newStatus === 'PREPARING' && orderToUpdate.status === 'PENDING') {
         try {
           // Step 1: Post to POS and Deduct Inventory in parallel
-          const posOrderPayload = {
+           const posOrderPayload = {
             online_order_id: orderToUpdate.id,
             customer_name: orderToUpdate.customerName,
+            cashier_name: username, // Use the logged-in username
             order_type: orderToUpdate.orderType,
             payment_method: orderToUpdate.paymentMethod,
             subtotal: orderToUpdate.total,
             total_amount: orderToUpdate.total,
             status: 'processing',
-            items: orderToUpdate.orderItems.map(item => ({ name: item.name, quantity: item.quantity, price: item.price, category: item.category || 'Online', addons: item.addons || {} }))
+            items: orderToUpdate.orderItems.map(item => ({ 
+                name: item.name, 
+                quantity: item.quantity, 
+                price: item.price, 
+                category: item.category, // Keep actual category, no fallback to 'Online'
+                addons: item.addons || [] 
+            }))
           };
 
           const deductionPayload = {
-            cartItems: orderToUpdate.orderItems.map(item => ({ name: item.name, quantity: item.quantity }))
+            cartItems: orderToUpdate.orderItems.map(item => ({
+                name: item.name,
+                quantity: item.quantity,
+                addons: item.addons || []
+            }))
           };
           
           const [posResponse, ingredientsResponse, materialsResponse] = await Promise.allSettled([
-              fetch(`${SALES_API_BASE_URL}/auth/purchase_orders/online-order`, { method: 'POST', headers, body: JSON.stringify(posOrderPayload) }),
-              fetch(`${INVENTORY_API_BASE_URL}/ingredients/deduct-from-sale`, { method: 'POST', headers, body: JSON.stringify(deductionPayload) }),
-              fetch(`${INVENTORY_API_BASE_URL}/materials/deduct-from-sale`, { method: 'POST', headers, body: JSON.stringify(deductionPayload) })
+              fetch(`${SALES_API_BASE_URL}/auth/purchase_orders/online-order`, { 
+                method: 'POST', 
+                headers, 
+                body: JSON.stringify(posOrderPayload) 
+              }),
+              fetch(`${INVENTORY_API_BASE_URL}/ingredients/deduct-from-sale`, { 
+                method: 'POST', 
+                headers, 
+                body: JSON.stringify(deductionPayload) 
+              }),
+              fetch(`${INVENTORY_API_BASE_URL}/materials/deduct-from-sale`, { 
+                method: 'POST', 
+                headers, 
+                body: JSON.stringify(deductionPayload) 
+              })
           ]);
 
           // Check for critical failure (POS system)
@@ -237,8 +310,12 @@ function Orders() {
           }
           
           // Log non-critical failures (inventory)
-          if (ingredientsResponse.status === 'rejected' || !ingredientsResponse.value.ok) console.error("Failed to deduct ingredients:", ingredientsResponse.status === 'fulfilled' ? await ingredientsResponse.value.text() : ingredientsResponse.reason);
-          if (materialsResponse.status === 'rejected' || !materialsResponse.value.ok) console.error("Failed to deduct materials:", materialsResponse.status === 'fulfilled' ? await materialsResponse.value.text() : materialsResponse.reason);
+          if (ingredientsResponse.status === 'rejected' || !ingredientsResponse.value.ok) {
+            console.error("Failed to deduct ingredients:", ingredientsResponse.status === 'fulfilled' ? await ingredientsResponse.value.text() : ingredientsResponse.reason);
+          }
+          if (materialsResponse.status === 'rejected' || !materialsResponse.value.ok) {
+            console.error("Failed to deduct materials:", materialsResponse.status === 'fulfilled' ? await materialsResponse.value.text() : materialsResponse.reason);
+          }
           
           console.log("Order saved to POS and inventory deduction initiated.");
   
@@ -256,21 +333,53 @@ function Orders() {
         }
       // GENERAL WORKFLOW: For all other status changes
       } else {
-        let url, body;
-        if (orderToUpdate.source === 'store') {
-            url = `${SALES_API_BASE_URL}/auth/purchase_orders/${orderToUpdate.id}/status`;
-            body = JSON.stringify({ newStatus: newStatus.toLowerCase() });
-        } else if (orderToUpdate.source === 'online') {
-            url = `${ONLINE_API_BASE_URL}/cart/admin/orders/${orderToUpdate.id}/status`;
-            body = JSON.stringify({ new_status: newStatus });
-        } else {
-            alert("Cannot update order: Unknown source.");
-            return;
-        }
         try {
-            const response = await fetch(url, { method: 'PATCH', headers, body });
-            if (!response.ok) throw new Error((await response.json()).detail || 'Failed to update order status.');
-            alert((await response.json()).message || "Order status updated successfully!");
+            const updatePromises = [];
+
+            // 1. Create the update promise for the primary system (Store or Online)
+            if (orderToUpdate.source === 'store') {
+                const url = `${SALES_API_BASE_URL}/auth/purchase_orders/${orderToUpdate.id}/status`;
+                const body = JSON.stringify({ newStatus: newStatus.toLowerCase() });
+                updatePromises.push(fetch(url, { method: 'PATCH', headers, body }));
+
+            } else if (orderToUpdate.source === 'online') {
+                // For online orders, we update BOTH the online system and the POS system
+                
+                // Promise to update the Online Ordering System (OOS)
+                const oosUrl = `${ONLINE_API_BASE_URL}/cart/admin/orders/${orderToUpdate.id}/status`;
+                const oosBody = JSON.stringify({ new_status: newStatus });
+                updatePromises.push(fetch(oosUrl, { method: 'PATCH', headers, body: oosBody }));
+                
+                // If the final status is COMPLETED, also update the POS status
+                // from 'processing' to 'completed'.
+                if (newStatus === 'COMPLETED') {
+                    const posStatus = 'completed'; // Map frontend status to backend status
+                    const posUrl = `${SALES_API_BASE_URL}/auth/purchase_orders/online/${orderToUpdate.id}/status`;
+                    const posBody = JSON.stringify({ newStatus: posStatus });
+                    updatePromises.push(fetch(posUrl, { method: 'PATCH', headers, body: posBody }));
+                }
+            } else {
+                alert("Cannot update order: Unknown source.");
+                return;
+            }
+
+            // 2. Execute all update promises concurrently
+            const results = await Promise.allSettled(updatePromises);
+            
+            let hasErrors = false;
+            results.forEach(result => {
+              if (result.status === 'rejected' || (result.status === 'fulfilled' && !result.value.ok)) {
+                hasErrors = true;
+                console.error("An update failed:", result.reason || result.value.statusText);
+              }
+            });
+
+            if (hasErrors) {
+              throw new Error('One or more status updates failed. Check the console for details.');
+            }
+            
+            alert("Order status updated successfully!");
+
         } catch (err) {
             console.error("Error updating status:", err);
             alert(`Error: ${err.message}`);
@@ -282,65 +391,189 @@ function Orders() {
     await fetchOrders();
     setSelectedOrder(prev => prev && prev.id === orderToUpdate.id ? { ...prev, status: newStatus.toUpperCase() } : null);
   };
+  // --- END: UPDATED FUNCTION ---
 
   const ordersData = activeTab === "store" ? storeOrders : onlineOrders;
   const filteredData = ordersData.filter(order => {
     const text = searchText.toLowerCase();
-    const matchesSearch = String(order.id).toLowerCase().includes(text) || (order.dateDisplay && order.dateDisplay.toLowerCase().includes(text)) || (order.customerName && order.customerName.toLowerCase().includes(text)) || order.status.toLowerCase().includes(text);
+    const matchesSearch = String(order.id).toLowerCase().includes(text) || 
+                         (order.dateDisplay && order.dateDisplay.toLowerCase().includes(text)) || 
+                         (order.customerName && order.customerName.toLowerCase().includes(text)) || 
+                         order.status.toLowerCase().includes(text);
     const matchesDate = filterDate ? order.localDateString === filterDate : true;
     const matchesStatus = filterStatus ? order.status.toUpperCase() === filterStatus.toUpperCase() : true;
     return matchesSearch && matchesDate && matchesStatus;
   });
 
-  const clearFilters = () => { setSearchText(""); setFilterDate(getTodayLocalDate()); setFilterStatus(""); };
-  const handleTabChange = (tab) => { setActiveTab(tab); clearFilters(); setSelectedOrder(null); };
-  useEffect(() => { if (filteredData.length > 0) { if (!selectedOrder || !filteredData.find(o => o.id === selectedOrder.id)) { setSelectedOrder(filteredData[0]); } } else { setSelectedOrder(null); } }, [filteredData, selectedOrder]);
-  useEffect(() => { const getMostRecentOrderDate = (orders) => { if (!orders || orders.length === 0) return null; return orders[0].localDateString; }; const currentOrders = activeTab === "store" ? storeOrders : onlineOrders; if (currentOrders.length > 0) { const mostRecentDate = getMostRecentOrderDate(currentOrders); setFilterDate(mostRecentDate); } else { setFilterDate(getTodayLocalDate()); } }, [activeTab, storeOrders, onlineOrders, getTodayLocalDate]);
+  const clearFilters = () => { 
+    setSearchText(""); 
+    setFilterDate(getTodayLocalDate()); 
+    setFilterStatus(""); 
+  };
+  
+  const handleTabChange = (tab) => { 
+    setActiveTab(tab); 
+    clearFilters(); 
+    setSelectedOrder(null); 
+  };
+
+  useEffect(() => { 
+    if (filteredData.length > 0) { 
+      if (!selectedOrder || !filteredData.find(o => o.id === selectedOrder.id)) { 
+        setSelectedOrder(filteredData[0]); 
+      } 
+    } else { 
+      setSelectedOrder(null); 
+    } 
+  }, [filteredData, selectedOrder]);
+
+  useEffect(() => { 
+    const getMostRecentOrderDate = (orders) => { 
+      if (!orders || orders.length === 0) return null; 
+      return orders[0].localDateString; 
+    }; 
+    
+    const currentOrders = activeTab === "store" ? storeOrders : onlineOrders; 
+    if (currentOrders.length > 0) { 
+      const mostRecentDate = getMostRecentOrderDate(currentOrders); 
+      setFilterDate(mostRecentDate); 
+    } else { 
+      setFilterDate(getTodayLocalDate()); 
+    } 
+  }, [activeTab, storeOrders, onlineOrders, getTodayLocalDate]);
 
   return (
     <div className="orders-main-container">
       <Navbar isOrderPanelOpen={true} username={username} />
       <div className="orders-content-container orders-panel-open">
         <div className="orders-tab-container">
-          <button className={`orders-tab ${activeTab === "store" ? "active" : ""}`} onClick={() => handleTabChange("store")}>Store</button>
-          <button className={`orders-tab ${activeTab === "online" ? "active" : ""}`} onClick={() => handleTabChange("online")}>Online</button>
+          <button 
+            className={`orders-tab ${activeTab === "store" ? "active" : ""}`} 
+            onClick={() => handleTabChange("store")}
+          >
+            Store
+          </button>
+          <button 
+            className={`orders-tab ${activeTab === "online" ? "active" : ""}`} 
+            onClick={() => handleTabChange("online")}
+          >
+            Online
+          </button>
         </div>
+        
         <div className="orders-filter-bar">
-          <input type="text" placeholder="Search..." value={searchText} onChange={(e) => setSearchText(e.target.value)} className="orders-filter-input" />
-          <input type="date" value={filterDate || ''} onChange={(e) => setFilterDate(e.target.value)} className="orders-filter-input" max={getTodayLocalDate()} />
-          <select value={filterStatus} onChange={(e) => setFilterStatus(e.target.value)} className="orders-filter-input">
+          <input 
+            type="text" 
+            placeholder="Search..." 
+            value={searchText} 
+            onChange={(e) => setSearchText(e.target.value)} 
+            className="orders-filter-input" 
+          />
+          <input 
+            type="date" 
+            value={filterDate || ''} 
+            onChange={(e) => setFilterDate(e.target.value)} 
+            className="orders-filter-input" 
+            max={getTodayLocalDate()} 
+          />
+          <select 
+            value={filterStatus} 
+            onChange={(e) => setFilterStatus(e.target.value)} 
+            className="orders-filter-input"
+          >
             <option value="">All Status</option>
             {activeTab === 'store' 
-              ? (<> 
+              ? (
+                <> 
                   <option value="COMPLETED">Completed</option> 
                   <option value="PROCESSING">Processing</option> 
                   <option value="CANCELLED">Cancelled</option> 
-                 </>) 
-              : (<> 
+                </> 
+              ) 
+              : (
+                <> 
                   <option value="PENDING">Pending</option> 
                   <option value="PREPARING">Preparing</option> 
                   <option value="WAITING FOR PICK UP">Waiting For Pick Up</option>
                   <option value="DELIVERING">Delivering</option>
                   <option value="COMPLETED">Completed</option> 
                   <option value="CANCELLED">Cancelled</option> 
-                 </>)}
+                </>
+              )}
           </select>
-          <button className="orders-clear-btn" onClick={clearFilters}>Clear Filters</button>
+          <button className="orders-clear-btn" onClick={clearFilters}>
+            Clear Filters
+          </button>
         </div>
+        
         <div className="orders-table-container">
-          {loading && ordersData.length === 0 ? (<div className="orders-message-container">Loading orders...</div>) : error && ordersData.length === 0 ? (<div className="orders-message-container orders-error">{error}</div>) : (
+          {loading && ordersData.length === 0 ? (
+            <div className="orders-message-container">Loading orders...</div>
+          ) : error && ordersData.length === 0 ? (
+            <div className="orders-message-container orders-error">{error}</div>
+          ) : (
             <DataTable
               columns={activeTab === 'store' ? storeColumns : onlineColumns}
               data={filteredData}
-              pagination highlightOnHover responsive fixedHeader fixedHeaderScrollHeight="60vh"
-              conditionalRowStyles={[{ when: row => row.id === selectedOrder?.id, style: { backgroundColor: "#e9f9ff", boxShadow: "inset 0 0 0 1px #2a9fbf" } }]}
+              pagination 
+              highlightOnHover 
+              responsive 
+              fixedHeader 
+              fixedHeaderScrollHeight="60vh"
+              conditionalRowStyles={[
+                { 
+                  when: row => row.id === selectedOrder?.id, 
+                  style: { 
+                    backgroundColor: "#e9f9ff", 
+                    boxShadow: "inset 0 0 0 1px #2a9fbf" 
+                  } 
+                }
+              ]}
               onRowClicked={(row) => setSelectedOrder(row)}
-              noDataComponent={<div className="orders-message-container">{`No ${activeTab} orders found for the selected filters.`}</div>}
-              customStyles={{ headCells: { style: { backgroundColor: "#4B929D", color: "#fff", fontWeight: "600", fontSize: "14px", padding: "15px", textTransform: "uppercase", letterSpacing: "1px" } }, rows: { style: { minHeight: "60px", padding: "10px", fontSize: "14px", color: "#333" } }, cells: { style: { fontSize: "14px" } }, }}
+              noDataComponent={
+                <div className="orders-message-container">
+                  {`No ${activeTab} orders found for the selected filters.`}
+                </div>
+              }
+              customStyles={{ 
+                headCells: { 
+                  style: { 
+                    backgroundColor: "#4B929D", 
+                    color: "#fff", 
+                    fontWeight: "600", 
+                    fontSize: "14px", 
+                    padding: "15px", 
+                    textTransform: "uppercase", 
+                    letterSpacing: "1px" 
+                  } 
+                }, 
+                rows: { 
+                  style: { 
+                    minHeight: "60px", 
+                    padding: "10px", 
+                    fontSize: "14px", 
+                    color: "#333" 
+                  } 
+                }, 
+                cells: { 
+                  style: { 
+                    fontSize: "14px" 
+                  } 
+                }
+              }}
             />
           )}
         </div>
-        {selectedOrder && ( <OrderPanel order={selectedOrder} isOpen={true} onClose={() => setSelectedOrder(null)} isStore={selectedOrder.source === 'store'} onUpdateStatus={handleUpdateStatus} /> )}
+        
+        {selectedOrder && ( 
+          <OrderPanel 
+            order={selectedOrder} 
+            isOpen={true} 
+            onClose={() => setSelectedOrder(null)} 
+            isStore={selectedOrder.source === 'store'} 
+            onUpdateStatus={handleUpdateStatus} 
+          /> 
+        )}
       </div>
     </div>
   );

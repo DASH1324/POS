@@ -2,7 +2,7 @@
 
 from fastapi import APIRouter, HTTPException, status, Depends
 from pydantic import BaseModel
-from typing import Optional
+from typing import Optional, Literal
 from decimal import Decimal
 import sys
 import os
@@ -41,12 +41,21 @@ async def get_current_active_user(token: str = Depends(oauth2_scheme)):
 # --- Pydantic Models ---
 class SalesMetricsRequest(BaseModel):
     cashierName: str
+    orderType: Optional[Literal['All', 'Store', 'Online']] = 'All' # NEW: Added orderType filter
 
 class SalesMetricsResponse(BaseModel):
     totalSales: float
     cashSales: float
     gcashSales: float
     itemsSold: int
+
+# --- Helper to generate WHERE clause for order types ---
+def get_order_type_condition(order_type: str) -> str:
+    if order_type == 'Store':
+        return "AND s.OrderType IN ('Dine In', 'Take Out')"
+    elif order_type == 'Online':
+        return "AND s.OrderType IN ('Pick Up', 'Delivery')"
+    return "" # For 'All'
 
 # --- NEW ENDPOINT FOR CURRENT SESSION METRICS ---
 @router_sales_metrics.post(
@@ -77,15 +86,16 @@ async def get_current_session_sales_metrics(
                 return SalesMetricsResponse(totalSales=0.0, cashSales=0.0, gcashSales=0.0, itemsSold=0)
 
             session_start_time = session_row.SessionStart
-
+            
+            # NEW: Generate dynamic WHERE clause for order type
+            order_type_condition = get_order_type_condition(request.orderType)
+            
             # Step 2: Calculate sales made only AFTER the session started
-            # THIS QUERY IS NOW CORRECTED TO INCLUDE ADDON PRICES
-            sql = """
+            sql = f"""
                 WITH ItemTotalPrices AS (
                     SELECT
                         si.SaleID,
                         si.Quantity,
-                        -- Calculate total price for one item line, including addons
                         (si.UnitPrice * si.Quantity) + ISNULL(SUM(a.Price * sia.Quantity), 0) AS LineTotal
                     FROM SaleItems si
                     LEFT JOIN SaleItemAddons sia ON si.SaleItemID = sia.SaleItemID
@@ -96,19 +106,18 @@ async def get_current_session_sales_metrics(
                     ISNULL(SUM(itp.LineTotal), 0) AS TotalSales,
                     ISNULL(SUM(CASE WHEN s.PaymentMethod = 'Cash' THEN itp.LineTotal ELSE 0 END), 0) AS CashSales,
                     ISNULL(SUM(CASE WHEN s.PaymentMethod = 'GCash' THEN itp.LineTotal ELSE 0 END), 0) AS GcashSales,
-                    -- ItemsSold calculation remains the same, summing the quantity of main items
                     ISNULL((SELECT SUM(Quantity) FROM SaleItems WHERE SaleID IN (
-                        SELECT SaleID FROM Sales WHERE Status = 'completed' AND CashierName = ? AND CreatedAt >= ?
+                        SELECT SaleID FROM Sales s WHERE Status = 'completed' AND CashierName = ? AND CreatedAt >= ? {order_type_condition}
                     )), 0) AS ItemsSold
                 FROM Sales s
                 JOIN ItemTotalPrices itp ON s.SaleID = itp.SaleID
                 WHERE 
                     s.Status = 'completed'
                     AND s.CashierName = ?
-                    AND s.CreatedAt >= ?;
+                    AND s.CreatedAt >= ?
+                    {order_type_condition};
             """
             
-            # Parameters need to be duplicated for the subquery and the main query
             params = (request.cashierName, session_start_time, request.cashierName, session_start_time)
             await cursor.execute(sql, params)
             row = await cursor.fetchone()
@@ -151,8 +160,10 @@ async def get_todays_sales_metrics(
     try:
         conn = await get_db_connection()
         async with conn.cursor() as cursor:
-            # THIS QUERY IS NOW CORRECTED TO INCLUDE ADDON PRICES
-            sql = """
+            # NEW: Generate dynamic WHERE clause for order type
+            order_type_condition = get_order_type_condition(request.orderType)
+
+            sql = f"""
                 WITH ItemTotalPrices AS (
                     SELECT
                         si.SaleID,
@@ -168,29 +179,28 @@ async def get_todays_sales_metrics(
                     ISNULL(SUM(CASE WHEN s.PaymentMethod = 'Cash' THEN itp.LineTotal ELSE 0 END), 0) AS CashSales,
                     ISNULL(SUM(CASE WHEN s.PaymentMethod = 'GCash' THEN itp.LineTotal ELSE 0 END), 0) AS GcashSales,
                     ISNULL((SELECT SUM(Quantity) FROM SaleItems WHERE SaleID IN (
-                        SELECT SaleID FROM Sales WHERE Status = 'completed' AND CashierName = ? AND CAST(CreatedAt AS DATE) = CAST(GETDATE() AS DATE)
+                        SELECT SaleID FROM Sales s WHERE Status = 'completed' AND CashierName = ? AND CAST(CreatedAt AS DATE) = CAST(GETDATE() AS DATE) {order_type_condition}
                     )), 0) AS ItemsSold
                 FROM Sales s
                 JOIN ItemTotalPrices itp ON s.SaleID = itp.SaleID
                 WHERE 
                     s.Status = 'completed'
                     AND s.CashierName = ?
-                    AND CAST(s.CreatedAt AS DATE) = CAST(GETDATE() AS DATE);
+                    AND CAST(s.CreatedAt AS DATE) = CAST(GETDATE() AS DATE)
+                    {order_type_condition};
             """
             
-            # Parameter is used in the subquery and main query
             params = (request.cashierName, request.cashierName)
             await cursor.execute(sql, params)
             row = await cursor.fetchone()
             
             if row:
-                response_data = SalesMetricsResponse(
+                return SalesMetricsResponse(
                     totalSales=float(row.TotalSales),
                     cashSales=float(row.CashSales),
                     gcashSales=float(row.GcashSales),
                     itemsSold=int(row.ItemsSold)
                 )
-                return response_data
             else:
                 return SalesMetricsResponse(totalSales=0.0, cashSales=0.0, gcashSales=0.0, itemsSold=0)
 

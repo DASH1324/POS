@@ -1,0 +1,166 @@
+.transhis-modal {
+    max-width: 600px !important;
+  width: 90% !important;
+}
+
+.transhis-modal .modal-content {
+  border-radius: 12px;
+  box-shadow: 0 6px 24px rgba(0, 0, 0, 0.25);
+  max-height: 80vh;
+  
+}
+
+.transhis-modal .modal-header {
+  color: #4B929D !important; 
+  border-radius: 12px 12px 0 0;
+  padding: 20px 24px;
+}
+
+.transhis-modal .modal-title {
+  font-size: 1.6rem;    
+  font-weight: 700;
+}
+
+.transhis-modal .modal-body {
+  padding: 16px;
+  background-color: #f9f9f9;     
+  font-size: 14px;      
+}
+
+.modal-section {
+  margin-bottom: 16px;
+}
+
+.modal-section h5 {
+  font-size: 16px;
+  font-weight: 600;
+  margin-top: 20px;
+  margin-bottom: 20px;  
+  padding-bottom: 4px;
+  letter-spacing: 0.5px;
+}
+
+.detail-row {
+  display: flex;
+  justify-content: space-between;
+  padding: 10px 0;
+  font-size: 16px;
+  border-bottom: 1px solid #eee;
+}
+
+.detail-row label {
+  font-weight: 600;
+  color: #333;
+}
+
+.items-list {
+  margin-top: 16px;
+  border-radius: 6px;
+  background: #fff;
+  padding: 16px;
+}
+
+.item-row {
+  display: flex;
+  justify-content: space-between;
+  padding: 10px 0;
+}
+
+.item-row:last-child {
+  border-bottom: none;
+}
+
+.item-info {
+  max-width: 70%;
+}
+
+.item-name {
+  font-weight: 600;
+  font-size: 16px;
+}
+
+.item-qty,
+.item-details {
+  font-size: 14px;
+  color: #666;
+}
+
+.item-price {
+  font-weight: 600;
+  font-size: 16px;
+  color: #333;
+}
+
+.applied-discount {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.discount-badge {
+  background-color: #e3f2fd;
+  color: #0d6efd;
+  padding: 4px 10px;
+  border-radius: 6px;
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.discount-badge.none {
+  background-color: #f1f1f1;
+  color: #777;
+}
+
+.bill-summary {
+  background: #fff;
+  border: 1px solid #eee;
+  border-radius: 6px;
+  padding: 16px;
+}
+
+.bill-row {
+  display: flex;
+  justify-content: space-between;
+  padding: 10px 0;
+  font-size: 16px;
+}
+
+.bill-row.discount-row {
+  color: #d9534f;
+}
+
+.bill-row.total-row {
+  font-weight: 700;
+  font-size: 18px;
+  border-top: 1px solid #ddd;
+  margin-top: 12px;
+  padding-top: 12px;
+}
+
+.issue-box {
+  background: #fff;
+  border: 1px solid #eee;
+  border-radius: 6px;
+  padding: 16px;
+  font-size: 14px;
+  color: #444;
+}
+
+.issue-box label {
+  display: block;
+  font-weight: 600;
+  margin-bottom: 6px;
+  color: #333;
+}
+
+.issue-box p {
+  margin: 0;
+  line-height: 1.4;
+}
+
+.transhis-modal .modal-footer {
+  border-top: none;
+  background: #f9f9f9;
+  border-radius: 0 0 12px 12px;
+  padding: 20px 24px;
+}

@@ -1,3 +1,5 @@
+// FILE: cashierSales.js - FINAL CORRECTED VERSION
+
 import React, { useState, useMemo, useEffect } from 'react';
 import './cashierSales.css';
 import Navbar from '../navbar';
@@ -7,18 +9,14 @@ import {
   faShoppingCart,
   faChartLine,
   faReceipt,
-  faArrowTrendUp,
-  faArrowTrendDown,
   faTimes,
-  faCalendarAlt,
   faExclamationTriangle,
   faCheckCircle,
   faCoins,
   faCashRegister,
-  faFileExport,
-  faFilePdf,
   faDownload,
-  faSpinner
+  faSpinner,
+  faFilter
 } from '@fortawesome/free-solid-svg-icons';
 import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
 import jsPDF from 'jspdf';
@@ -29,7 +27,6 @@ const SESSION_API_URL = 'http://127.0.0.1:9001/api';
 const CANCELLED_ORDERS_API_URL = 'http://127.0.0.1:9000/auth/cancelled_orders';
 const SALES_METRICS_API_URL = 'http://127.0.0.1:9000/auth/sales_metrics';
 const CASH_TALLY_API_URL = 'http://127.0.0.1:9001/api/auth/cash_tally';
-// --- NEW: API Endpoint for Top Products ---
 const TOP_PRODUCTS_API_URL = 'http://127.0.0.1:9000/auth/top_products';
 
 
@@ -37,46 +34,31 @@ function CashierSales({ shiftLabel = "Morning Shift", shiftTime = "6:00AM – 2:
   const [activeTab, setActiveTab] = useState('summary');
   const [modalType, setModalType] = useState(null);
   const [selectedDate, setSelectedDate] = useState(new Date().toISOString().split('T')[0]);
-  const [reportType, setReportType] = useState('daily');
   const [showExportModal, setShowExportModal] = useState(false);
-  
-  // State for session data
+  const [orderTypeFilter, setOrderTypeFilter] = useState('All');
   const [initialCash, setInitialCash] = useState(0);
   const [loggedInUser, setLoggedInUser] = useState("Loading...");
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState(null);
   const [activeSessionId, setActiveSessionId] = useState(null);
-
-  // State for DAILY Sales Metrics Data
   const [salesData, setSalesData] = useState({ totalSales: 0, cashSales: 0, gcashSales: 0, itemsSold: 0 });
   const [isSalesLoading, setIsSalesLoading] = useState(true);
   const [salesError, setSalesError] = useState(null);
-
-  // State for CURRENT SESSION Sales Metrics
   const [sessionSalesData, setSessionSalesData] = useState({ totalSales: 0, cashSales: 0, gcashSales: 0, itemsSold: 0 });
   const [isSessionSalesLoading, setIsSessionSalesLoading] = useState(true);
   const [sessionSalesError, setSessionSalesError] = useState(null);
-
-  // State for Cancelled Orders data
   const [cancelledOrders, setCancelledOrders] = useState([]);
   const [isCancelledLoading, setIsCancelledLoading] = useState(false);
   const [cancelledError, setCancelledError] = useState(null);
-
-  // --- NEW: State for Top Products Data ---
   const [topProducts, setTopProducts] = useState([]);
   const [isTopProductsLoading, setIsTopProductsLoading] = useState(true);
   const [topProductsError, setTopProductsError] = useState(null);
-
-  // State for submitting cash count
   const [isSubmitting, setIsSubmitting] = useState(false);
-
-  // Cash drawer state
   const [cashCounts, setCashCounts] = useState({
     bills1000: 0, bills500: 0, bills200: 0, bills100: 0, bills50: 0, bills20: 0,
     coins10: 0, coins5: 0, coins1: 0, cents25: 0, cents10: 0, cents05: 0
   });
 
-  // Fetch all necessary data when the component loads or tab changes
   useEffect(() => {
     const username = localStorage.getItem('username');
     if (username) {
@@ -90,7 +72,7 @@ function CashierSales({ shiftLabel = "Morning Shift", shiftTime = "6:00AM – 2:
       try {
         const response = await fetch(`${SALES_METRICS_API_URL}/today`, {
           method: 'POST', headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
-          body: JSON.stringify({ cashierName: username })
+          body: JSON.stringify({ cashierName: username, orderType: orderTypeFilter })
         });
         if (!response.ok) throw new Error("Failed to fetch daily sales.");
         const data = await response.json();
@@ -105,7 +87,7 @@ function CashierSales({ shiftLabel = "Morning Shift", shiftTime = "6:00AM – 2:
         try {
           const response = await fetch(`${SALES_METRICS_API_URL}/current_session`, {
             method: 'POST', headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
-            body: JSON.stringify({ cashierName: username })
+            body: JSON.stringify({ cashierName: username, orderType: orderTypeFilter })
           });
           if (!response.ok) throw new Error("Failed to fetch session sales.");
           const data = await response.json();
@@ -138,7 +120,9 @@ function CashierSales({ shiftLabel = "Morning Shift", shiftTime = "6:00AM – 2:
         try {
             const response = await fetch(`${CANCELLED_ORDERS_API_URL}/today`, {
                 method: 'POST', headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}`},
-                body: JSON.stringify({ cashierName: username })
+                // --- START: THIS IS THE CORRECTED LINE ---
+                body: JSON.stringify({ cashierName: username, orderType: orderTypeFilter })
+                // --- END: THIS IS THE CORRECTED LINE ---
             });
             if (!response.ok) throw new Error("Failed to fetch cancelled orders.");
             const data = await response.json();
@@ -146,7 +130,6 @@ function CashierSales({ shiftLabel = "Morning Shift", shiftTime = "6:00AM – 2:
         } catch (error) { setCancelledError(error.message); } finally { setIsCancelledLoading(false); }
     };
     
-    // --- NEW: Function to fetch top selling products ---
     const fetchTopProducts = async () => {
         const token = localStorage.getItem('authToken');
         if (!token || !username) return;
@@ -154,7 +137,7 @@ function CashierSales({ shiftLabel = "Morning Shift", shiftTime = "6:00AM – 2:
         try {
             const response = await fetch(`${TOP_PRODUCTS_API_URL}/today`, {
                 method: 'POST', headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
-                body: JSON.stringify({ cashierName: username })
+                body: JSON.stringify({ cashierName: username, orderType: orderTypeFilter })
             });
             if (!response.ok) throw new Error("Failed to fetch top products.");
             const data = await response.json();
@@ -169,14 +152,13 @@ function CashierSales({ shiftLabel = "Morning Shift", shiftTime = "6:00AM – 2:
     if (activeTab === 'summary') {
       fetchDailySalesMetrics();
       fetchCancelledOrders();
-      fetchTopProducts(); // Fetch top products for the summary tab
+      fetchTopProducts();
     }
     if (activeTab === 'cash') {
       fetchSessionData();
       fetchSessionSalesMetrics();
     }
-
-  }, [activeTab]);
+  }, [activeTab, orderTypeFilter]);
 
   const today = new Date();
   const formattedDate = date || today.toLocaleDateString('en-US', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' });
@@ -188,11 +170,6 @@ function CashierSales({ shiftLabel = "Morning Shift", shiftTime = "6:00AM – 2:
     { title: 'GCash Sales', key: 'gcashSales', format: 'currency', icon: faChartLine, isLoading: isSalesLoading, error: salesError },
     { title: 'Items Sold', key: 'itemsSold', format: 'number', icon: faShoppingCart, isLoading: isSalesLoading, error: salesError },
   ];
-
-  const getReportMetrics = () => {
-    // This function was present but empty in your code.
-    // I am keeping it here as it might be used elsewhere.
-  };
 
   const denominations = [
     { key: 'bills1000', label: '₱1000 Bills', value: 1000 }, { key: 'bills500', label: '₱500 Bills', value: 500 },
@@ -261,13 +238,7 @@ function CashierSales({ shiftLabel = "Morning Shift", shiftTime = "6:00AM – 2:
     }
   };
 
-  const generatePDFReport = (type) => { 
-    // This function was present but empty in your code.
-    // I am keeping it here as it might be used elsewhere.
-  };
   const handleDateChange = (e) => {
-    // This function was present but empty in your code.
-    // I am keeping it here as it might be used elsewhere.
     setSelectedDate(e.target.value);
   };
 
@@ -285,17 +256,14 @@ function CashierSales({ shiftLabel = "Morning Shift", shiftTime = "6:00AM – 2:
       <div className="cashier-modal-overlay" onClick={closeModal}>
         <div className="cashier-modal" onClick={(e) => e.stopPropagation()}>
           <div className="cashier-modal-header"><h2>{modalTitle}</h2><button className="cashier-modal-close" onClick={closeModal}><FontAwesomeIcon icon={faTimes} /></button></div>
-          <div className="cashier-modal-content"><div className="cashier-modal-table-container"><DataTable columns={columns} data={data} striped highlightOnHover responsive pagination fixedHeader fixedHeaderScrollHeight="60vh" noDataComponent={<div style={{ padding: "24px" }}>No data available.</div>} customStyles={customTableStyles} /></div></div>
+          <div className="cashier-modal-content"><div className="cashier-modal-table-container"><DataTable columns={columns} data={data} striped highlightOnHover responsive pagination fixedHeader fixedHeaderScrollHeight="60vh" noDataComponent={<div style={{ padding: "24px" }}>No data available for this filter.</div>} customStyles={customTableStyles} /></div></div>
         </div>
       </div>
     );
   };
 
   const renderExportModal = () => { 
-    // This function was present but empty in your code.
-    // I am keeping it here as it might be used elsewhere.
     if (!showExportModal) return null;
-    // You can add your export modal JSX here
     return null;
   };
 
@@ -331,10 +299,9 @@ function CashierSales({ shiftLabel = "Morning Shift", shiftTime = "6:00AM – 2:
   const renderCancelledProductsContent = () => {
     if (isCancelledLoading) return <div className="cashier-loading-container" style={{ minHeight: '150px' }}><FontAwesomeIcon icon={faSpinner} spin size="2x" /><p>Loading Cancelled Orders...</p></div>;
     if (cancelledError) return <div className="cashier-error-container"><FontAwesomeIcon icon={faExclamationTriangle} /><p>Error: {cancelledError}</p></div>;
-    return <DataTable columns={cancelledProductsColumns} data={limitedCancelledProducts} striped highlightOnHover responsive noDataComponent={<div style={{ padding: "24px" }}>No cancelled products for today.</div>} customStyles={customTableStyles} pagination={false} />;
+    return <DataTable columns={cancelledProductsColumns} data={limitedCancelledProducts} striped highlightOnHover responsive noDataComponent={<div style={{ padding: "24px" }}>No cancelled products for this filter.</div>} customStyles={customTableStyles} pagination={false} />;
   };
 
-  // --- NEW: Render function for the Top Products section ---
   const renderTopProductsContent = () => {
     if (isTopProductsLoading) {
       return (
@@ -352,7 +319,7 @@ function CashierSales({ shiftLabel = "Morning Shift", shiftTime = "6:00AM – 2:
       );
     }
     if (topProducts.length === 0) {
-      return <div style={{ padding: "24px", textAlign: 'center' }}>No sales recorded today.</div>;
+      return <div style={{ padding: "24px", textAlign: 'center' }}>No sales recorded for this filter.</div>;
     }
     return topProducts.slice(0, 7).map((product, idx) => (
       <div key={idx} className="cashier-top-product-bar">
@@ -377,7 +344,19 @@ function CashierSales({ shiftLabel = "Morning Shift", shiftTime = "6:00AM – 2:
           </div>
           {activeTab === 'summary' && (
             <div className="cashier-sales-header">
-              <div className="cashier-date"><span>Date:</span><input type="date" value={selectedDate} onChange={handleDateChange} max={todayString} className="cashier-date-input" /></div>
+              <div className="cashier-filter-item">
+                <FontAwesomeIcon icon={faFilter} />
+                <span>Order Type:</span>
+                <select value={orderTypeFilter} onChange={(e) => setOrderTypeFilter(e.target.value)} className="cashier-filter-select">
+                  <option value="All">All</option>
+                  <option value="Store">Store (Dine In/Take Out)</option>
+                  <option value="Online">Online (Pick Up/Delivery)</option>
+                </select>
+              </div>
+              <div className="cashier-filter-item">
+                <span>Date:</span>
+                <input type="date" value={selectedDate} onChange={handleDateChange} max={todayString} className="cashier-date-input" />
+              </div>
               <div className="cashier-employee">Employee: {loggedInUser}</div>
               <button className="cashier-export-report-btn" onClick={openExportModal} title="Export Sales Report"><FontAwesomeIcon icon={faDownload} /> Export Report</button>
             </div>

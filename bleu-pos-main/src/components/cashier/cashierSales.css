@@ -739,18 +739,6 @@ body, html {
 }
 
 /* Custom scrollbar for WebKit browsers (Chrome, Safari) */
-.cashier-cash-count-section::-webkit-scrollbar {
-  width: 6px;
-}
-
-.cashier-cash-count-section::-webkit-scrollbar-track {
-  background: transparent;
-}
-
-.cashier-cash-count-section::-webkit-scrollbar-thumb {
-  background-color: #b0c4cc;
-  border-radius: 6px;
-}
 
 .cashier-cash-header {
   margin-bottom: 24px;
@@ -782,9 +770,20 @@ body, html {
   gap: 2px;
   max-height: 530px;
   overflow-y: auto;
-  /* Custom scrollbar for Firefox */
-  scrollbar-width: thin;
-  scrollbar-color: #b0c4cc transparent;
+}
+
+/* Custom scrollbar for WebKit browsers (Chrome, Safari) */
+.cashier-cash-table::-webkit-scrollbar {
+  width: 6px;
+}
+
+.cashier-cash-table::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.cashier-cash-table::-webkit-scrollbar-thumb {
+  background-color: #b0c4cc;
+  border-radius: 6px;
 }
 
 .cashier-cash-row,
@@ -1250,4 +1249,62 @@ body, html {
 
 .cashier-export-generate:active {
   transform: translateY(0);
+}
+
+/* ... a new style at the end of the cashierSales.css file */
+
+.cashier-sales-header {
+  display: flex;
+  align-items: center;
+  gap: 20px; /* Adjust spacing between items */
+  flex-wrap: wrap; /* Allow items to wrap on smaller screens */
+}
+
+.cashier-filter-item {
+  display: flex;
+  align-items: center;
+  gap: 8px; /* Space between icon, label and select */
+  font-size: 14px;
+  font-weight: 500;
+  color: #555;
+}
+
+.cashier-filter-item svg {
+  color: #4B929D;
+  font-size: 16px;
+}
+
+.cashier-filter-select,
+.cashier-date-input {
+  padding: 8px 12px;
+  border-radius: 8px;
+  border: 2px solid #e2e8f0;
+  background-color: #fff;
+  font-size: 14px;
+  font-family: inherit;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+  min-width: 180px;
+}
+
+.cashier-filter-select:hover,
+.cashier-date-input:hover {
+  border-color: #4B929D;
+  box-shadow: 0 2px 6px rgba(75, 146, 157, 0.15);
+}
+
+.cashier-filter-select:focus,
+.cashier-date-input:focus {
+  outline: none;
+  border-color: #4B929D;
+  box-shadow: 0 0 0 3px rgba(75, 146, 157, 0.2);
+}
+
+.cashier-employee {
+  background-color: #e9ecef;
+  padding: 8px 12px;
+  border-radius: 6px;
+  font-weight: 500;
+  color: #333;
 }
