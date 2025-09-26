@@ -319,7 +319,6 @@ async def get_todays_sales_metrics(
 
 
 
-# --- CORRECTED ENDPOINT FOR SALES REPORT ---
 @router_sales_metrics.post(
     "/report",
     response_model=SalesReportResponse,
@@ -355,7 +354,6 @@ async def get_sales_report(
     date_filter = ""
     params = []
     
-    # Use the provided startDate as the reference date, otherwise default to today
     reference_date = request.startDate if request.startDate else date.today()
 
     if request.reportType == 'daily':
@@ -383,10 +381,11 @@ async def get_sales_report(
                 ISNULL(SUM(CASE WHEN OrderType IN ('Pick Up', 'Delivery') THEN LineTotal ELSE 0 END), 0) AS onlineSale,
                 SUM(LineTotal) AS totalSale,
                 (SELECT TOP 1 ItemName FROM RankedItems ri WHERE ri.DayOfWeek = DATENAME(weekday, AggregatedSales.CreatedAt) AND ri.rn = 1) AS bestItem
-            FROM AggregatedSales GROUP BY DATENAME(weekday, CreatedAt) ORDER BY MIN(CreatedAt)
+            FROM AggregatedSales GROUP BY DATENAME(weekday, CreatedAt), DATEPART(weekday, CreatedAt) ORDER BY DATEPART(weekday, CreatedAt)
         """
-        # SQL Server specific query to get the start of the week for the given reference date
-        date_filter = "AND s.CreatedAt >= DATEADD(wk, DATEDIFF(wk, 7, ?), 0) AND s.CreatedAt < DATEADD(wk, DATEDIFF(wk, 7, ?), 7)"
+        # --- THIS IS THE FIX ---
+        # Using the standard, robust method to calculate the start of the week (Monday).
+        date_filter = "AND s.CreatedAt >= DATEADD(wk, DATEDIFF(wk, 0, ?), 0) AND s.CreatedAt < DATEADD(wk, DATEDIFF(wk, 0, ?), 7)"
         params.extend([reference_date, reference_date])
 
     elif request.reportType == 'monthly':
