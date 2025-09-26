@@ -1,4 +1,4 @@
-import React, { useState, useMemo, useEffect } from "react"; // Added useEffect
+import React, { useState, useMemo, useEffect } from "react"; 
 import { FaEdit, FaTrash, FaPlus } from "react-icons/fa";
 import "./spillage.css";
 import Sidebar from "../shared/sidebar";
@@ -33,10 +33,8 @@ function Spillage() {
   const [customEnd, setCustomEnd] = useState("");
   const [selectedSpillage, setSelectedSpillage] = useState(null);
 
-  // --- NEW: State to hold the user's role ---
   const [userRole, setUserRole] = useState("");
 
-  // --- NEW: useEffect to get user role from localStorage on component mount ---
   useEffect(() => {
     const role = localStorage.getItem("userRole");
     if (role) {
@@ -155,7 +153,6 @@ function Spillage() {
     return [...new Set(spillageData.map((item) => item.type))];
   }, [spillageData]);
 
-  // --- CORRECTED: Dynamically generate columns based on user role ---
   const columns = useMemo(() => {
     const baseColumns = [
       {
@@ -270,8 +267,7 @@ function Spillage() {
             Clear Filters
           </button>
           
-          {/* --- CORRECTED: Conditional "Log Spillage" Button --- */}
-          {/* This button will only be rendered if the user is NOT an admin */}
+          
           {userRole !== 'admin' && (
             <button
               className="spillage-add-btn"
