@@ -1,4 +1,4 @@
-import React, { useState, useMemo } from "react";
+import React, { useState, useMemo, useEffect } from "react"; // Added useEffect
 import { FaEdit, FaTrash, FaPlus } from "react-icons/fa";
 import "./spillage.css";
 import Sidebar from "../shared/sidebar";
@@ -7,7 +7,7 @@ import DataTable from "react-data-table-component";
 import SpillageDetailsModal from "./modals/detailSpillageModal";
 import LogSpillageModal from "./modals/logSpillageModal";
 import EditSpillageModal from "./modals/editSpillageModal";
-import DeleteSpillageModal from "./modals/deleteSpillageModal"; 
+import DeleteSpillageModal from "./modals/deleteSpillageModal";
 import CustomDateModal from "../shared/customDateModal";
 import {
   startOfToday,
@@ -32,6 +32,17 @@ function Spillage() {
   const [customStart, setCustomStart] = useState("");
   const [customEnd, setCustomEnd] = useState("");
   const [selectedSpillage, setSelectedSpillage] = useState(null);
+
+  // --- NEW: State to hold the user's role ---
+  const [userRole, setUserRole] = useState("");
+
+  // --- NEW: useEffect to get user role from localStorage on component mount ---
+  useEffect(() => {
+    const role = localStorage.getItem("userRole");
+    if (role) {
+      setUserRole(role);
+    }
+  }, []); // Empty dependency array ensures this runs only once on mount
 
   const getDateRange = () => {
     const now = new Date();
@@ -144,70 +155,79 @@ function Spillage() {
     return [...new Set(spillageData.map((item) => item.type))];
   }, [spillageData]);
 
-  const columns = [
-    {
-      name: "PRODUCT NAME",
-      selector: (row) => row.productName,
-      sortable: true,
-      width: "15%",
-    },
-    { name: "TYPE", selector: (row) => row.type, sortable: true, width: "7%" },
-    { name: "AMOUNT", selector: (row) => row.amount, center: true, width: "9%" },
-    { name: "SIZE", selector: (row) => row.size, center: true, width: "10%" },
-    {
-      name: "SPILLED BY",
-      selector: (row) => row.spilledBy,
-      sortable: true,
-      width: "12%",
-    },
-    {
-      name: "LOGGED BY",
-      selector: (row) => row.loggedBy,
-      sortable: true,
-      width: "12%",
-    },
-    {
-      name: "DATE",
-      selector: (row) => row.date,
-      sortable: true,
-      width: "10%",
-      center: true,
-    },
-    { name: "REASON", selector: (row) => row.reason, center: true, width: "10%" },
-    {
-      name: "ACTIONS",
-      cell: (row) => (
-        <div className="spillage-action-buttons">
-          <button
-            type="button"
-            className="action-btn edit-btn"
-            onClick={(e) => {
-              e.stopPropagation();
-              setSelectedSpillage(row);
-              setIsEditModalOpen(true);
-            }}
-            title="Edit"
-          >
-            <FaEdit />
-          </button>
-          <button
-            type="button"
-            className="action-btn delete-btn"
-            onClick={(e) => {
-              e.stopPropagation();
-              setSelectedSpillage(row);
-              setIsDeleteModalOpen(true);
-            }}
-            title="Delete"
-          >
-            <FaTrash />
-          </button>
-        </div>
-      ),
-      center: true,
-      width: "15%",
-    },
-  ];
+  // --- CORRECTED: Dynamically generate columns based on user role ---
+  const columns = useMemo(() => {
+    const baseColumns = [
+      {
+        name: "PRODUCT NAME",
+        selector: (row) => row.productName,
+        sortable: true,
+        width: "15%",
+      },
+      { name: "TYPE", selector: (row) => row.type, sortable: true, width: "7%" },
+      { name: "AMOUNT", selector: (row) => row.amount, center: true, width: "9%" },
+      { name: "SIZE", selector: (row) => row.size, center: true, width: "10%" },
+      {
+        name: "SPILLED BY",
+        selector: (row) => row.spilledBy,
+        sortable: true,
+        width: "12%",
+      },
+      {
+        name: "LOGGED BY",
+        selector: (row) => row.loggedBy,
+        sortable: true,
+        width: "12%",
+      },
+      {
+        name: "DATE",
+        selector: (row) => row.date,
+        sortable: true,
+        width: "10%",
+        center: true,
+      },
+      { name: "REASON", selector: (row) => row.reason, center: true, width: "10%" },
+    ];
+
+    // Add the "Actions" column only if the user is NOT an admin
+    if (userRole !== 'admin') {
+      baseColumns.push({
+        name: "ACTIONS",
+        cell: (row) => (
+          <div className="spillage-action-buttons">
+            <button
+              type="button"
+              className="action-btn edit-btn"
+              onClick={(e) => {
+                e.stopPropagation();
+                setSelectedSpillage(row);
+                setIsEditModalOpen(true);
+              }}
+              title="Edit"
+            >
+              <FaEdit />
+            </button>
+            <button
+              type="button"
+              className="action-btn delete-btn"
+              onClick={(e) => {
+                e.stopPropagation();
+                setSelectedSpillage(row);
+                setIsDeleteModalOpen(true);
+              }}
+              title="Delete"
+            >
+              <FaTrash />
+            </button>
+          </div>
+        ),
+        center: true,
+        width: "15%",
+      });
+    }
+
+    return baseColumns;
+  }, [userRole]); // Recalculate columns only when userRole changes
 
   return (
     <div className="spillage-page">
@@ -249,17 +269,24 @@ function Spillage() {
           <button className="spillage-clear-btn" onClick={handleClearFilters}>
             Clear Filters
           </button>
-          <button
-            className="spillage-add-btn"
-            onClick={() => setIsLogModalOpen(true)}
-          >
-            <FaPlus /> Log Spillage{" "}
-          </button>
+          
+          {/* --- CORRECTED: Conditional "Log Spillage" Button --- */}
+          {/* This button will only be rendered if the user is NOT an admin */}
+          {userRole !== 'admin' && (
+            <button
+              className="spillage-add-btn"
+              onClick={() => setIsLogModalOpen(true)}
+            >
+              <FaPlus /> Log Spillage
+            </button>
+          )}
+
         </div>
         <div className="spillage-table-container">
           <DataTable
             columns={columns}
             data={filteredData}
+            // ... (rest of DataTable props are unchanged)
             striped
             highlightOnHover
             responsive
@@ -299,13 +326,15 @@ function Spillage() {
             show={isDetailsModalOpen}
             onClose={() => setIsDetailsModalOpen(false)}
             spillage={selectedSpillage}
+            // Pass userRole to the modal so it can hide its own Edit/Delete buttons if needed
+            userRole={userRole}
             onEdit={() => {
               setIsDetailsModalOpen(false);
               setIsEditModalOpen(true);
             }}
             onDelete={() => {
-              setIsDetailsModalOpen(false);   
-              setIsDeleteModalOpen(true);    
+              setIsDetailsModalOpen(false);
+              setIsDeleteModalOpen(true);
             }}
           />
           <LogSpillageModal

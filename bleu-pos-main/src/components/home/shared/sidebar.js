@@ -17,8 +17,7 @@ function SidebarComponent() {
   const toggleSidebar = () => setCollapsed(!collapsed);
   const location = useLocation(); // Gets the current page location
 
-  // --- CORRECTED LOGIC ---
-  // This effect now re-runs every time the user navigates to a new page.
+  // This effect re-runs every time the user navigates to a new page.
   useEffect(() => {
     const role = localStorage.getItem('userRole');
     console.log('Sidebar reading userRole from localStorage:', role); // For debugging
@@ -74,9 +73,9 @@ function SidebarComponent() {
                 Discounts
               </MenuItem>
 
-              {/* --- CONDITIONAL RENDERING FOR SPILLAGE --- */}
-              {/* This logic will now be reliable. It shows Spillage only for 'manager' */}
-              {userRole === 'manager' && (
+              {/* --- CORRECTED: CONDITIONAL RENDERING FOR SPILLAGE --- */}
+              {/* This logic now shows the "Spillage" link for both 'manager' and 'admin' roles. */}
+              {(userRole === 'manager' || userRole === 'admin') && (
                 <MenuItem
                   icon={<FontAwesomeIcon icon={faWarning} />}
                   component={<Link to="/home/spillage" />}
