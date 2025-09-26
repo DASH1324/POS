@@ -2,8 +2,8 @@ import React, { useState, useEffect, useCallback } from "react";
 import { useNavigate } from 'react-router-dom';
 import { FaChevronDown, FaBell } from "react-icons/fa";
 import { jwtDecode } from 'jwt-decode';
-import { confirmAlert } from 'react-confirm-alert'; 
-import 'react-confirm-alert/src/react-confirm-alert.css'; 
+import { confirmAlert } from 'react-confirm-alert';
+import 'react-confirm-alert/src/react-confirm-alert.css';
 import "./header.css";
 import '../../confirmAlertCustom.css';
 
@@ -48,10 +48,14 @@ const Header = ({ pageTitle }) => {
       localStorage.setItem('username', usernameFromUrl);
       localStorage.setItem('authToken', tokenFromUrl);
 
+      // --- FIX: This block was removed to prevent it from stripping URL parameters ---
+      /*
       if (window.history.replaceState) {
         const cleanUrl = `${window.location.protocol}//${window.location.host}${window.location.pathname}`;
         window.history.replaceState({ path: cleanUrl }, '', cleanUrl);
       }
+      */
+      // --------------------------------------------------------------------------
     }
 
     const storedUsername = localStorage.getItem('username');
@@ -109,7 +113,7 @@ const Header = ({ pageTitle }) => {
           {isDropdownOpen && (
             <div className="profile-dropdown">
               <ul>
-                <li onClick={confirmLogout}>Logout</li> 
+                <li onClick={confirmLogout}>Logout</li>
               </ul>
             </div>
           )}

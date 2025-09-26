@@ -33,9 +33,17 @@ const Header = ({ pageTitle }) => {
     });
   };
 
+  // UPDATED: Clear all localStorage data including userRole
   const handleLogout = useCallback(() => {
+    // Clear all authentication-related data from localStorage
     localStorage.removeItem('authToken');
     localStorage.removeItem('username');
+    localStorage.removeItem('userRole'); // ADD THIS LINE
+    
+    // Optional: Clear everything if you want to be thorough
+    // localStorage.clear();
+    
+    console.log('Logout: All localStorage data cleared');
     navigate('/');
   }, [navigate]);
 

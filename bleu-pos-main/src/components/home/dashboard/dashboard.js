@@ -1,13 +1,17 @@
-import React, { useState } from "react";
-import "./dashboard.css"; 
-import Sidebar from "../shared/sidebar"; 
-import Header from "../shared/header"; 
-import {LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer, AreaChart, Area
+import React, { useState, useEffect } from "react";
+import "./dashboard.css";
+import Sidebar from "../shared/sidebar";
+import Header from "../shared/header";
+import {
+  LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer, AreaChart, Area
 } from 'recharts';
 import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
-import { faMoneyBillWave, faChartLine, faShoppingCart, faClock, faArrowTrendUp, faArrowTrendDown
+import {
+  faMoneyBillWave, faChartLine, faShoppingCart, faClock, faArrowTrendUp, faArrowTrendDown
 } from '@fortawesome/free-solid-svg-icons';
+import { jwtDecode } from 'jwt-decode';
 
+// Static data for demonstration purposes
 const revenueData = [
   { name: 'Jan', income: 5000, expense: 3000 },
   { name: 'Feb', income: 14000, expense: 10000 },
@@ -63,6 +67,7 @@ const summaryCardData = [
   }
 ];
 
+// Helper function to format currency or numbers
 const formatValue = (value, format) => {
   return format === "currency"
     ? `₱${value.toLocaleString()}`
@@ -70,14 +75,47 @@ const formatValue = (value, format) => {
 };
 
 const Dashboard = () => {
+  // State for chart filters and user role
   const [revenueFilter, setRevenueFilter] = useState("Monthly");
   const [salesFilter, setSalesFilter] = useState("Monthly");
+  const [userRole, setUserRole] = useState('');
+
+  // This hook determines the definitive user role
+  useEffect(() => {
+    let roleToSet = '';
+    
+    const searchParams = new URLSearchParams(window.location.search);
+    const roleFromUrl = searchParams.get('userRole');
+
+    if (roleFromUrl) {
+      // Prioritize the URL parameter
+      roleToSet = roleFromUrl;
+      localStorage.setItem('userRole', roleFromUrl);
+    } else {
+      // Fallback to localStorage on page refresh
+      const roleFromStorage = localStorage.getItem('userRole');
+      if (roleFromStorage) {
+        roleToSet = roleFromStorage;
+      }
+    }
+
+    if (roleToSet) {
+      setUserRole(roleToSet);
+    } else {
+      setUserRole('guest');
+    }
+  }, []); // Runs once to set the role
 
   return (
     <div className="posAdmnDashboard">
-      <Sidebar />
+      {/* 
+        By adding `key={userRole}`, we tell React to create a brand new 
+        Sidebar and Header whenever the userRole changes. This forces them 
+        to re-run their useEffects at the correct time.
+      */}
+      <Sidebar key={userRole} />
       <main className="posAdmnDashboardMain">
-      <Header pageTitle="Dashboard" />
+        <Header key={userRole} pageTitle={`Dashboard`} />
 
         <div className="posAdmnDashboardContents">
           <div className="posAdmnDashboardCards">
@@ -88,6 +126,10 @@ const Dashboard = () => {
               const isImproved = current > previous;
               const hasChange = current !== previous;
 
+              if (userRole === 'manager' && card.type === 'posAdmnPendings') {
+                return null;
+              }
+
               return (
                 <div key={index} className={`posAdmnCard ${card.type}`}>
                   <div className="posAdmnCardText">
@@ -97,7 +139,7 @@ const Dashboard = () => {
                       {hasChange && (
                         <div className={`posAdmnCardPercent ${isImproved ? 'posAdmnGreen' : 'posAdmnRed'}`}>
                           <FontAwesomeIcon icon={isImproved ? faArrowTrendUp : faArrowTrendDown} />
-                             {Math.abs(percent).toFixed(1)}%
+                             {` `}{Math.abs(percent).toFixed(1)}%
                         </div>
                       )}
                     </div>
@@ -133,7 +175,9 @@ const Dashboard = () => {
                   <Tooltip />
                   <Legend />
                   <Line type="monotone" dataKey="income" stroke="#00b4d8" strokeWidth={2}/>
-                  <Line type="monotone" dataKey="expense" stroke="#ff4d6d" strokeWidth={2}/>
+                  {userRole === 'admin' && (
+                    <Line type="monotone" dataKey="expense" stroke="#ff4d6d" strokeWidth={2}/>
+                  )}
                 </LineChart>
               </ResponsiveContainer>
             </div>

@@ -20,35 +20,26 @@ import {
   endOfYear,
 } from "date-fns";
 
-const getAuthToken = () => localStorage.getItem("authToken");
-const API_URL = "http://127.0.0.1:9000/auth/purchase_orders/all";
-const transformApiData = (apiTransaction) => {
-  const subtotal = apiTransaction.orderItems.reduce(
-    (acc, item) => acc + item.price * item.quantity, 0);
-const discount = subtotal - apiTransaction.total;
+const getAuthToken = () => {
+  return localStorage.getItem("authToken");
+};
 
+const API_URL = "http://127.0.0.1:9000/auth/transaction_history/all";
+
+// Fixed transform function to work with the actual API response
+const transformApiData = (apiTransaction) => {
   return {
     id: apiTransaction.id,
     date: new Date(apiTransaction.date).toISOString(),
     orderType: apiTransaction.orderType,
-    items: apiTransaction.orderItems.map((item) => ({
-      name: item.name,
-      quantity: item.quantity,
-      price: item.price,
-      details:
-        item.addons && Object.values(item.addons).some((v) => v > 0)
-          ? "Includes add-ons"
-          : undefined,
-    })),
+    items: apiTransaction.items || [],
     total: apiTransaction.total,
-    subtotal: subtotal,
-    discount: discount,
-    status:
-      apiTransaction.status.charAt(0).toUpperCase() +
-      apiTransaction.status.slice(1),
+    subtotal: apiTransaction.subtotal,
+    discount: apiTransaction.discount,
+    status: apiTransaction.status,
     paymentMethod: apiTransaction.paymentMethod,
-    type: "Store",
-    discountsAndPromotions: discount > 0 ? "Discount Applied" : "None",
+    type: apiTransaction.type,
+    discountsAndPromotions: apiTransaction.discountsAndPromotions,
     cashierName: apiTransaction.cashierName,
     GCashReferenceNumber: apiTransaction.GCashReferenceNumber,
   };
@@ -61,40 +52,68 @@ function TransactionHistory() {
   const [transactions, setTransactions] = useState([]);
   const [searchTerm, setSearchTerm] = useState("");
   const [statusFilter, setStatusFilter] = useState("");
-  const [isLoading, setIsLoading] = useState(true);
-  const [error, setError] = useState(null);
   const [selectedTransaction, setSelectedTransaction] = useState(null);
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [dateRange, setDateRange] = useState("thisWeek");
   const [isCustomModalOpen, setIsCustomModalOpen] = useState(false);
   const [customStart, setCustomStart] = useState("");
   const [customEnd, setCustomEnd] = useState("");
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState(null);
+  const [authError, setAuthError] = useState(false);
+
+  const handleAuthError = () => {
+    localStorage.removeItem("authToken");
+    setAuthError(true);
+    navigate("/");
+  };
+
   const fetchTransactions = useCallback(async (token) => {
-    setIsLoading(true);
+    if (!token) {
+      handleAuthError();
+      return;
+    }
+
+    setLoading(true);
     setError(null);
+    setAuthError(false);
+
     try {
       const response = await fetch(API_URL, {
+        method: 'GET',
         headers: {
-          Authorization: `Bearer ${token}`,
+          'Authorization': `Bearer ${token}`,
+          'Content-Type': 'application/json',
         },
       });
+      
+      if (response.status === 401) {
+        handleAuthError();
+        return;
+      }
+
       if (!response.ok) {
-        throw new Error(`HTTP error! Status: ${response.status}`);
+        const errorText = await response.text();
+        throw new Error(`HTTP error! Status: ${response.status} - ${errorText}`);
       }
 
       const data = await response.json();
+      
+      if (!Array.isArray(data)) {
+        throw new Error("Invalid data format received from API");
+      }
+      
       const transformedData = data.map(transformApiData);
       setTransactions(transformedData);
     } catch (err) {
       console.error("Failed to fetch transactions:", err);
-      setError(
-        "Failed to load transaction data. Please check the connection and try again."
-      );
+      setError(err.message);
     } finally {
-      setIsLoading(false);
+      setLoading(false);
     }
-  }, []);
+  }, [navigate]);
 
+  // Initial load
   useEffect(() => {
     const token = getAuthToken();
     if (!token) {
@@ -104,6 +123,8 @@ function TransactionHistory() {
     fetchTransactions(token);
   }, [navigate, fetchTransactions]);
 
+  // No need to refetch when tab changes - data is filtered on frontend
+
   const handleClearFilters = () => {
     setSearchTerm("");
     setStatusFilter("");
@@ -112,71 +133,89 @@ function TransactionHistory() {
     setCustomEnd("");
   };
 
- 
-  const handleExport = () => {
-    const doc = new jsPDF();
-    doc.addImage(logo, "PNG", 150, 10, 40, 30);
-    doc.setFontSize(14);
-    doc.text(`Transaction History - ${activeTab}`, 14, 20);
-    doc.setFontSize(10);
-    doc.text(`Generated on: ${new Date().toLocaleString()}`, 14, 28);
-    doc.text("Transaction Date Range: All Dates", 14, 34);
-    doc.text(`Status: ${statusFilter || "All"}`, 14, 40);
-    doc.text("Generated by: Admin", 14, 45);
-   
-    doc.autoTable({
-      startY: 50,
-      head: [
-        [
-          "Transaction ID",
-          "Date",
-          "Cashier",
-          "Order Type",
-          "Item(s)",
-          "Discounts",
-          "Total",
-          "Payment Method",
-          "Status",
-        ],
-      ],
-      body: transactions.map((t) => [
-        t.id,
-        new Date(t.date).toLocaleDateString(),
-        t.cashierName || "—",
-        t.orderType || "—",
-        t.items?.length || 0,
-        t.discountsAndPromotions || "None",
-        `₱${parseFloat(t.total).toFixed(2)}`,
-        t.paymentMethod || "N/A",
-        t.status,
-      ]),
-      theme: "grid",
-      headStyles: { fillColor: [75, 146, 157], textColor: 255 },
-      styles: { fontSize: 9 },
-    });
-
-    const totalSales = transactions.reduce(
-      (sum, t) => sum + parseFloat(t.total),
-      0
-    );
-    const totalItems = transactions.reduce(
-      (sum, t) => sum + (t.items?.length || 0),
-      0
-    );
-    const discountsApplied = transactions.filter((t) => t.discount > 0).length;
-    let finalY = doc.lastAutoTable.finalY + 10;
-    doc.setFontSize(12);
-    doc.text("Transaction History Summary", 14, finalY);
-    doc.setFontSize(10);
-    doc.text(`Total Transactions: ${transactions.length}`, 14, finalY + 8);
-    doc.text(`Total Sales: ₱${totalSales.toFixed(2)}`, 14, finalY + 16);
-    doc.text(`Total Items: ${totalItems}`, 14, finalY + 24);
-    doc.text(`Total Discount Applied: ${discountsApplied}`, 14, finalY + 32);
-    doc.text("Promotion Applied: 0", 14, finalY + 40);
-    doc.save("Transaction_History.pdf");
+  const handleRefresh = () => {
+    const token = getAuthToken();
+    if (token) {
+      fetchTransactions(token);
+    } else {
+      navigate("/");
+    }
   };
 
-  const getDateRange = () => {
+  const handleExport = () => {
+    if (!filteredTransactions.length) {
+      alert("No transactions to export");
+      return;
+    }
+
+    try {
+      const doc = new jsPDF();
+      doc.addImage(logo, "PNG", 150, 10, 40, 30);
+      doc.setFontSize(14);
+      doc.text(`Transaction History - ${activeTab}`, 14, 20);
+      doc.setFontSize(10);
+      doc.text(`Generated on: ${new Date().toLocaleString()}`, 14, 28);
+      doc.text("Transaction Date Range: All Dates", 14, 34);
+      doc.text(`Status: ${statusFilter || "All"}`, 14, 40);
+      doc.text("Generated by: Admin", 14, 45);
+
+      doc.autoTable({
+        startY: 50,
+        head: [
+          [
+            "Transaction ID",
+            "Date",
+            "Cashier",
+            "Order Type",
+            "Item(s)",
+            "Discounts",
+            "Total",
+            "Payment Method",
+            "Status",
+          ],
+        ],
+        body: filteredTransactions.map((t) => [
+          t.id,
+          new Date(t.date).toLocaleDateString(),
+          t.cashierName || "—",
+          t.orderType || "—",
+          t.items?.length || 0,
+          t.discountsAndPromotions || "None",
+          `₱${parseFloat(t.total).toFixed(2)}`,
+          t.paymentMethod || "N/A",
+          t.status,
+        ]),
+        theme: "grid",
+        headStyles: { fillColor: [75, 146, 157], textColor: 255 },
+        styles: { fontSize: 9 },
+      });
+
+      const totalSales = filteredTransactions.reduce(
+        (sum, t) => sum + parseFloat(t.total),
+        0
+      );
+      const totalItems = filteredTransactions.reduce(
+        (sum, t) => sum + (t.items?.length || 0),
+        0
+      );
+      const discountsApplied = filteredTransactions.filter((t) => t.discount > 0).length;
+      let finalY = doc.lastAutoTable.finalY + 10;
+      doc.setFontSize(12);
+      doc.text("Transaction History Summary", 14, finalY);
+      doc.setFontSize(10);
+      doc.text(`Total Transactions: ${filteredTransactions.length}`, 14, finalY + 8);
+      doc.text(`Total Sales: ₱${totalSales.toFixed(2)}`, 14, finalY + 16);
+      doc.text(`Total Items: ${totalItems}`, 14, finalY + 24);
+      doc.text(`Total Discount Applied: ${discountsApplied}`, 14, finalY + 32);
+      doc.text("Promotion Applied: 0", 14, finalY + 40);
+      doc.save(`Transaction_History_${activeTab}_${new Date().toISOString().split('T')[0]}.pdf`);
+    } catch (err) {
+      console.error("Error generating PDF:", err);
+      alert("Failed to generate PDF export");
+    }
+  };
+
+  const getDateRange = useCallback(() => {
     const now = new Date();
     switch (dateRange) {
       case "today":
@@ -194,40 +233,57 @@ function TransactionHistory() {
       default:
         return [null, null];
     }
-  };
+  }, [dateRange, customStart, customEnd]);
 
   const filteredTransactions = useMemo(() => {
     const [start, end] = getDateRange();
     return transactions.filter((transaction) => {
-      const matchesTab = activeTab === "Store";
+      const matchesTab = transaction.type === activeTab;
+      
       const matchesSearch = (transaction.id || "")
         .toString()
         .toLowerCase()
         .includes(searchTerm.toLowerCase());
+      
       const matchesStatus =
         statusFilter === "" || transaction.status === statusFilter;
+      
       const tDate = new Date(transaction.date);
       const matchesDate = !start || !end || (tDate >= start && tDate <= end);
+      
       return matchesTab && matchesSearch && matchesStatus && matchesDate;
     });
-  }, [activeTab, transactions, searchTerm, statusFilter, dateRange, customStart, customEnd]);
+  }, [activeTab, transactions, searchTerm, statusFilter, getDateRange]);
 
+  // Clear filters when tab changes
   useEffect(() => {
     setStatusFilter("");
     setSearchTerm("");
   }, [activeTab]);
 
   const uniqueStatuses = useMemo(() => {
-    return [...new Set(transactions.map((item) => item.status).filter(Boolean))];
-  }, [transactions]);
+    const currentTabTransactions = transactions.filter(t => t.type === activeTab);
+    return [...new Set(currentTabTransactions.map((item) => item.status).filter(Boolean))];
+  }, [transactions, activeTab]);
 
   const handleRowClick = (row) => {
     setSelectedTransaction(row);
     setIsModalOpen(true);
   };
+
   const closeModal = () => {
     setIsModalOpen(false);
     setSelectedTransaction(null);
+  };
+
+  const handleCustomDateApply = (startDate, endDate) => {
+    setCustomStart(startDate);
+    setCustomEnd(endDate);
+    setIsCustomModalOpen(false);
+    const token = getAuthToken();
+    if (token) {
+      fetchTransactions(token);
+    }
   };
 
   const columns = [
@@ -235,7 +291,7 @@ function TransactionHistory() {
     { name: "DATE", selector: (row) => new Date(row.date).toLocaleDateString(), sortable: true, width: "8%" },
     { name: "CASHIER", selector: (row) => row.cashierName || "—", width: "12%" },
     { name: "ORDER TYPE", selector: (row) => row.orderType || "—", width: "10%" },
-    { name: "ITEM(S)", selector: (row) => row.items?.length || 0, center: true, sortable: true, center: true,  width: "9%" },
+    { name: "ITEM(S)", selector: (row) => row.items?.length || 0, center: true, sortable: true, width: "9%" },
     { name: "DISCOUNTS", selector: (row) => row.discountsAndPromotions || "—", width: "11%" },
     { name: "TOTAL", selector: (row) => `₱${parseFloat(row.total).toFixed(2)}`, center: true, sortable: true, width: "12%" },
     { name: "PAYMENT METHOD", selector: (row) => row.paymentMethod || "N/A", center: true, width: "13%" },
@@ -249,6 +305,70 @@ function TransactionHistory() {
     },
   ];
 
+  // Auth error state
+  if (authError) {
+    return (
+      <div className="transaction-history">
+        <Sidebar />
+        <div className="transHis">
+          <Header pageTitle="Transaction History" />
+          <div className="transHis-content">
+            <div style={{ padding: "20px", textAlign: "center", color: "red" }}>
+              Authentication failed. Please login again.
+              <br />
+              <button onClick={() => navigate("/")}>Go to Login</button>
+            </div>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  // Loading state
+  if (loading) {
+    return (
+      <div className="transaction-history">
+        <Sidebar />
+        <div className="transHis">
+          <Header pageTitle="Transaction History" />
+          <div className="transHis-content">
+            <div style={{ padding: "20px", textAlign: "center" }}>
+              <div>Loading transactions...</div>
+              <div style={{ marginTop: "10px" }}>
+                <button onClick={() => setLoading(false)}>Cancel</button>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  // Error state
+  if (error) {
+    return (
+      <div className="transaction-history">
+        <Sidebar />
+        <div className="transHis">
+          <Header pageTitle="Transaction History" />
+          <div className="transHis-content">
+            <div style={{ padding: "20px", textAlign: "center" }}>
+              <div style={{ color: "red", marginBottom: "10px" }}>
+                Error loading transactions: {error}
+              </div>
+              <button onClick={handleRefresh} style={{ marginRight: "10px" }}>
+                Retry
+              </button>
+              <button onClick={() => navigate("/")}>
+                Back to Login
+              </button>
+            </div>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div className="transaction-history">
       <Sidebar />
@@ -256,25 +376,51 @@ function TransactionHistory() {
         <Header pageTitle="Transaction History" />
         <div className="transHis-content">
           <div className="tabs">
-            <button className={`tab ${activeTab === "Store" ? "active-tab" : ""}`} onClick={() => setActiveTab("Store")}>Store</button>
-            <button className={`tab ${activeTab === "Online" ? "active-tab" : ""}`} onClick={() => setActiveTab("Online")}>Online</button>
+            <button 
+              className={`tab ${activeTab === "Store" ? "active-tab" : ""}`} 
+              onClick={() => setActiveTab("Store")}
+            >
+              Store
+            </button>
+            <button 
+              className={`tab ${activeTab === "Online" ? "active-tab" : ""}`} 
+              onClick={() => setActiveTab("Online")}
+            >
+              Online
+            </button>
           </div>
 
           <div className="transHis-filter-bar">
-              <input type="text" placeholder="Search by Transaction Number..." value={searchTerm} onChange={(e) => setSearchTerm(e.target.value)} />
-              <select value={dateRange} onChange={(e) => { const v = e.target.value; setDateRange(v); if (v === "custom") setIsCustomModalOpen(true); }}>
-                <option value="today">Today</option>
-                <option value="thisWeek">This Week</option>
-                <option value="thisMonth">This Month</option>
-                <option value="thisYear">This Year</option>
-                <option value="custom">Custom</option>
-              </select>
-              <select value={statusFilter} onChange={(e) => setStatusFilter(e.target.value)}>
-                <option value="">Status: All</option>
-                {uniqueStatuses.map((s) => <option key={s} value={s}>{s}</option>)}
+            <input 
+              type="text" 
+              placeholder="Search by Transaction Number..." 
+              value={searchTerm} 
+              onChange={(e) => setSearchTerm(e.target.value)} 
+            />
+            <select 
+              value={dateRange} 
+              onChange={(e) => { 
+                const v = e.target.value; 
+                setDateRange(v); 
+                if (v === "custom") setIsCustomModalOpen(true); 
+              }}
+            >
+              <option value="today">Today</option>
+              <option value="thisWeek">This Week</option>
+              <option value="thisMonth">This Month</option>
+              <option value="thisYear">This Year</option>
+              <option value="custom">Custom</option>
             </select>
-            <button className="history-clear-btn" onClick={handleClearFilters}>Clear Filters</button>
-            <button className="history-export-btn" onClick={handleExport}>Export</button>
+            <select value={statusFilter} onChange={(e) => setStatusFilter(e.target.value)}>
+              <option value="">Status: All</option>
+              {uniqueStatuses.map((s) => <option key={s} value={s}>{s}</option>)}
+            </select>
+            <button className="history-clear-btn" onClick={handleClearFilters}>
+              Clear Filters
+            </button>
+            <button className="history-export-btn" onClick={handleExport}>
+              Export
+            </button>
           </div>
 
           <div className="transactions-table-container">
@@ -289,7 +435,11 @@ function TransactionHistory() {
               fixedHeaderScrollHeight="60vh"
               onRowClicked={handleRowClick}
               pointerOnHover
-              noDataComponent={<div style={{ padding: "24px" }}>No transactions found.</div>}
+              noDataComponent={
+                <div style={{ padding: "24px" }}>
+                  No {activeTab.toLowerCase()} transactions found.
+                </div>
+              }
               customStyles={{
                 headCells: {
                   style: {
@@ -311,11 +461,22 @@ function TransactionHistory() {
                 },
               }}
             />
-            <TransHisModal show={isModalOpen} onClose={closeModal} transaction={selectedTransaction} />
+            
+            {selectedTransaction && (
+              <TransHisModal 
+                show={isModalOpen} 
+                onClose={closeModal} 
+                transaction={selectedTransaction} 
+              />
+            )}
           </div>
-          <CustomDateModal show={isCustomModalOpen} onClose={() => setIsCustomModalOpen(false)} onApply={(s, e) => { setCustomStart(s); setCustomEnd(e); }} />
+          
+          <CustomDateModal 
+            show={isCustomModalOpen} 
+            onClose={() => setIsCustomModalOpen(false)} 
+            onApply={handleCustomDateApply} 
+          />
         </div>
-        
       </div>
     </div>
   );

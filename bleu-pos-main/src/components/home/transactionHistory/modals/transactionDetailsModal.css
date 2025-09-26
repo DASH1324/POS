@@ -1,51 +1,95 @@
-.transhis-modal {
-    max-width: 600px !important;
-  width: 90% !important;
+.transhis-modal-backdrop {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: rgba(0, 0, 0, 0.55);
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  z-index: 1100;
+  overflow: hidden;
 }
 
-.transhis-modal .modal-content {
+.transhis-modal-container {
+  background: #fff;
   border-radius: 12px;
+  width: 600px;
+  max-width: 90%;
+  max-height: 85vh;
+  display: flex;
+  flex-direction: column;
+  position: relative;
   box-shadow: 0 6px 24px rgba(0, 0, 0, 0.25);
-  max-height: 80vh;
-  
+  animation: fadeIn 0.25s ease;
+  overflow: hidden;
+  padding: 10px; 
 }
 
-.transhis-modal .modal-header {
-  color: #4B929D !important; 
-  border-radius: 12px 12px 0 0;
-  padding: 20px 24px;
+.transhis-modal-close-x {
+  position: absolute;
+  top: 12px;
+  right: 16px;
+  font-size: 22px;
+  font-weight: bold;
+  color: #666;
+  background: none;
+  border: none;
+  cursor: pointer;
+  transition: color 0.2s;
 }
 
-.transhis-modal .modal-title {
-  font-size: 1.6rem;    
+.transhis-modal-close-x:hover {
+  color: #4B929D;
+}
+
+.transhis-modal-title {
+  font-size: 1.6rem;
   font-weight: 700;
+  text-align: center;
+  margin: 10px 0 20px;
+  color: #4B929D;
+  border-bottom: 2px solid #eee;
+  padding-bottom: 10px;
 }
 
-.transhis-modal .modal-body {
-  padding: 16px;
-  background-color: #f9f9f9;     
-  font-size: 14px;      
+.modal-body {
+  flex: 1;
+  overflow-y: auto;
+  padding: 20px;
+  background-color: #f9f9f9;
+  font-size: 14px;
+  border-radius: 8px;
 }
 
+/* Sections */
 .modal-section {
-  margin-bottom: 16px;
+  margin-bottom: 20px;
+  padding: 12px; /* 🔹 section padding */
+  background: #fff;
+  border-radius: 8px;
+  border: 1px solid #eee;
 }
 
 .modal-section h5 {
   font-size: 16px;
   font-weight: 600;
-  margin-top: 20px;
-  margin-bottom: 20px;  
-  padding-bottom: 4px;
+  margin: 0 0 12px;
   letter-spacing: 0.5px;
+  color: #333;
 }
 
 .detail-row {
   display: flex;
   justify-content: space-between;
   padding: 10px 0;
-  font-size: 16px;
+  font-size: 15px;
   border-bottom: 1px solid #eee;
+}
+
+.detail-row:last-child {
+  border-bottom: none;
 }
 
 .detail-row label {
@@ -54,9 +98,9 @@
 }
 
 .items-list {
-  margin-top: 16px;
+  margin-top: 12px;
   border-radius: 6px;
-  background: #fff;
+  background: #fdfdfd;
   padding: 16px;
 }
 
@@ -64,6 +108,7 @@
   display: flex;
   justify-content: space-between;
   padding: 10px 0;
+  border-bottom: 1px solid #eee;
 }
 
 .item-row:last-child {
@@ -76,7 +121,7 @@
 
 .item-name {
   font-weight: 600;
-  font-size: 16px;
+  font-size: 15px;
 }
 
 .item-qty,
@@ -87,14 +132,8 @@
 
 .item-price {
   font-weight: 600;
-  font-size: 16px;
+  font-size: 15px;
   color: #333;
-}
-
-.applied-discount {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
 }
 
 .discount-badge {
@@ -112,17 +151,18 @@
 }
 
 .bill-summary {
-  background: #fff;
+  background: #fdfdfd;
   border: 1px solid #eee;
   border-radius: 6px;
   padding: 16px;
+  margin-top: 12px;
 }
 
 .bill-row {
   display: flex;
   justify-content: space-between;
   padding: 10px 0;
-  font-size: 16px;
+  font-size: 15px;
 }
 
 .bill-row.discount-row {
@@ -131,7 +171,7 @@
 
 .bill-row.total-row {
   font-weight: 700;
-  font-size: 18px;
+  font-size: 17px;
   border-top: 1px solid #ddd;
   margin-top: 12px;
   padding-top: 12px;
@@ -158,9 +198,13 @@
   line-height: 1.4;
 }
 
-.transhis-modal .modal-footer {
-  border-top: none;
-  background: #f9f9f9;
-  border-radius: 0 0 12px 12px;
-  padding: 20px 24px;
+@keyframes fadeIn {
+  from {
+    opacity: 0;
+    transform: scale(0.95);
+  }
+  to {
+    opacity: 1;
+    transform: scale(1);
+  }
 }

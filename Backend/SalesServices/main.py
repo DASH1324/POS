@@ -4,6 +4,7 @@ from fastapi.middleware.cors import CORSMiddleware
 # --- Imports for your routers ---
 from routers import pos_router, purchase_order, cancelled_order, sales
 from routers.top_products import router_top_products
+from routers.transaction_history import router_transaction_history
 
 app = FastAPI(
     title="POS and Order Service API",
@@ -17,6 +18,7 @@ app.include_router(pos_router.router_sales)
 app.include_router(purchase_order.router_purchase_order)
 app.include_router(cancelled_order.router_cancelled_order)
 app.include_router(router_top_products)
+app.include_router(router_transaction_history)
 
 # --- THIS IS THE FIX ---
 # The object in sales.py is named 'router_sales_metrics'

@@ -1,5 +1,7 @@
-  import React, { useEffect } from 'react';
-  import { BrowserRouter as Router, Routes, Route } from 'react-router-dom';
+import React, { useEffect } from 'react';
+import { BrowserRouter as Router, Routes, Route } from 'react-router-dom';
+import { StyleSheetManager } from 'styled-components';
+import isPropValid from '@emotion/is-prop-valid';
 
   //home: admin & manager
   import Dashboard from './components/home/dashboard/dashboard';
@@ -29,29 +31,31 @@
 
   function App() {
     return (
-      <Router>
-        <Routes>
-          <Route path="/" element={<RedirectToLoginSystem />} />
-        
-        {/*Admin & Manager*/}
-        <Route path="/home/dashboard" element={<Dashboard />} />
-          <Route path="/home/salesMonitoring" element={<SalesMonitoring />} />
-          <Route path="/home/products" element={<Products />} />
-          <Route path="/home/discounts" element={<Discounts />} />
-          <Route path="/home/salesReport" element={<SalesReport />} />
-          <Route path="/home/transactionHistory" element={<TransactionHistory />} />
-          <Route path="/home/transactionReport" element={<TransactionReports />} />
-          <Route path="/home/transactionHistory" element={<TransactionHistoryExport />} />
-          <Route path="/home/spillage" element={<Spillage />} />
+      <StyleSheetManager shouldForwardProp={isPropValid}>
+        <Router>
+          <Routes>
+            <Route path="/" element={<RedirectToLoginSystem />} />
+          
+            {/*Admin & Manager*/}
+            <Route path="/home/dashboard" element={<Dashboard />} />
+              <Route path="/home/salesMonitoring" element={<SalesMonitoring />} />
+              <Route path="/home/products" element={<Products />} />
+              <Route path="/home/discounts" element={<Discounts />} />
+              <Route path="/home/salesReport" element={<SalesReport />} />
+              <Route path="/home/transactionHistory" element={<TransactionHistory />} />
+              <Route path="/home/transactionReport" element={<TransactionReports />} />
+              <Route path="/home/transactionHistory" element={<TransactionHistoryExport />} />
+              <Route path="/home/spillage" element={<Spillage />} />
 
-          {/*Cashier*/}
-          <Route path="/cashier/menu" element={<Menu />} />
-          <Route path="/cashier/orders" element={<Orders />} />
-          <Route path="/cashier/orderPanel" element={<OrderPanel />} />
-          <Route path="/cashier/cashierSales" element={<CashierSales />} />
-          <Route path="/cashier/cashierSpillage" element={<CashierSpillage />} />
-        </Routes>
-      </Router>
+              {/*Cashier*/}
+              <Route path="/cashier/menu" element={<Menu />} />
+              <Route path="/cashier/orders" element={<Orders />} />
+              <Route path="/cashier/orderPanel" element={<OrderPanel />} />
+              <Route path="/cashier/cashierSales" element={<CashierSales />} />
+              <Route path="/cashier/cashierSpillage" element={<CashierSpillage />} />
+          </Routes>
+        </Router>
+      </StyleSheetManager>
     );
   }
 

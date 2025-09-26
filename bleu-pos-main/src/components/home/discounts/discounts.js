@@ -68,6 +68,15 @@ function Discounts() {
   const [showDiscountModal, setShowDiscountModal] = useState(false);
   const [editingDiscountId, setEditingDiscountId] = useState(null);
   const [isSavingDiscount, setIsSavingDiscount] = useState(false);
+  
+  // --- Role-based access control ---
+  const [userRole, setUserRole] = useState("");
+
+  useEffect(() => {
+    // Retrieve user role from local storage on component mount
+    const role = localStorage.getItem('userRole'); 
+    setUserRole(role);
+  }, []);
 
   // Form states remain the same
   const [discountForm, setDiscountForm] = useState({
@@ -124,6 +133,8 @@ function Discounts() {
 
   // --- Modal Handlers ---
   const handleDiscountModalOpen = useCallback(async (discount = null) => {
+    if (userRole === 'manager') return; // Prevent managers from opening the modal
+
     if (discount) {
       try {
         const detailedDiscount = await apiFetch(`/discounts/${discount.id}`);
@@ -149,7 +160,7 @@ function Discounts() {
       });
     }
     setShowDiscountModal(true);
-  }, [today]);
+  }, [today, userRole]);
 
   // --- FORM HANDLERS ---
   const handleDiscountFormChange = (e) => {
@@ -157,8 +168,6 @@ function Discounts() {
     setDiscountForm(prev => ({ ...prev, [name]: value }));
   };
 
-  // *** THIS IS THE CORRECTED FUNCTION ***
-  // It now correctly accepts the array of strings from the modal.
   const handleMultiSelectChange = (name, newValue) => {
     setDiscountForm(prev => ({
       ...prev,
@@ -168,6 +177,8 @@ function Discounts() {
   
   // --- REAL Save/Delete Handlers ---
   const handleSaveDiscount = async () => {
+    if (userRole === 'manager') return; // Prevent managers from saving
+
     if (!discountForm.discountName.trim()) {
       alert("Please enter a discount name.");
       return;
@@ -196,6 +207,8 @@ function Discounts() {
   };
   
   const handleDeleteDiscount = async (discountId) => {
+    if (userRole === 'manager') return; // Prevent managers from deleting
+
     if (!window.confirm("Are you sure you want to delete this discount?")) {
       return;
     }
@@ -217,7 +230,7 @@ function Discounts() {
   const filteredPromotions = promotions;
 
   // --- Column Definitions ---
-  const discountColumns = [
+  let discountColumns = [
     { name: "NAME", selector: row => row.name, sortable: true, minWidth: "150px" },
     { name: "DISCOUNT", selector: row => row.discount, sortable: true, minWidth: "100px" },
     { name: "MIN SPEND", selector: row => `₱${row.minSpend.toFixed(2)}`, sortable: true, minWidth: "120px" },
@@ -227,7 +240,12 @@ function Discounts() {
       cell: row => (<span className={`status-badge ${row.status.toLowerCase()}`}>{row.status.toUpperCase()}</span>),
       minWidth: "100px"
     },
-    { name: "ACTIONS",
+  ];
+
+  // Conditionally add the Actions column if the user is not a manager
+  if (userRole !== 'manager') {
+    discountColumns.push({ 
+      name: "ACTIONS",
       cell: row => (
         <div className="action-buttons">
           <button className="edit-btn" onClick={() => handleDiscountModalOpen(row)} title="Edit"><FaEdit /></button>
@@ -235,8 +253,9 @@ function Discounts() {
         </div>
       ),
       ignoreRowClick: true, allowOverflow: true, button: true, minWidth: "120px"
-    }
-  ];
+    });
+  }
+
 
   const promotionColumns = [ /* ... promotion columns ... */ ];
 
@@ -271,7 +290,10 @@ function Discounts() {
                   <option value="inactive">Inactive</option>
                   <option value="expired">Expired</option>
                 </select>
-                <button className="discount-add-btn" onClick={() => handleDiscountModalOpen()}><FaPlus /> Add Discount</button>
+                {/* Conditionally render the Add Discount button */}
+                {userRole !== 'manager' && (
+                  <button className="discount-add-btn" onClick={() => handleDiscountModalOpen()}><FaPlus /> Add Discount</button>
+                )}
               </div>
 
               {isLoadingDiscounts ? (
@@ -300,21 +322,23 @@ function Discounts() {
             </div>
           )}
 
-          <DiscountModal
-            showModal={showDiscountModal}
-            onClose={() => setShowDiscountModal(false)}
-            editingId={editingDiscountId}
-            form={discountForm}
-            onFormChange={handleDiscountFormChange}
-            onMultiSelectChange={handleMultiSelectChange}
-            onSave={handleSaveDiscount}
-            isSaving={isSavingDiscount}
-            availableProducts={availableProducts}
-            categories={categories}
-            today={today}
-            isLoadingChoices={isLoadingChoices}
-            errorChoices={errorChoices}
-          />
+          {userRole !== 'manager' && (
+            <DiscountModal
+              showModal={showDiscountModal}
+              onClose={() => setShowDiscountModal(false)}
+              editingId={editingDiscountId}
+              form={discountForm}
+              onFormChange={handleDiscountFormChange}
+              onMultiSelectChange={handleMultiSelectChange}
+              onSave={handleSaveDiscount}
+              isSaving={isSavingDiscount}
+              availableProducts={availableProducts}
+              categories={categories}
+              today={today}
+              isLoadingChoices={isLoadingChoices}
+              errorChoices={errorChoices}
+            />
+          )}
           
           {/* PromotionModal can be left as is for now */}
         </div>
