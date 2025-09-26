@@ -6,10 +6,16 @@ import DataTable from "react-data-table-component";
 import { FaFileExport } from "react-icons/fa";
 import CustomDateModal from "../shared/customDateModal";
 
-// --- HELPER: Formats a date object to 'YYYY-MM-DD' string ---
+// --- HELPER: Formats a date object to 'YYYY-MM-DD' string RESPECTING LOCAL TIMEZONE ---
 const formatDate = (date) => {
-  return date.toISOString().split('T')[0];
+  const year = date.getFullYear();
+  // getMonth() is 0-indexed (0 for January), so we add 1
+  const month = String(date.getMonth() + 1).padStart(2, '0'); 
+  const day = String(date.getDate()).padStart(2, '0');
+  
+  return `${year}-${month}-${day}`;
 };
+
 
 // --- HELPER FUNCTION FOR DISPLAYING DATE RANGES ---
 const getPeriodText = (tab, customStart = null, customEnd = null) => {
@@ -38,8 +44,14 @@ const getPeriodText = (tab, customStart = null, customEnd = null) => {
     }
     case "custom": {
       if (customStart && customEnd) {
-        const start = new Date(customStart).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
-        const end = new Date(customEnd).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
+        // Adding timezone offset handling for custom dates to prevent off-by-one day issues
+        const startDate = new Date(customStart);
+        const endDate = new Date(customEnd);
+        const timeZoneOffset = startDate.getTimezoneOffset() * 60000;
+        
+        const start = new Date(startDate.getTime() + timeZoneOffset).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
+        const end = new Date(endDate.getTime() + timeZoneOffset).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
+        
         return `Date Period: ${start} - ${end}`;
       }
       return "Date Period: None Selected";
@@ -66,7 +78,6 @@ function SalesReport() {
   const fetchSalesReport = async (tab, startDate, endDate) => {
     setIsLoading(true);
     setError(null);
-    // Retrieve token from local storage
     const token = localStorage.getItem('authToken'); 
 
     if (!token) {
@@ -102,7 +113,7 @@ function SalesReport() {
 
     } catch (err) {
       setError(err.message);
-      setReportData([]); // Clear data on error
+      setReportData([]); 
       setReportTotals({ transactions: 0, itemsSold: 0, storeSale: 0, onlineSale: 0, totalSale: 0 });
     } finally {
       setIsLoading(false);
@@ -111,16 +122,13 @@ function SalesReport() {
   
   // --- EFFECT TO FETCH DATA WHEN TAB CHANGES ---
   useEffect(() => {
-    // For custom tab, data is fetched only when the user applies a date range
     if (activeTab === 'custom') {
-      // Clear previous data when switching to custom tab
       setReportData([]);
       setReportTotals({ transactions: 0, itemsSold: 0, storeSale: 0, onlineSale: 0, totalSale: 0 });
       setCurrentPeriodText(getPeriodText('custom', customRange.start, customRange.end));
       return;
     }
     
-    // For other tabs, use today's date. The backend will calculate the correct range.
     const todayStr = formatDate(new Date());
     fetchSalesReport(activeTab, todayStr, todayStr);
     setCurrentPeriodText(getPeriodText(activeTab));
@@ -284,6 +292,7 @@ function SalesReport() {
             <div className="totals-right">
               {!isLoading && data.length > 0 && renderTotals()}
             </div>
+          
           </div>
         </div>
       </div>
