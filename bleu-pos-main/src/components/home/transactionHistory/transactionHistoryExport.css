@@ -6,7 +6,6 @@
   background-color: white;
 }
 
-/* Header Section */
 .header-section {
   display: flex;
   justify-content: space-between;
@@ -68,8 +67,7 @@
   font-size: 14px;
   color: #666;
 }
-
-/* Table Container */
+ 
 .table-container {
   overflow-x: auto;
   border-radius: 8px;
@@ -85,7 +83,6 @@
   overflow: hidden;
 }
 
-/* Table Header */
 .table-header {
   background-color: #20b2aa;
   color: white;
@@ -99,7 +96,6 @@
   border: none;
 }
 
-/* Table Body */
 .transaction-table tbody tr {
   border-bottom: 1px solid #e0e0e0;
 }
@@ -123,7 +119,6 @@
   border: none;
 }
 
-/* Column-specific styling */
 .transaction-table td:nth-child(1) {
   font-weight: 600;
   color: #2c5aa0;
@@ -138,7 +133,6 @@
   color: #2c5aa0;
 }
 
-/* Status styling */
 .transaction-table td:nth-child(9) {
   font-weight: 500;
 }
@@ -151,7 +145,6 @@
   color: #ffc107;
 }
 
-/* Discount styling */
 .transaction-table td:nth-child(6):contains('Discount Applied') {
   color: #dc3545;
   font-weight: 500;
@@ -161,7 +154,6 @@
   color: #6c757d;
 }
 
-/* Responsive design */
 @media (max-width: 768px) {
   .header-section {
     flex-direction: column;
@@ -192,7 +184,6 @@
   }
 }
 
-/* Summary Section */
 .summary-section {
   margin-top: 30px; 
   text-align: left;

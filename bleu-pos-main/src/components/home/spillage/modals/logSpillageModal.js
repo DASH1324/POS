@@ -1,183 +1,196 @@
 import React, { useState } from "react";
-import "./logSpillageModal.css";
+import PropTypes from "prop-types";
+import "./sharedSpillageModal.css";
 
 function LogSpillageModal({ show, onClose, onSave }) {
-  const [formData, setFormData] = useState({
-    type: "",
-    productName: "",
-    amount: "",
-    size: "",
-    loggedBy: "",
-    spilledBy: "",
-    reason: "",
-    date: "",
-  });
+  const [productType, setProductType] = useState("");
+  const [productName, setProductName] = useState("");
+  const [amount, setAmount] = useState("");
+  const [size, setSize] = useState("");
+  const [loggedBy, setLoggedBy] = useState("");
+  const [date, setDate] = useState("");
+  const [reason, setReason] = useState("");
+  const [errors, setErrors] = useState({});
+  const [isSaving, setIsSaving] = useState(false);
 
   if (!show) return null;
 
-  const handleChange = (e) => {
-    const { name, value } = e.target;
-    setFormData((prev) => ({ ...prev, [name]: value }));
+  const handleFocus = (field) => {
+    setErrors((prev) => ({ ...prev, [field]: "" }));
   };
 
   const handleSubmit = (e) => {
     e.preventDefault();
-    for (const key in formData) {
-      if (!formData[key]) {
-        alert("Please fill in all required fields.");
-        return;
-      }
+    let newErrors = {};
+
+    if (!productType.trim()) newErrors.productType = "Product type is required";
+    if (!productName.trim()) newErrors.productName = "Product name is required";
+    if (!amount || isNaN(amount) || parseInt(amount) <= 0) {
+      newErrors.amount = "Enter a valid amount";
     }
-    onSave(formData);
+    if (!size.trim()) newErrors.size = "Size is required";
+    if (!loggedBy.trim()) newErrors.loggedBy = "Spilled by is required";
+    if (!date.trim()) newErrors.date = "Date is required";
+    if (!reason.trim()) newErrors.reason = "Reason is required";
+
+    if (Object.keys(newErrors).length > 0) {
+      setErrors(newErrors);
+      return;
+    }
+
+    setIsSaving(true);
+
+    const newSpillage = {
+      productName,
+      type: productType,
+      amount: parseInt(amount),
+      size,
+      loggedBy,
+      reason,
+      date,
+    };
+
+    onSave(newSpillage);
+    setIsSaving(false);
     onClose();
   };
 
   return (
-    <div className="logSpillage-modal-backdrop" onClick={onClose}>
-      <div
-        className="logSpillage-modal-container"
-        onClick={(e) => e.stopPropagation()}
-      >
-        {/* Header */}
+    <div className="logSpillage-modal-overlay">
+      <div className="logSpillage-modal-container">
         <div className="logSpillage-modal-header">
           <h2>Log New Spillage</h2>
-          <button className="logSpillage-close-button" onClick={onClose}>
+          <span className="logSpillage-close-button" onClick={onClose}>
             ×
-          </button>
+          </span>
         </div>
 
-        {/* Form */}
-        <form className="logSpillage-form" onSubmit={handleSubmit}>
+        <form className="logSpillage-modal-form" onSubmit={handleSubmit}>
           <div className="form-row">
-            <div className="form-group">
-              <label>
-                Product Type<span className="logSpillage-required-asterisk">*</span>
-              </label>
+            <label>
+              Product Type: <span className="required">*</span>
               <select
-                name="type"
-                value={formData.type}
-                onChange={handleChange}
-                required
+                value={productType}
+                onChange={(e) => setProductType(e.target.value)}
+                onFocus={() => handleFocus("productType")}
+                className={errors.productType ? "error-field" : ""}
               >
-                <option value="">Select Type</option>
+                <option value="">Select type</option>
                 <option value="Drink">Drink</option>
                 <option value="Food">Food</option>
               </select>
-            </div>
-            <div className="form-group">
-              <label>
-                Product Name<span className="logSpillage-required-asterisk">*</span>
-              </label>
+              {errors.productType && (
+                <p className="error-message">{errors.productType}</p>
+              )}
+            </label>
+
+            <label>
+              Product Name: <span className="required">*</span>
               <select
-                name="productName"
-                value={formData.productName}
-                onChange={handleChange}
-                required
+                value={productName}
+                onChange={(e) => setProductName(e.target.value)}
+                onFocus={() => handleFocus("productName")}
+                className={errors.productName ? "error-field" : ""}
               >
-                <option value="">Select Product</option>
+                <option value="">Select product</option>
                 <option value="Cappuccino">Cappuccino</option>
                 <option value="Latte">Latte</option>
                 <option value="Cheeseburger">Cheeseburger</option>
               </select>
-            </div>
+              {errors.productName && (
+                <p className="error-message">{errors.productName}</p>
+              )}
+            </label>
           </div>
 
           <div className="form-row">
-            <div className="form-group">
-              <label>
-                Amount<span className="logSpillage-required-asterisk">*</span>
-              </label>
+            <label>
+              Amount: <span className="required">*</span>
               <input
                 type="number"
-                name="amount"
-                value={formData.amount}
-                onChange={handleChange}
                 min="1"
-                required
+                value={amount}
+                onChange={(e) => setAmount(e.target.value)}
+                onFocus={() => handleFocus("amount")}
+                className={errors.amount ? "error-field" : ""}
               />
-            </div>
-            <div className="form-group">
-              <label>
-                Size<span className="logSpillage-required-asterisk">*</span>
-              </label>
+              {errors.amount && <p className="error-message">{errors.amount}</p>}
+            </label>
+
+            <label>
+              Size: <span className="required">*</span>
               <select
-                name="size"
-                value={formData.size}
-                onChange={handleChange}
-                required
+                value={size}
+                onChange={(e) => setSize(e.target.value)}
+                onFocus={() => handleFocus("size")}
+                className={errors.size ? "error-field" : ""}
               >
-                <option value="">Select Size</option>
+                <option value="">Select size</option>
                 <option value="12oz">12oz</option>
-                <option value="16oz">16oz</option>
                 <option value="22oz">22oz</option>
                 <option value="Solo">Solo</option>
+                <option value="Regular">Regular</option>
               </select>
-            </div>
+              {errors.size && <p className="error-message">{errors.size}</p>}
+            </label>
           </div>
 
           <div className="form-row">
-            <div className="form-group">
-              <label>
-                Logged By<span className="logSpillage-required-asterisk">*</span>
-              </label>
+            <label>
+              Spilled By: <span className="required">*</span>
               <select
-                name="loggedBy"
-                value={formData.loggedBy}
-                onChange={handleChange}
-                required
+                value={loggedBy}
+                onChange={(e) => setLoggedBy(e.target.value)}
+                onFocus={() => handleFocus("loggedBy")}
+                className={errors.loggedBy ? "error-field" : ""}
               >
-                <option value="">Select Staff</option>
+                <option value="">Select staff</option>
                 <option value="Cashier A">Cashier A</option>
                 <option value="Cashier B">Cashier B</option>
                 <option value="Cashier C">Cashier C</option>
               </select>
-            </div>
-            <div className="form-group">
-              <label>
-                Spilled By<span className="logSpillage-required-asterisk">*</span>
-              </label>
-              <select
-                name="spilledBy"
-                value={formData.spilledBy}
-                onChange={handleChange}
-                required
-              >
-                <option value="">Select Staff</option>
-                <option value="Staff A">Staff A</option>
-                <option value="Staff B">Staff B</option>
-                <option value="Staff C">Staff C</option>
-              </select>
-            </div>
-          </div>
-
-          <div className="form-group">
-            <label>
-              Reason<span className="logSpillage-required-asterisk">*</span>
+              {errors.loggedBy && (
+                <p className="error-message">{errors.loggedBy}</p>
+              )}
             </label>
-            <textarea
-              name="reason"
-              value={formData.reason}
-              onChange={handleChange}
-              rows="3"
-              required
-            />
-          </div>
 
-          <div className="form-group">
             <label>
-              Date<span className="logSpillage-required-asterisk">*</span>
+              Date: <span className="required">*</span>
+              <input
+                type="date"
+                value={date}
+                onChange={(e) => setDate(e.target.value)}
+                onFocus={() => handleFocus("date")}
+                className={errors.date ? "error-field" : ""}
+              />
+              {errors.date && <p className="error-message">{errors.date}</p>}
             </label>
-            <input
-              type="date"
-              name="date"
-              value={formData.date}
-              onChange={handleChange}
-              required
-            />
           </div>
 
-          {/* Buttons */}
+          <div className="form-row full-width">
+            <label>
+              Reason: <span className="required">*</span>
+              <textarea
+                rows="3"
+                value={reason}
+                onChange={(e) => setReason(e.target.value)}
+                onFocus={() => handleFocus("reason")}
+                className={errors.reason ? "error-field" : ""}
+              />
+              {errors.reason && (
+                <p className="error-message">{errors.reason}</p>
+              )}
+            </label>
+          </div>
+
           <div className="logSpillage-button-container">
+            <button
+              type="submit"
+              className="logSpillage-submit-button"
+              disabled={isSaving}
+            >
+              {isSaving ? "Saving..." : "Save"}
+            </button>
             <button
               type="button"
               className="logSpillage-cancel-button"
@@ -185,14 +198,17 @@ function LogSpillageModal({ show, onClose, onSave }) {
             >
               Cancel
             </button>
-            <button type="submit" className="logSpillage-submit-button">
-              Save
-            </button>
           </div>
         </form>
       </div>
     </div>
   );
 }
+
+LogSpillageModal.propTypes = {
+  show: PropTypes.bool.isRequired,
+  onClose: PropTypes.func.isRequired,
+  onSave: PropTypes.func.isRequired,
+};
 
 export default LogSpillageModal;

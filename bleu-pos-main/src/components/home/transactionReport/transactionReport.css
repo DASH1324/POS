@@ -1,5 +1,5 @@
 body {
-  background: #eaf6f8;
+  background: #eaf6f8 !important;
   margin: 0;
   font-family: 'Segoe UI', sans-serif;
 }
@@ -8,66 +8,75 @@ body {
   display: flex;
   flex-direction: row;
   height: 100vh;
-  overflow: hidden;
+  overflow: auto;
+  margin-bottom: 600px;
 }
 
 .transRep {
   flex: 1;
-  padding-right: 60px;
-  padding-top: 20px;
   box-sizing: border-box;
-  margin: 0 auto;
-  overflow-y: auto;
-}
-
-.transRepContents {
-  margin-top: 60px;
-}
-
-.transRep-filter-bar {
+  width: 85%;
+  margin-top: 23px;
+  margin-left: 10px;
+  margin-right: 50px;
+  margin-bottom: 30px;
   display: flex;
-  gap: 8px;
-  margin-top: 50px;
-  margin-bottom: 10px;
+  flex-direction: column;
+  gap: 15px;
+}
+
+.transRep-header-row {
+  display: flex;
+  justify-content: space-between;
   align-items: center;
-  flex-wrap: nowrap;
-  width: 100%;
+  margin-top: 40px;
+  flex-wrap: wrap;
+  gap: 10px;
 }
 
-.transRep-filter-bar select {
-  flex: 1;
-  min-width: 150px;
-  max-width: 300px;
-  font-size: 13px;
-  padding: 9px 8px;
-  border: 0.5px solid #EBEBEB;
-  border-radius: 6px;
-  border-color: black;
-  color: #555; 
+.transRep-tabs {
+  display: flex;
+  gap: 10px;
+  flex-wrap: wrap;
 }
 
-.transaction-clear-btn {
-  padding: 8px 14px;
-  background-color: #d9534f;
-  color: white;
+.transRep-tabs button {
+  padding: 8px 16px;
+  background-color: #ffffff;
+  color: #666;
   border: none;
   border-radius: 6px;
   cursor: pointer;
   font-weight: 500;
-  font-size: 13px;
   transition: background-color 0.3s;
-  white-space: nowrap;
-  flex-shrink: 0;
-  width: 110px;
+  width: 150px;
 }
 
-.transaction-clear-btn:hover {
-    background-color: #c9302c;
+.transRep-tabs button:hover {
+  background: #4B929D;
+  color: white;
+}
+
+.transRep-tabs button.active {
+  background: #4B929D;
+  color: white;
+}
+
+.period-text-label {
+  
+  background: white;
+  color: #333;
+  padding: 11px 11px;
+  border-radius: 10px; 
+  font-size: 14px;
+  font-weight: 500px;
+  border: 1px solid #4B929D;
+  white-space: nowrap;
 }
 
 .charts-container {
   display: grid;
-  margin-top: 50px;
+  margin-top: 10px;
   grid-template-columns: 1fr 1fr;
   gap: 25px;
 }

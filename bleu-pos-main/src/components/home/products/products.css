@@ -21,10 +21,6 @@ body {
     margin-bottom: 30px;
 }
 
-.products-content {
-    margin-top: 60px;
-}
-
 .tabs {
   display: flex;
   margin-bottom: 15px;
@@ -67,10 +63,11 @@ align-items: center;
 .filter-bar input,
 .filter-bar select {
 font-size: 14px; 
-padding: 8px;
+padding: 11px;
 border: 0.5px solid #EBEBEB;
 border-radius: 6px;
 width: 80%;
+border-color:black;
 color: #888;
 }
 
@@ -166,11 +163,10 @@ font-size: 12px;
     display: flex;
     align-items: center;
     gap: 10px;
-    text-align: left; /* Ensures text doesn't center if the column is centered */
-    padding: 5px 0;   /* Adds a little vertical spacing */
+    text-align: left; 
+    padding: 5px 0;
 }
 
-/* This styles the image for ALL product types */
 .product-photo {
     width: 90px;
     height: 90px;
@@ -178,7 +174,6 @@ font-size: 12px;
     object-fit: cover;
 }
 
-/* This styles the name for ALL product types */
 .product-name {
   font-weight: 600;
 }

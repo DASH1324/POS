@@ -1,8 +1,8 @@
 import React, { useState, useEffect, useMemo, useCallback } from "react";
 import { useNavigate } from "react-router-dom";
 import "../products/products.css"; 
-import Sidebar from "../sidebar/sidebar";
-import Header from "../header/header"; 
+import Sidebar from "../shared/sidebar";
+import Header from "../shared/header"; 
 import DataTable from "react-data-table-component";
 import DetailsProductModal from "./modals/detailsProductModal";
 
@@ -176,8 +176,8 @@ function Products() {
   ];
 
   return (
-    <div className="productList">
-      <Sidebar />
+  <div className="productList"> 
+    <Sidebar />
       <div className="products">
         <Header pageTitle="Products" />
 

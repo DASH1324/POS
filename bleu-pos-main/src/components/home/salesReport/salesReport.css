@@ -1,22 +1,110 @@
 body {
-    background: #eaf6f8;
-    margin: 0;
-    font-family: 'Segoe UI', sans-serif;
+  background: #eaf6f8;
+  margin: 0;
+  font-family: 'Segoe UI', sans-serif;
 }
 
-.sales-report {
-    display: flex;
-    flex-direction: row;
-    min-height: 100vh;
+.sales-report-page {
+  display: flex;
+  flex-direction: row;
+  min-height: 100vh;
 }
 
 .report {
-    flex: 1;
-    box-sizing: border-box;
-    width: 85%;
-    overflow: hidden; 
-    margin-top: 23px;
-    margin-left: 10px;
-    margin-right: 40px;
-    margin-bottom: 30px;
+  flex: 1;
+  box-sizing: border-box;
+  width: 85%;
+  overflow: hidden;
+  margin: 23px 50px 30px 10px;
+  display: flex;
+  flex-direction: column;
+  gap: 15px;
+}
+
+.sales-tabs {
+  display: flex;
+  margin-top: 30px;
+  margin-bottom: 15px;
+  gap: 10px;
+}
+
+.sales-tabs button {
+  padding: 8px 16px;
+    background-color: #ffffff;
+    color: #666;
+    border: none;
+    border-radius: 6px;
+    cursor: pointer;
+    font-weight: 500;
+    transition: background-color 0.3s;
+    width: 150px;
+}
+
+.sales-tabs button.active {
+  background: #4B929D;
+  color: white;
+}
+
+
+.sales-tabs button:hover {
+  background: #4B929D;
+  color: white;
+}
+
+
+.export-btn {
+  margin-left: auto;
+  padding: 8px 14px;
+    background-color: #007BFF !important;
+    color: white !important;
+    border: none;
+    border-radius: 6px;
+    cursor: pointer;
+    font-weight: 500;
+    font-size: 13px;
+    transition: background-color 0.3s;
+    white-space: nowrap;
+    flex-shrink: 0;
+    width: 95px;
+}
+
+.export-btn:hover {
+  background-color: #0069d9;
+}
+
+.salesRep-table-container {
+  flex: 1;
+}
+
+.sales-total-row {
+  margin-top: 10px;
+  padding: 12px;
+  background: #f1f1f1;
+  border-top: 2px solid #4B929D;
+  display: flex; 
+  justify-content: space-between; 
+  align-items: center; 
+  font-weight: 600;
+  color: #333;
+  font-size: 14px;
+  flex-wrap: wrap; 
+}
+
+.period-text {
+  font-size: 14px;
+  font-weight: 700;
+  color: #333; 
+  margin-right: 20px; 
+  white-space: nowrap;
+}
+
+.totals-right {
+  display: flex;
+  gap: 20px;
+  justify-content: flex-end;
+  flex-wrap: wrap;
+}
+
+.total-cell {
+  white-space: nowrap;
 }

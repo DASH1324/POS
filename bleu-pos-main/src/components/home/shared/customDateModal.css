@@ -1,0 +1,116 @@
+.customDateModal-overlay {
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  background: rgba(0, 0, 0, 0.5);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 999;
+}
+
+.customDateModal-container {
+  background-color: #fff;
+  padding: 25px;
+  border-radius: 10px;
+  width: 450px;
+  max-height: 80vh;
+  overflow-y: auto;
+  position: relative;
+  box-shadow: 0 8px 16px rgba(0, 0, 0, 0.2);
+  text-align: left;
+  animation: fadeInScale 0.25s ease-out;
+}
+
+.customDateModal-container h2 {
+  margin-bottom: 15px;
+  font-size: 1.6rem;
+  font-weight: 700;
+  text-align: center !important;
+  color: #4B929D;
+  border-bottom: 2px solid #eee;
+  padding-bottom: 10px;
+}
+
+.customDateModal-error {
+  background-color: #ffe0e0; 
+  color: #c0392b; 
+  border: 1px solid #f99;
+  padding: 10px;
+  border-radius: 6px;
+  margin-bottom: 15px;
+  text-align: center;
+  font-weight: 600;
+  animation: slideDownFadeIn 0.3s ease-out;
+}
+
+
+.customDateModal-inputs {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.customDateModal-inputs label {
+  font-weight: bold;
+  margin-bottom: 5px;
+  display: block;
+  color: #444;
+}
+
+.customDateModal-inputs input {
+  width: 100%;
+  padding: 8px;
+  border-radius: 6px;
+  border: 1px solid #ccc;
+}
+
+
+
+.customDateModal-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 10px;
+  margin-top: 15px;
+}
+
+.customDateModal-btn {
+  padding: 8px 14px;
+  border: none;
+  border-radius: 6px;
+  cursor: pointer;
+  font-size: 14px;
+}
+
+.customDateModal-btn.cancel {
+  background: #ccc;
+}
+
+.customDateModal-btn.apply {
+  background: #4b929d;
+  color: white;
+}
+
+@keyframes fadeInScale {
+  from {
+    opacity: 0;
+    transform: scale(0.9);
+  }
+  to {
+    opacity: 1;
+    transform: scale(1);
+  }
+}
+
+@keyframes slideDownFadeIn {
+  from {
+    opacity: 0;
+    transform: translateY(-10px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}

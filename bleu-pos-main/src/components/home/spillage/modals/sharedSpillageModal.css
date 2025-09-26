@@ -1,0 +1,325 @@
+/*log & edit modal*/
+.logSpillage-modal-overlay {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background-color: rgba(0, 0, 0, 0.5);
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  z-index: 1000;
+}
+
+.logSpillage-modal-container {
+  background-color: #fff;
+  padding: 25px;
+  border-radius: 10px;
+  width: 600px;
+  max-height: 80vh;
+  overflow-y: auto;
+  position: relative;
+  box-shadow: 0 8px 16px rgba(0, 0, 0, 0.2);
+  animation: fadeInScale 0.25s ease-out;
+}
+
+.logSpillage-modal-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 20px;
+}
+
+.logSpillage-modal-header h2 {
+  margin-bottom: 20px;
+  font-size: 1.6rem;
+  font-weight: 700;
+  color: #4B929D;
+  text-align: center;
+}
+
+.logSpillage-close-button {
+  font-size: 24px;
+  cursor: pointer;
+  color: #444;
+}
+
+.logSpillage-modal-form label {
+  display: block;
+  margin-bottom: 15px;
+  font-weight: 600;
+  color: #333;
+}
+
+.logSpillage-modal-form input,
+.logSpillage-modal-form textarea,
+.logSpillage-modal-form select {
+  box-sizing: border-box;
+  width: 100%;
+  padding: 8px 10px;
+  margin-top: 5px;
+  border: 1px solid #ccc;
+  border-radius: 6px;
+  font-size: 14px;
+  display: block;
+}
+
+.logSpillage-modal-form textarea {
+  resize: vertical;
+  min-height: 100px;
+}
+
+.form-row {
+  display: flex;
+  gap: 20px;
+}
+
+.form-row label {
+  flex: 1; 
+}
+
+.form-row.full-width {
+  flex-direction: column; 
+}
+
+.form-row.full-width label {
+  width: 100%; 
+}
+
+
+.logSpillage-button-container {
+  display: flex;
+  justify-content: flex-end;
+  margin-top: 30px;
+}
+
+.logSpillage-submit-button {
+  min-width: 100px;
+  padding: 10px 20px;
+  background-color: #4B929D;
+  color: white;
+  font-weight: bold;
+  border: none;
+  border-radius: 5px;
+  cursor: pointer;
+  margin-right: 10px;
+}
+
+.logSpillage-submit-button:hover {
+  background-color: #37717a;
+}
+
+.logSpillage-cancel-button {
+  min-width: 100px;
+  padding: 10px 20px;
+  background-color: #cccccc;
+  color: #333333;
+  font-weight: bold;
+  border: none;
+  border-radius: 5px;
+  cursor: pointer;
+}
+
+.logSpillage-cancel-button:hover {
+  background-color: #b3b3b3;
+}
+
+.error-field {
+  border: 1px solid #dc3545 !important;
+}
+
+.error-message {
+  color: #dc3545;
+  font-size: 12px;
+  margin-top: 5px;
+  margin-bottom: 0;
+}
+
+.required {
+  color: #dc3545;
+  margin-left: 2px;
+}
+
+/*delete modal*/
+.deleteSpillage-modal-backdrop {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background-color: rgba(0, 0, 0, 0.5);
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  z-index: 1000;
+}
+
+.deleteSpillage-modal-container {
+  background-color: #fff;
+  padding: 25px;
+  border-radius: 10px;
+  width: 450px;
+  max-height: 80vh;
+  overflow-y: auto;
+  position: relative;
+  box-shadow: 0 8px 16px rgba(0, 0, 0, 0.2);
+  text-align: center;
+  animation: fadeInScale 0.25s ease-out;
+}
+
+.deleteSpillage-modal-container h2 {
+  margin-bottom: 15px;
+  font-size: 1.6rem;
+  font-weight: 700;
+  color: #4B929D;
+  border-bottom: 2px solid #eee;
+  padding-bottom: 10px;
+}
+
+.deleteSpillage-modal-container p {
+  font-size: 1rem;
+  color: #333;
+}
+
+.deleteSpillage-button-container {
+  margin-top: 20px;
+  display: flex;
+  justify-content: flex-end;
+  gap: 10px;
+}
+
+.deleteSpillage-cancel-button {
+  padding: 8px 14px;
+  border: none;
+  border-radius: 6px;
+  background-color: #cccccc;
+  color: #333333;
+  cursor: pointer;
+}
+
+.deleteSpillage-cancel-button:hover {
+  background-color: #b3b3b3;
+}
+
+.deleteSpillage-confirm-button {
+  padding: 8px 14px;
+  border: none;
+  border-radius: 6px;
+  background-color: #d9534f;
+  color: white;
+  cursor: pointer;
+}
+
+.deleteSpillage-confirm-button:hover {
+  background-color: #c9302c;
+}
+
+
+/*details modal*/
+.spillage-modal-backdrop {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: rgba(0, 0, 0, 0.6);
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  z-index: 1100;
+}
+
+.spillage-modal-container {
+  background: #fff;
+  padding: 30px;
+  border-radius: 12px;
+  width: 500px;
+  max-width: 90%;
+  box-shadow: 0 5px 15px rgba(0, 0, 0, 0.3);
+  position: relative;
+  animation: fadeInScale 0.25s ease-out;
+}
+
+.spillage-modal-container h2 {
+  margin-bottom: 20px;
+  font-size: 1.6rem;
+  font-weight: 700;
+  color: #4B929D;
+  text-align: center;
+  border-bottom: 2px solid #eee;
+  padding-bottom: 10px;
+}
+
+.spillage-modal-container p {
+  margin: 10px 0;
+  font-size: 15px;
+  color: #333;
+}
+
+.spillage-modal-container strong {
+  color: #444;
+  font-weight: 600;
+  margin-right: 4px;
+}
+
+.modal-close-x {
+  position: absolute;
+  top: 12px;
+  right: 12px;
+  background: none;
+  border: none;
+  font-size: 22px;
+  cursor: pointer;
+  color: #666;
+  transition: color 0.2s ease;
+}
+
+.modal-close-x:hover {
+  color: #4B929D;
+}
+
+.spillage-modal-actions {
+  margin-top: 25px;
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.spillage-modal-actions button {
+  flex: 1;
+  padding: 10px 14px;
+  border: none;
+  border-radius: 6px;
+  font-size: 14px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.25s ease;
+}
+
+.details-edit-btn {
+  background: #4B929D;
+  color: #fff;
+}
+.details-edit-btn:hover {
+  background: #3a7a85;
+}
+
+.btn-delete {
+  background: #d9534f;
+  color: #fff;
+}
+.btn-delete:hover {
+  background: #c9302c;
+}
+
+@keyframes fadeInScale {
+  from {
+    opacity: 0;
+    transform: scale(0.9);
+  }
+  to {
+    opacity: 1;
+    transform: scale(1);
+  }
+}

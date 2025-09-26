@@ -1,29 +1,32 @@
 import React, { useState, useEffect } from "react";
 import PropTypes from "prop-types";
-import "./editSpillageModal.css";
+import "./sharedSpillageModal.css";
 
 function EditSpillageModal({ spillage, onClose, onUpdate }) {
-  const [productName, setProductName] = useState("");
-  const [type, setType] = useState("");
-  const [amount, setAmount] = useState("");
-  const [size, setSize] = useState("");
-  const [loggedBy, setLoggedBy] = useState("");
-  const [reason, setReason] = useState("");
-  const [date, setDate] = useState("");
+  const [productType, setProductType] = useState(spillage.type || "");
+  const [productName, setProductName] = useState(spillage.productName || "");
+  const [amount, setAmount] = useState(spillage.amount || "");
+  const [size, setSize] = useState(spillage.size || "");
+  const [loggedBy, setLoggedBy] = useState(spillage.loggedBy || "");
+  const [date, setDate] = useState(spillage.date || "");
+  const [reason, setReason] = useState(spillage.reason || "");
   const [errors, setErrors] = useState({});
-  const [isSaving, setIsSaving] = useState(false);
+  const [isUpdating, setIsUpdating] = useState(false);
 
+  // Reset fields when spillage changes
   useEffect(() => {
     if (spillage) {
+      setProductType(spillage.type || "");
       setProductName(spillage.productName || "");
-      setType(spillage.type || "");
       setAmount(spillage.amount || "");
       setSize(spillage.size || "");
       setLoggedBy(spillage.loggedBy || "");
-      setReason(spillage.reason || "");
       setDate(spillage.date || "");
+      setReason(spillage.reason || "");
     }
   }, [spillage]);
+
+  if (!spillage) return null;
 
   const handleFocus = (field) => {
     setErrors((prev) => ({ ...prev, [field]: "" }));
@@ -33,146 +36,178 @@ function EditSpillageModal({ spillage, onClose, onUpdate }) {
     e.preventDefault();
     let newErrors = {};
 
+    if (!productType.trim()) newErrors.productType = "Product type is required";
     if (!productName.trim()) newErrors.productName = "Product name is required";
-    if (!type.trim()) newErrors.type = "Type is required";
     if (!amount || isNaN(amount) || parseInt(amount) <= 0) {
       newErrors.amount = "Enter a valid amount";
     }
     if (!size.trim()) newErrors.size = "Size is required";
-    if (!loggedBy.trim()) newErrors.loggedBy = "Logged By is required";
-    if (!reason.trim()) newErrors.reason = "Reason is required";
+    if (!loggedBy.trim()) newErrors.loggedBy = "Spilled by is required";
     if (!date.trim()) newErrors.date = "Date is required";
+    if (!reason.trim()) newErrors.reason = "Reason is required";
 
     if (Object.keys(newErrors).length > 0) {
       setErrors(newErrors);
       return;
     }
 
-    setIsSaving(true);
+    setIsUpdating(true);
+
     const updatedSpillage = {
       ...spillage,
       productName,
-      type,
+      type: productType,
       amount: parseInt(amount),
       size,
       loggedBy,
       reason,
       date,
     };
+
     onUpdate(updatedSpillage);
-    setIsSaving(false);
+    setIsUpdating(false);
     onClose();
   };
 
-  if (!spillage) return null;
-
   return (
-    <div className="editSpillage-modal-overlay">
-      <div className="editSpillage-modal-container">
-        <div className="editSpillage-modal-header">
+    <div className="logSpillage-modal-overlay">
+      <div className="logSpillage-modal-container">
+        <div className="logSpillage-modal-header">
           <h2>Edit Spillage</h2>
-          <span className="editSpillage-close-button" onClick={onClose}>
+          <span className="logSpillage-close-button" onClick={onClose}>
             ×
           </span>
         </div>
 
-        <form className="editSpillage-modal-form" onSubmit={handleSubmit}>
-          <label>
-            Product Name: <span className="required">*</span>
-            <input
-              type="text"
-              value={productName}
-              onChange={(e) => setProductName(e.target.value)}
-              onFocus={() => handleFocus("productName")}
-              className={errors.productName ? "error-field" : ""}
-            />
-            {errors.productName && <p className="error-message">{errors.productName}</p>}
-          </label>
+        <form className="logSpillage-modal-form" onSubmit={handleSubmit}>
+          <div className="form-row">
+            <label>
+              Product Type: <span className="required">*</span>
+              <select
+                value={productType}
+                onChange={(e) => setProductType(e.target.value)}
+                onFocus={() => handleFocus("productType")}
+                className={errors.productType ? "error-field" : ""}
+              >
+                <option value="">Select type</option>
+                <option value="Drink">Drink</option>
+                <option value="Food">Food</option>
+              </select>
+              {errors.productType && (
+                <p className="error-message">{errors.productType}</p>
+              )}
+            </label>
 
-          <label>
-            Type: <span className="required">*</span>
-            <input
-              type="text"
-              value={type}
-              onChange={(e) => setType(e.target.value)}
-              onFocus={() => handleFocus("type")}
-              className={errors.type ? "error-field" : ""}
-            />
-            {errors.type && <p className="error-message">{errors.type}</p>}
-          </label>
+            <label>
+              Product Name: <span className="required">*</span>
+              <select
+                value={productName}
+                onChange={(e) => setProductName(e.target.value)}
+                onFocus={() => handleFocus("productName")}
+                className={errors.productName ? "error-field" : ""}
+              >
+                <option value="">Select product</option>
+                <option value="Cappuccino">Cappuccino</option>
+                <option value="Latte">Latte</option>
+                <option value="Cheeseburger">Cheeseburger</option>
+              </select>
+              {errors.productName && (
+                <p className="error-message">{errors.productName}</p>
+              )}
+            </label>
+          </div>
 
-          <label>
-            Amount: <span className="required">*</span>
-            <input
-              type="number"
-              min="1"
-              value={amount}
-              onChange={(e) => setAmount(e.target.value)}
-              onFocus={() => handleFocus("amount")}
-              className={errors.amount ? "error-field" : ""}
-            />
-            {errors.amount && <p className="error-message">{errors.amount}</p>}
-          </label>
+          <div className="form-row">
+            <label>
+              Amount: <span className="required">*</span>
+              <input
+                type="number"
+                min="1"
+                value={amount}
+                onChange={(e) => setAmount(e.target.value)}
+                onFocus={() => handleFocus("amount")}
+                className={errors.amount ? "error-field" : ""}
+              />
+              {errors.amount && <p className="error-message">{errors.amount}</p>}
+            </label>
 
-          <label>
-            Size: <span className="required">*</span>
-            <input
-              type="text"
-              value={size}
-              onChange={(e) => setSize(e.target.value)}
-              onFocus={() => handleFocus("size")}
-              className={errors.size ? "error-field" : ""}
-            />
-            {errors.size && <p className="error-message">{errors.size}</p>}
-          </label>
+            <label>
+              Size: <span className="required">*</span>
+              <select
+                value={size}
+                onChange={(e) => setSize(e.target.value)}
+                onFocus={() => handleFocus("size")}
+                className={errors.size ? "error-field" : ""}
+              >
+                <option value="">Select size</option>
+                <option value="12oz">12oz</option>
+                <option value="22oz">22oz</option>
+                <option value="Solo">Solo</option>
+                <option value="Regular">Regular</option>
+              </select>
+              {errors.size && <p className="error-message">{errors.size}</p>}
+            </label>
+          </div>
 
-          <label>
-            Logged By: <span className="required">*</span>
-            <input
-              type="text"
-              value={loggedBy}
-              onChange={(e) => setLoggedBy(e.target.value)}
-              onFocus={() => handleFocus("loggedBy")}
-              className={errors.loggedBy ? "error-field" : ""}
-            />
-            {errors.loggedBy && <p className="error-message">{errors.loggedBy}</p>}
-          </label>
+          <div className="form-row">
+            <label>
+              Spilled By: <span className="required">*</span>
+              <select
+                value={loggedBy}
+                onChange={(e) => setLoggedBy(e.target.value)}
+                onFocus={() => handleFocus("loggedBy")}
+                className={errors.loggedBy ? "error-field" : ""}
+              >
+                <option value="">Select staff</option>
+                <option value="Cashier A">Cashier A</option>
+                <option value="Cashier B">Cashier B</option>
+                <option value="Cashier C">Cashier C</option>
+              </select>
+              {errors.loggedBy && (
+                <p className="error-message">{errors.loggedBy}</p>
+              )}
+            </label>
 
-          <label>
-            Date: <span className="required">*</span>
-            <input
-              type="date"
-              value={date}
-              onChange={(e) => setDate(e.target.value)}
-              onFocus={() => handleFocus("date")}
-              className={errors.date ? "error-field" : ""}
-            />
-            {errors.date && <p className="error-message">{errors.date}</p>}
-          </label>
+            <label>
+              Date: <span className="required">*</span>
+              <input
+                type="date"
+                value={date}
+                onChange={(e) => setDate(e.target.value)}
+                onFocus={() => handleFocus("date")}
+                className={errors.date ? "error-field" : ""}
+              />
+              {errors.date && <p className="error-message">{errors.date}</p>}
+            </label>
+          </div>
 
-          <label>
-            Reason: <span className="required">*</span>
-            <textarea
-              rows="3"
-              value={reason}
-              onChange={(e) => setReason(e.target.value)}
-              onFocus={() => handleFocus("reason")}
-              className={errors.reason ? "error-field" : ""}
-            />
-            {errors.reason && <p className="error-message">{errors.reason}</p>}
-          </label>
+          <div className="form-row full-width">
+            <label>
+              Reason: <span className="required">*</span>
+              <textarea
+                rows="3"
+                value={reason}
+                onChange={(e) => setReason(e.target.value)}
+                onFocus={() => handleFocus("reason")}
+                className={errors.reason ? "error-field" : ""}
+              />
+              {errors.reason && (
+                <p className="error-message">{errors.reason}</p>
+              )}
+            </label>
+          </div>
 
-          <div className="editSpillage-button-container">
+          <div className="logSpillage-button-container">
             <button
               type="submit"
-              className="editSpillage-submit-button"
-              disabled={isSaving}
+              className="logSpillage-submit-button"
+              disabled={isUpdating}
             >
-              {isSaving ? "Saving..." : "Save"}
+              {isUpdating ? "Updating..." : "Update"}
             </button>
             <button
               type="button"
-              className="editSpillage-cancel-button"
+              className="logSpillage-cancel-button"
               onClick={onClose}
             >
               Cancel
@@ -185,16 +220,7 @@ function EditSpillageModal({ spillage, onClose, onUpdate }) {
 }
 
 EditSpillageModal.propTypes = {
-  spillage: PropTypes.shape({
-    id: PropTypes.number,
-    productName: PropTypes.string,
-    type: PropTypes.string,
-    amount: PropTypes.number,
-    size: PropTypes.string,
-    loggedBy: PropTypes.string,
-    reason: PropTypes.string,
-    date: PropTypes.string,
-  }),
+  spillage: PropTypes.object.isRequired,
   onClose: PropTypes.func.isRequired,
   onUpdate: PropTypes.func.isRequired,
 };

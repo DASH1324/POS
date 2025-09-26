@@ -1,7 +1,7 @@
 import React, { useState } from "react";
 import "./dashboard.css"; 
-import Sidebar from "../sidebar/sidebar"; 
-import Header from "../header/header"; 
+import Sidebar from "../shared/sidebar"; 
+import Header from "../shared/header"; 
 import {LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer, AreaChart, Area
 } from 'recharts';
 import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';

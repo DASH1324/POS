@@ -1,6 +1,6 @@
 import React, { useState } from "react";
 import "../roleManagement.css";
-import Sidebar from "../sidebar/sidebar";
+import Sidebar from "../shared/sidebar";
 import { FaChevronDown, FaBell, FaEdit, FaArchive, FaPlus, FaFolderOpen } from "react-icons/fa";
 import DataTable from "react-data-table-component";
 

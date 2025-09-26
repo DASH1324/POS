@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useCallback } from "react";
 import "./discounts.css";
-import Sidebar from "../sidebar/sidebar";
-import Header from "../header/header";
+import Sidebar from "../shared/sidebar";
+import Header from "../shared/header";
 import { FaEdit, FaPlus, FaTrash } from "react-icons/fa";
 import DataTable from "react-data-table-component";
 import DiscountModal from "./discountModal";
