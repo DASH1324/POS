@@ -383,11 +383,10 @@ async def get_sales_report(
                 (SELECT TOP 1 ItemName FROM RankedItems ri WHERE ri.DayOfWeek = DATENAME(weekday, AggregatedSales.CreatedAt) AND ri.rn = 1) AS bestItem
             FROM AggregatedSales GROUP BY DATENAME(weekday, CreatedAt), DATEPART(weekday, CreatedAt) ORDER BY DATEPART(weekday, CreatedAt)
         """
-        # --- THIS IS THE FIX ---
-        # Using the standard, robust method to calculate the start of the week (Monday).
-        date_filter = "AND s.CreatedAt >= DATEADD(wk, DATEDIFF(wk, 0, ?), 0) AND s.CreatedAt < DATEADD(wk, DATEDIFF(wk, 0, ?), 7)"
+        # Last 7 days including today
+        date_filter = "AND CAST(s.CreatedAt AS DATE) >= DATEADD(day, -6, CAST(? AS DATE)) AND CAST(s.CreatedAt AS DATE) <= CAST(? AS DATE)"
         params.extend([reference_date, reference_date])
-
+    
     elif request.reportType == 'monthly':
         query = base_query + """
             , RankedItems AS (

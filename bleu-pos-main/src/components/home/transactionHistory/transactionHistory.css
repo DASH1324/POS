@@ -68,7 +68,7 @@ body {
 
 .transHis-filter-bar input {
     font-size: 13px;
-    padding: 9px 8px;
+    padding: 11px 11px;
     border: 0.5px solid #EBEBEB;
     border-radius: 6px;
     border-color:black;
@@ -81,7 +81,7 @@ body {
     min-width: 150px;
     max-width: 300px;
     font-size: 13px;
-    padding: 9px 8px;
+    padding: 11px 11px;
     border: 0.5px solid #EBEBEB;
     border-radius: 6px;
     border-color:black;
@@ -89,8 +89,8 @@ body {
 }
 
 .history-clear-btn {
-    padding: 8px 14px;
-    background-color: #d9534f;
+    padding: 11px 11px;
+    background-color: #77a1a7;
     color: white;
     border: none;
     border-radius: 6px;
@@ -104,12 +104,12 @@ body {
 }
 
 .history-clear-btn:hover {
-    background-color: #c9302c;
+    background: #3a7a85;
 }
 
 .history-export-btn {
-    padding: 8px 14px;
-    background-color: #007BFF;
+    padding: 11px 11px;
+    background-color: #4B929D;
     color: white;
     border: none;
     border-radius: 6px;
@@ -123,7 +123,7 @@ body {
 }
 
 .history-export-btn:hover {
-    background-color: #0069d9;
+    background: #3a7a85;
 }
 
 .transactions-table-container {

@@ -27,51 +27,133 @@ body {
 
 .transRep-header-row {
   display: flex;
-  justify-content: space-between;
+  justify-content: flex-end;
   align-items: center;
   margin-top: 40px;
-  flex-wrap: wrap;
-  gap: 10px;
-}
-
-.transRep-tabs {
-  display: flex;
   gap: 10px;
   flex-wrap: wrap;
-}
-
-.transRep-tabs button {
-  padding: 8px 16px;
-  background-color: #ffffff;
-  color: #666;
-  border: none;
-  border-radius: 6px;
-  cursor: pointer;
-  font-weight: 500;
-  transition: background-color 0.3s;
-  width: 150px;
-}
-
-.transRep-tabs button:hover {
-  background: #4B929D;
-  color: white;
-}
-
-.transRep-tabs button.active {
-  background: #4B929D;
-  color: white;
 }
 
 .period-text-label {
-  
   background: white;
-  color: #333;
   padding: 11px 11px;
-  border-radius: 10px; 
+  border-radius: 10px;
   font-size: 14px;
-  font-weight: 500px;
-  border: 1px solid #4B929D;
-  white-space: nowrap;
+  font-weight: 500;
+  color: #555; 
+  min-width: 380px;
+  max-width: 380px;
+  text-align: left;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  border: 1px solid #000;
+}
+
+.transRep-dropdown select {
+  flex: 1;
+  min-width: 250px;
+  max-width: 200px;
+  font-size: 13px;
+  padding: 11px 11px;
+  border: 0.5px solid #EBEBEB;
+  border-radius: 6px;
+  border-color: black;
+  color: #555; 
+  order: 1;
+}
+
+/* Summary Cards - Added */
+.summary-cards {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 15px;
+  margin-top: 10px;
+  margin-bottom: 10px;
+}
+
+.summary-card {
+  background: white;
+  padding: 20px;
+  border-radius: 15px;
+  box-shadow: 2px 3px 3px 3px rgba(0, 0, 0, 0.08);
+  text-align: center;
+}
+
+.summary-card h3 {
+  font-size: 13px;
+  font-weight: 500;
+  color: #555;
+  margin: 0 0 10px 0;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+.summary-value {
+  font-size: 24px;
+  font-weight: 600;
+  color: #333;
+  margin: 0;
+}
+
+/* Loading State - Added */
+.loading-container {
+  background: white;
+  padding: 40px;
+  border-radius: 15px;
+  box-shadow: 2px 3px 3px 3px rgba(0, 0, 0, 0.08);
+  text-align: center;
+  margin: 20px 0;
+}
+
+.loading-container p {
+  font-size: 16px;
+  color: #555;
+  margin: 0;
+}
+
+/* Error State - Added */
+.error-container {
+  background: white;
+  padding: 30px;
+  border-radius: 15px;
+  box-shadow: 2px 3px 3px 3px rgba(0, 0, 0, 0.08);
+  text-align: center;
+  margin: 20px 0;
+  border: 2px solid #dc3545;
+}
+
+.error-message {
+  color: #dc3545;
+  font-size: 15px;
+  margin-bottom: 15px;
+  font-weight: 500;
+}
+
+.error-container button {
+  padding: 10px 25px;
+  background-color: #dc3545;
+  color: white;
+  border: none;
+  border-radius: 6px;
+  cursor: pointer;
+  font-size: 14px;
+  font-weight: 500;
+  transition: background-color 0.3s ease;
+}
+
+.error-container button:hover {
+  background-color: #c82333;
+}
+
+/* No Data State - Added */
+.no-data {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  height: 250px;
+  color: #999;
+  font-size: 15px;
+  font-style: italic;
 }
 
 .charts-container {
@@ -85,7 +167,7 @@ body {
   background: white;
   padding: 20px;
   border-radius: 15px;
-  box-shadow: 2px 3px 3px 3px rgba(0,0,0,0.08);
+  box-shadow: 2px 3px 3px 3px rgba(0, 0, 0, 0.08);
   height: auto;
   min-height: 300px;
 }
@@ -94,13 +176,38 @@ body {
   font-size: 18px;
   font-weight: 600;
   margin-top: 10px;
-  margin-bottom: 35px;
+  margin-bottom: 35px;  
   color: #333;
+}
+
+/* Recharts Custom Styling */
+.recharts-default-tooltip {
+  background-color: white !important;
+  border: 1px solid #ccc !important;
+  border-radius: 8px !important;
+  padding: 10px !important;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.15) !important;
+}
+
+.recharts-tooltip-label {
+  font-weight: 600;
+  color: #333;
+  margin-bottom: 5px;
+}
+
+@media (max-width: 1400px) {
+  .summary-cards {
+    grid-template-columns: repeat(2, 1fr);
+  }
 }
 
 @media (max-width: 1024px) {
   .charts-container {
     grid-template-columns: 1fr;
+  }
+  
+  .summary-cards {
+    grid-template-columns: repeat(2, 1fr);
   }
 }
 
@@ -112,5 +219,22 @@ body {
 
   .charts-container {
     grid-template-columns: 1fr;
+  }
+
+  .period-text-label {
+    min-width: 500px;
+    max-width: 500px;
+  }
+  
+  .summary-cards {
+    grid-template-columns: 1fr;
+  }
+  
+  .summary-card {
+    padding: 15px;
+  }
+  
+  .summary-value {
+    font-size: 20px;
   }
 }

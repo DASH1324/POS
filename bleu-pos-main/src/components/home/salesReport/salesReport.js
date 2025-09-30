@@ -5,33 +5,31 @@ import Header from "../shared/header";
 import DataTable from "react-data-table-component";
 import { FaFileExport } from "react-icons/fa";
 import CustomDateModal from "../shared/customDateModal";
+import handleSalesReportExport from "./salesReportExport";
 
-// --- HELPER: Formats a date object to 'YYYY-MM-DD' string RESPECTING LOCAL TIMEZONE ---
+// --- HELPER: Formats a date object to 'YYYY-MM-DD' string ---
 const formatDate = (date) => {
   const year = date.getFullYear();
-  // getMonth() is 0-indexed (0 for January), so we add 1
-  const month = String(date.getMonth() + 1).padStart(2, '0'); 
+  const month = String(date.getMonth() + 1).padStart(2, '0');
   const day = String(date.getDate()).padStart(2, '0');
-  
   return `${year}-${month}-${day}`;
 };
-
 
 // --- HELPER FUNCTION FOR DISPLAYING DATE RANGES ---
 const getPeriodText = (tab, customStart = null, customEnd = null) => {
   const today = new Date();
-  
+
   switch (tab) {
     case "daily": {
       const options = { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' };
       return `Date: ${today.toLocaleDateString('en-US', options)}`;
     }
     case "weekly": {
+      // Last 7 days including today
+      const lastDayOfWeek = new Date(today);
       const firstDayOfWeek = new Date(today);
-      firstDayOfWeek.setDate(today.getDate() - (today.getDay() === 0 ? 6 : today.getDay() - 1));
-      const lastDayOfWeek = new Date(firstDayOfWeek);
-      lastDayOfWeek.setDate(firstDayOfWeek.getDate() + 6);
-      
+      firstDayOfWeek.setDate(today.getDate() - 6);
+
       const start = firstDayOfWeek.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
       const end = lastDayOfWeek.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
       return `Date Period: ${start} - ${end}`;
@@ -44,14 +42,13 @@ const getPeriodText = (tab, customStart = null, customEnd = null) => {
     }
     case "custom": {
       if (customStart && customEnd) {
-        // Adding timezone offset handling for custom dates to prevent off-by-one day issues
         const startDate = new Date(customStart);
         const endDate = new Date(customEnd);
         const timeZoneOffset = startDate.getTimezoneOffset() * 60000;
-        
+
         const start = new Date(startDate.getTime() + timeZoneOffset).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
         const end = new Date(endDate.getTime() + timeZoneOffset).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
-        
+
         return `Date Period: ${start} - ${end}`;
       }
       return "Date Period: None Selected";
@@ -64,8 +61,7 @@ const getPeriodText = (tab, customStart = null, customEnd = null) => {
 function SalesReport() {
   const [activeTab, setActiveTab] = useState("daily");
   const [isCustomModalOpen, setIsCustomModalOpen] = useState(false);
-  
-  // --- STATE FOR API DATA ---
+
   const [reportData, setReportData] = useState([]);
   const [reportTotals, setReportTotals] = useState({ transactions: 0, itemsSold: 0, storeSale: 0, onlineSale: 0, totalSale: 0 });
   const [isLoading, setIsLoading] = useState(false);
@@ -74,11 +70,10 @@ function SalesReport() {
   const [currentPeriodText, setCurrentPeriodText] = useState(getPeriodText("daily"));
   const [customRange, setCustomRange] = useState({ start: null, end: null });
 
-  // --- API CALL FUNCTION ---
   const fetchSalesReport = async (tab, startDate, endDate) => {
     setIsLoading(true);
     setError(null);
-    const token = localStorage.getItem('authToken'); 
+    const token = localStorage.getItem('authToken');
 
     if (!token) {
       setError("Authentication token not found. Please log in.");
@@ -86,11 +81,7 @@ function SalesReport() {
       return;
     }
 
-    const body = {
-      reportType: tab,
-      startDate: startDate,
-      endDate: endDate,
-    };
+    const body = { reportType: tab, startDate, endDate };
 
     try {
       const response = await fetch('http://127.0.0.1:9000/auth/sales_metrics/report', {
@@ -113,14 +104,13 @@ function SalesReport() {
 
     } catch (err) {
       setError(err.message);
-      setReportData([]); 
+      setReportData([]);
       setReportTotals({ transactions: 0, itemsSold: 0, storeSale: 0, onlineSale: 0, totalSale: 0 });
     } finally {
       setIsLoading(false);
     }
   };
-  
-  // --- EFFECT TO FETCH DATA WHEN TAB CHANGES ---
+
   useEffect(() => {
     if (activeTab === 'custom') {
       setReportData([]);
@@ -128,15 +118,13 @@ function SalesReport() {
       setCurrentPeriodText(getPeriodText('custom', customRange.start, customRange.end));
       return;
     }
-    
+
     const todayStr = formatDate(new Date());
     fetchSalesReport(activeTab, todayStr, todayStr);
     setCurrentPeriodText(getPeriodText(activeTab));
 
   }, [activeTab]);
 
-
-  // --- COLUMNS (Structure remains the same) ---
   const dailyColumns = [
     { name: "PRODUCT NAME", selector: (row) => row.productName, sortable: true },
     { name: "CATEGORY", selector: (row) => row.category, center: true, sortable: true },
@@ -197,8 +185,6 @@ function SalesReport() {
     }
   }, [activeTab, reportData]);
 
-
-  // --- RENDER TOTALS FROM STATE ---
   const renderTotals = () => (
     <>
       {activeTab !== "daily" && (
@@ -211,7 +197,6 @@ function SalesReport() {
     </>
   );
 
-  // --- HANDLE CUSTOM DATE SUBMISSION ---
   const handleCustomApply = (startDate, endDate) => {
     const startStr = formatDate(new Date(startDate));
     const endStr = formatDate(new Date(endDate));
@@ -228,30 +213,42 @@ function SalesReport() {
       <Sidebar />
       <div className="report">
         <Header pageTitle="Sales Report" />
+        <div className="sales-tabs-wrapper">
+          <div className="sales-tabs">
+            <select
+              className="tab-dropdown"
+              value={activeTab}
+              onChange={(e) => {
+                const value = e.target.value;
+                if (value === "custom") {
+                  setIsCustomModalOpen(true);
+                } else {
+                  setActiveTab(value);
+                }
+              }}
+            >
+              <option value="daily">Today</option>
+              <option value="weekly">This Week</option>
+              <option value="monthly">This Month</option>
+              <option value="yearly">This Year</option>
+              <option value="custom">Custom</option>
+            </select>
 
-        {/* Tabs */}
-        <div className="sales-tabs">
-          <button className={activeTab === "daily" ? "active" : ""} onClick={() => setActiveTab("daily")}>
-            Today
-          </button>
-          <button className={activeTab === "weekly" ? "active" : ""} onClick={() => setActiveTab("weekly")}>
-            This Week
-          </button>
-          <button className={activeTab === "monthly" ? "active" : ""} onClick={() => setActiveTab("monthly")}>
-            This Month
-          </button>
-          <button className={activeTab === "yearly" ? "active" : ""} onClick={() => setActiveTab("yearly")}>
-            This Year
-          </button>
-          <button className={activeTab === "custom" ? "active" : ""} onClick={() => setIsCustomModalOpen(true)}>
-            Custom
-          </button>
-
-          <button className="export-btn">
-            <FaFileExport /> Export
-          </button>
+            <button className="export-btn" onClick={() => handleSalesReportExport(reportData, reportTotals, activeTab, currentPeriodText)}>
+              <FaFileExport /> Export
+            </button>
+          </div>
         </div>
 
+        {/* 👉 Totals moved here */}
+        <div className="sales-total-row">
+          <span className="period-text">{currentPeriodText}</span>
+          <div className="totals-right">
+            {!isLoading && data.length > 0 && renderTotals()}
+          </div>
+        </div>
+
+        {/* Table */}
         <div className="salesRep-table-container">
           <DataTable
             columns={columns}
@@ -263,9 +260,26 @@ function SalesReport() {
             fixedHeader
             fixedHeaderScrollHeight="60vh"
             progressPending={isLoading}
+            progressComponent={
+              <div style={{ padding: "24px", textAlign: "center" }}>
+                {error ? (
+                  <span style={{ color: "red" }}>
+                    Unable to load sales report. {error}
+                  </span>
+                ) : (
+                  "Loading Sales Report..."
+                )}
+              </div>
+            }
             noDataComponent={
-              <div style={{ padding: "24px" }}>
-                {error ? `Error: ${error}` : "No sales data available for this period."}
+              <div style={{ padding: "24px", textAlign: "center" }}>
+                {error ? (
+                  <span style={{ color: "red" }}>
+                    Unable to load sales report. {error}
+                  </span>
+                ) : (
+                  "No sales data available for this period."
+                )}
               </div>
             }
             customStyles={{
@@ -286,14 +300,6 @@ function SalesReport() {
               },
             }}
           />
-
-          <div className="sales-total-row">
-            <span className="period-text">{currentPeriodText}</span>
-            <div className="totals-right">
-              {!isLoading && data.length > 0 && renderTotals()}
-            </div>
-          
-          </div>
         </div>
       </div>
 

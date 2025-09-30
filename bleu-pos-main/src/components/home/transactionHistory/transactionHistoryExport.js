@@ -1,194 +1,189 @@
-import React from 'react';
-import './transactionHistoryExport.css';
-import logo from '../../../assets/logo.png';
+import logo from "../../../assets/logo.png";
+import "./transactionHistoryExport.css"; 
 
-const TransactionHistoryExport = () => {
-  const transactions = [
-    {
-      id: 'SO-10',
-      date: '9/21/2025',
-      cashier: 'POScashier2',
-      orderType: 'Take out',
-      items: 1,
-      discounts: 'Discount Applied',
-      total: '₱256.00',
-      paymentMethod: 'GCash',
-      status: 'Completed'
-    },
-    {
-      id: 'SO-9',
-      date: '9/21/2025',
-      cashier: 'cashierPOS',
-      orderType: 'Dine in',
-      items: 2,
-      discounts: 'None',
-      total: '₱120.00',
-      paymentMethod: 'Cash',
-      status: 'Processing'
-    },
-    {
-      id: 'SO-8',
-      date: '9/21/2025',
-      cashier: 'POSadmin2',
-      orderType: 'Take out',
-      items: 1,
-      discounts: 'Discount Applied',
-      total: '₱168.00',
-      paymentMethod: 'GCash',
-      status: 'Processing'
-    },
-    {
-      id: 'SO-7',
-      date: '9/21/2025',
-      cashier: 'POScashier2',
-      orderType: 'Dine in',
-      items: 2,
-      discounts: 'None',
-      total: '₱330.00',
-      paymentMethod: 'Cash',
-      status: 'Completed'
-    },
-    {
-      id: 'SO-6',
-      date: '9/21/2025',
-      cashier: 'cashierPOS',
-      orderType: 'Dine in',
-      items: 1,
-      discounts: 'None',
-      total: '₱99.00',
-      paymentMethod: 'GCash',
-      status: 'Completed'
-    },
-    {
-      id: 'SO-5',
-      date: '9/21/2025',
-      cashier: 'POSadmin2',
-      orderType: 'Dine in',
-      items: 2,
-      discounts: 'None',
-      total: '₱120.00',
-      paymentMethod: 'Cash',
-      status: 'Completed'
-    },
-    {
-      id: 'SO-4',
-      date: '9/21/2025',
-      cashier: 'POScashier2',
-      orderType: 'Dine in',
-      items: 1,
-      discounts: 'None',
-      total: '₱110.00',
-      paymentMethod: 'GCash',
-      status: 'Completed'
-    },
-    {
-      id: 'SO-3',
-      date: '9/20/2025',
-      cashier: 'cashierPOS',
-      orderType: 'Dine in',
-      items: 2,
-      discounts: 'None',
-      total: '₱180.00',
-      paymentMethod: 'Cash',
-      status: 'Completed'
-    },
-    {
-      id: 'SO-2',
-      date: '9/20/2025',
-      cashier: 'POSadmin2',
-      orderType: 'Dine in',
-      items: 1,
-      discounts: 'None',
-      total: '₱69.00',
-      paymentMethod: 'GCash',
-      status: 'Processing'
-    },
-    {
-      id: 'SO-1',
-      date: '9/20/2025',
-      cashier: 'POScashier2',
-      orderType: 'Dine in',
-      items: 2,
-      discounts: 'Discount Applied',
-      total: '₱144.00',
-      paymentMethod: 'Cash',
-      status: 'Completed'
-    }
-  ];
+const handleExport = (filteredTransactions, activeTab, statusFilter, exportedBy, dateFilter) => {
+  const modal = document.createElement("div");
+  modal.className = "export-modal";
 
-  const currentDate = new Date();
-  const formattedDate = `${currentDate.getMonth() + 1}/${currentDate.getDate()}/${currentDate.getFullYear()}, ${currentDate.getHours()}:${currentDate.getMinutes().toString().padStart(2, '0')}:${currentDate.getSeconds().toString().padStart(2, '0')} ${currentDate.getHours() >= 12 ? 'PM' : 'AM'}`;
-
-  return (
-    <div className="transaction-history-container">
-      {/* Header Section */}
-      <div className="header-section">
-        <div className="logo-section">
-          <div className="logo">
-            <img src={logo} alt="Bleu Bean Cafe Logo" className="logo-image" />
-          </div>
-        </div>
-        <div className="title-section">
-          <h1 className="report-title">Transaction History - Store</h1>
-          <div className="report-info">
-            <p>Generated on: {formattedDate}</p>
-            <p>Transaction Date Range: All Dates</p>
-            <p>Status: Completed</p>
-          </div>
-        </div>
-      </div>
-
-      {/* Transaction Table */}
-      <div className="table-container">
-        <table className="transaction-table">
-          <thead>
-            <tr className="table-header">
-              <th>Transaction ID</th>
-              <th>Date</th>
-              <th>Cashier</th>
-              <th>Order Type</th>
-              <th>Item(s)</th>
-              <th>Discounts</th>
-              <th>Total</th>
-              <th>Payment Method</th>
-              <th>Status</th>
-            </tr>
-          </thead>
-          <tbody>
-            {transactions.map((transaction, index) => (
-              <tr key={transaction.id} className={index % 2 === 0 ? 'even-row' : 'odd-row'}>
-                <td>{transaction.id}</td>
-                <td>{transaction.date}</td>
-                <td>{transaction.cashier}</td>
-                <td>{transaction.orderType}</td>
-                <td>{transaction.items}</td>
-                <td>{transaction.discounts}</td>
-                <td>{transaction.total}</td>
-                <td>{transaction.paymentMethod}</td>
-                <td>{transaction.status}</td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
-      </div>
-
-      {/* Summary Section */}
-      <div className="summary-section">
-        <h2 className="summary-title">Transaction History Summary</h2>
-        <div className="summary-info">
-          <p>Total Transactions: {transactions.length}</p>
-          <p>Total Sales: ₱{transactions.reduce((sum, transaction) => {
-            const amount = parseFloat(transaction.total.replace('₱', '').replace(',', ''));
-            return sum + amount;
-          }, 0).toFixed(2)}</p>
-          <p>Total Items: {transactions.reduce((sum, transaction) => sum + transaction.items, 0)}</p>
-          <p>Total Discount Applied: {transactions.filter(t => t.discounts === 'Discount Applied').length}</p>
-          <p>Promotion Applied: 0</p>
-          <p>Generated by: Admin</p>
-        </div>
-      </div>
+  modal.innerHTML = `
+    <div class="export-modal-content">
+      <h2>Choose Export Format</h2>
+      <p>Choose which type of file to export.</p>
+      <button id="exportPDF" class="export-btn pdf">Export as PDF</button>
+      <button id="exportCSV" class="export-btn csv">Export as CSV</button>
+      <button id="cancelExport" class="export-btn cancel">Cancel</button>
     </div>
-  );
+    `;
+
+  document.body.appendChild(modal);
+  document.getElementById("cancelExport").onclick = () => modal.remove();
+  document.getElementById("exportPDF").onclick = () => {
+    modal.remove();
+
+    if (!filteredTransactions.length) {
+      const noDataModal = document.createElement("div");
+      noDataModal.className = "no-data-modal";
+
+      noDataModal.innerHTML = `
+        <div class="no-data-content">
+          <h2>No Transactions</h2>
+          <p>There are no transactions available to export.</p>
+          <button id="closeNoData">Okay</button>
+        </div>
+      `;
+
+      document.body.appendChild(noDataModal);
+      document.getElementById("closeNoData").onclick = () => noDataModal.remove();
+      return;
+    }
+
+    //SUMMARY COMPUTATION
+    const totalTransactions = filteredTransactions.length;
+    const totalSale = filteredTransactions.reduce((sum, t) => sum + parseFloat(t.total || 0), 0);
+    const totalItems = filteredTransactions.reduce((sum, t) => sum + (t.items?.length || 0), 0);
+    const discountedTransactions = filteredTransactions.filter(
+      (t) => t.discountsAndPromotions && t.discountsAndPromotions !== "None"
+    ).length;
+    const nonDiscountedTransactions = totalTransactions - discountedTransactions;
+
+    const newWindow = window.open("", "_blank");
+    newWindow.document.write(`
+      <html>
+        <head>
+          <title>Transaction History Export</title>
+          <style>
+            body { font-family: Arial, sans-serif; padding: 20px; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+            h1 { margin: 0; font-size: 18px; }
+            .export-header { display: flex; align-items: flex-start; margin-bottom: 15px; }
+            .export-header img { height: 140px; }
+            .header-details { text-align: left; font-size: 13px; margin-left: 15px; }
+
+            table { width: 100%; border-collapse: collapse; margin-top: 20px; }
+            th, td { border: 1px solid #000; padding: 8px; font-size: 11px; text-align: left; }
+            th { background-color: #4B929D !important; color: #fff !important; font-weight: bold; text-align: center; }
+
+            .badge { padding: 3px 6px; border-radius: 5px; font-size: 11px; font-weight: bold; }
+
+            .summary { margin-top: 40px; font-size: 12px; text-align: center; }
+            .summary h3 { margin-bottom: 10px; }
+            .summary-table { border-collapse: collapse; width: 100%; }
+            .summary-table th, .summary-table td { border: 1px solid #000; padding: 8px 12px; font-size: 12px; text-align: left; }
+            .summary-table th { background: #f2f2f2; text-align: left; width: 50%; }
+
+            .approved { margin-top: 40px; text-align: right; }
+            .signature { margin-top: 40px; }
+          </style>
+        </head>
+        <body>
+          <div class="export-header">
+            <img src="${logo}" alt="Logo" />
+            <div class="header-details">
+              <h1>Transaction History - ${activeTab}</h1>
+              <p><strong>Generated On:</strong> ${new Date().toLocaleString()}</p>
+              <p><strong>Generated By:</strong> ${exportedBy || "System"}</p>
+              <p><strong>Transaction Period:</strong> ${dateFilter || "All"}</p>
+              <p><strong>Status Filter:</strong> ${statusFilter || "All"}</p>
+            </div>
+          </div>
+
+          <table>
+            <thead>
+              <tr>
+                <th>Transaction Number</th>
+                <th>Date</th>
+                <th>Cashier</th>
+                <th>Order Type</th>
+                <th>Items</th>
+                <th>Discounts</th>
+                <th>Total</th>
+                <th>Payment Method</th>
+                <th>Status</th>
+              </tr>
+            </thead>
+            <tbody>
+              ${filteredTransactions.map((t) => `
+                <tr>
+                  <td>${t.id}</td>
+                  <td>${new Date(t.date).toLocaleDateString()}</td>
+                  <td>${t.cashierName || "—"}</td>
+                  <td>${t.orderType || "—"}</td>
+                  <td>${t.items?.length || 0}</td>
+                  <td><span class="badge discount">${t.discountsAndPromotions || "None"}</span></td>
+                  <td>₱${parseFloat(t.total).toFixed(2)}</td>
+                  <td>${t.paymentMethod || "N/A"}</td>
+                  <td><span class="badge ${t.status.toLowerCase()}">${t.status}</span></td>
+                </tr>
+              `).join("")}
+            </tbody>
+          </table>
+
+          <div class="summary">
+            <h3>Transaction Summary</h3>
+            <table class="summary-table">
+              <tr><th>Total Transactions</th><td>${totalTransactions}</td></tr>
+              <tr><th>Total Sale</th><td>₱${totalSale.toFixed(2)}</td></tr>
+              <tr><th>Total Item Ordered</th><td>${totalItems}</td></tr>
+              <tr><th>Total Discounted Transactions</th><td>${discountedTransactions}</td></tr>
+              <tr><th>Total Non-Discounted Transactions</th><td>${nonDiscountedTransactions}</td></tr>
+            </table>
+          </div>
+
+          <div class="approved">
+            <p>Approved By:</p>
+            <div class="signature">________________________</div>
+          </div>
+
+          <script> window.onload = () => window.print(); </script>
+        </body>
+      </html>
+    `);
+    newWindow.document.close();
+  };
+
+  //CSV EXPORT
+  document.getElementById("exportCSV").onclick = () => {
+    modal.remove();
+
+    if (!filteredTransactions.length) {
+      alert("No transactions to export");
+      return;
+    }
+
+    const headers = [
+      "Transaction Number",
+      "Date",
+      "Cashier",
+      "Order Type",
+      "Items",
+      "Discounts",
+      "Total",
+      "Payment Method",
+      "Status"
+    ];
+
+    const rows = filteredTransactions.map((t) => [
+      t.id,
+      new Date(t.date).toLocaleDateString(),
+      t.cashierName || "—",
+      t.orderType || "—",
+      t.items?.length || 0,
+      t.discountsAndPromotions || "None",
+      `₱${parseFloat(t.total).toFixed(2)}`,
+      t.paymentMethod || "N/A",
+      t.status
+    ]);
+
+    const csvContent = [headers, ...rows].map((e) => e.join(",")).join("\n");
+    const blob = new Blob([csvContent], { type: "text/csv;charset=utf-8;" });
+    const url = URL.createObjectURL(blob);
+
+    const link = document.createElement("a");
+    link.setAttribute("href", url);
+    link.setAttribute("download", `transaction_history_${Date.now()}.csv`);
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+  };
 };
 
-export default TransactionHistoryExport;
+export default handleExport;

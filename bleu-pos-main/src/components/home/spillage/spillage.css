@@ -60,7 +60,7 @@ body {
 
 .spillage-clear-btn {
     padding: 11px 11px;
-    background-color: #d9534f;
+    background-color: #77a1a7;
     color: white;
     border: none;
     border-radius: 6px;
@@ -74,12 +74,12 @@ body {
 }
 
 .spillage-clear-btn:hover {
-    background-color: #c9302c;
+    background: #3a7a85;
 }
 
 .spillage-add-btn {
     padding: 11px 11px;
-    background-color: #007BFF;
+    background-color: #4B929D;
     color: white;
     border: none;
     border-radius: 6px;
@@ -92,8 +92,8 @@ body {
     width: auto;
 }
 
-.spillage-export-btn:hover {
-    background-color: #0069d9;
+.spillage-add-btn:hover {
+    background-color: #3a7a85;
 }
 
 

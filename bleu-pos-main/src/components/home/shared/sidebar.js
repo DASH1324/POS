@@ -72,10 +72,7 @@ function SidebarComponent() {
               >
                 Discounts
               </MenuItem>
-
-              {/* --- CORRECTED: CONDITIONAL RENDERING FOR SPILLAGE --- */}
-              {/* This logic now shows the "Spillage" link for both 'manager' and 'admin' roles. */}
-              {(userRole === 'manager' || userRole === 'admin') && (
+              
                 <MenuItem
                   icon={<FontAwesomeIcon icon={faWarning} />}
                   component={<Link to="/home/spillage" />}
@@ -83,7 +80,6 @@ function SidebarComponent() {
                 >
                   Spillage
                 </MenuItem>
-              )}
 
               {!collapsed && <div className="section-title">REPORTS</div>}
               <MenuItem

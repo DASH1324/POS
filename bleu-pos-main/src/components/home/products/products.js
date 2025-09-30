@@ -1,12 +1,13 @@
 import React, { useState, useEffect, useMemo, useCallback } from "react";
 import { useNavigate } from "react-router-dom";
-import "../products/products.css"; 
+import "../products/products.css";
 import Sidebar from "../shared/sidebar";
-import Header from "../shared/header"; 
+import Header from "../shared/header";
 import DataTable from "react-data-table-component";
 import DetailsProductModal from "./modals/detailsProductModal";
 
 const API_BASE_URL = "http://127.0.0.1:8001";
+const MERCHANDISE_API_URL = "http://127.0.0.1:8002";
 const getAuthToken = () => localStorage.getItem("authToken");
 
 function Products() {
@@ -15,13 +16,14 @@ function Products() {
   const [activeTab, setActiveTab] = useState(null);
   const [productTypes, setProductTypes] = useState([]);
   const [products, setProducts] = useState([]);
+  const [merchandise, setMerchandise] = useState([]);
   const [searchTerm, setSearchTerm] = useState("");
   const [categoryFilter, setCategoryFilter] = useState("");
   const [sizeFilter, setSizeFilter] = useState("");
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState(null);
 
-  const [selectedProduct, setSelectedProduct] = useState(null); 
+  const [selectedProduct, setSelectedProduct] = useState(null);
 
   const fetchProductTypes = useCallback(async (token) => {
     try {
@@ -31,6 +33,7 @@ function Products() {
       if (!response.ok) throw new Error("Failed to fetch product types");
       const data = await response.json();
       setProductTypes(data);
+
       if (data.length > 0) {
         setActiveTab((currentTab) =>
           currentTab === null ? data[0].productTypeID : currentTab
@@ -56,6 +59,24 @@ function Products() {
     }
   }, []);
 
+  const fetchMerchandise = useCallback(async (token) => {
+    try {
+      const response = await fetch(`${MERCHANDISE_API_URL}/merchandise/`, {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      if (!response.ok) {
+        const errorText = await response.text();
+        throw new Error(`Failed to fetch merchandise: ${response.status} - ${errorText}`);
+      }
+      const data = await response.json();
+      console.log("Merchandise data:", data);
+      setMerchandise(data);
+    } catch (err) {
+      console.error("Merchandise fetch error:", err);
+      setError((error) => error || err.message);
+    }
+  }, []);
+
   useEffect(() => {
     const token = getAuthToken();
 
@@ -65,7 +86,11 @@ function Products() {
     }
 
     setIsLoading(true);
-    Promise.all([fetchProductTypes(token), fetchProducts(token)])
+    Promise.all([
+      fetchProductTypes(token),
+      fetchProducts(token),
+      fetchMerchandise(token),
+    ])
       .catch((err) => {
         console.error("Error during data fetching:", err);
         setError("Could not load all required data.");
@@ -73,10 +98,19 @@ function Products() {
       .finally(() => {
         setIsLoading(false);
       });
-  }, [navigate, fetchProductTypes, fetchProducts]);
+  }, [navigate, fetchProductTypes, fetchProducts, fetchMerchandise]);
 
   const filteredProductsForActiveTab = useMemo(() => {
-    if (!activeTab || products.length === 0) return [];
+    if (!activeTab) return [];
+
+    if (activeTab === "merch") {
+      return merchandise.filter((merch) => {
+        const matchesSearch = (merch.MerchandiseName || "")
+          .toLowerCase()
+          .includes(searchTerm.toLowerCase());
+        return matchesSearch;
+      });
+    }
 
     return products.filter((product) => {
       const matchesTab = product.ProductTypeID === activeTab;
@@ -91,10 +125,15 @@ function Products() {
 
       return matchesTab && matchesSearch && matchesCategory && matchesSize;
     });
-  }, [activeTab, products, searchTerm, categoryFilter, sizeFilter]);
+  }, [activeTab, products, merchandise, searchTerm, categoryFilter, sizeFilter]);
 
   const uniqueCategories = useMemo(() => {
     if (!activeTab || products.length === 0) return [];
+
+    if (activeTab === "merch") {
+      return [];
+    }
+
     const currentTabProducts = products.filter(
       (product) => product.ProductTypeID === activeTab
     );
@@ -107,9 +146,15 @@ function Products() {
 
   const uniqueSizes = useMemo(() => {
     if (!activeTab || products.length === 0) return [];
+
+    if (activeTab === "merch") {
+      return [];
+    }
+
     const currentTabProducts = products.filter(
       (product) => product.ProductTypeID === activeTab
     );
+
     const allSizes = currentTabProducts.flatMap(
       (item) => item.ProductSizes || []
     );
@@ -124,84 +169,106 @@ function Products() {
 
   const DEFAULT_PRODUCT_IMAGE = "/images/default-product.png";
 
-  const columns = [
-    {
-      name: "PRODUCT",
-      selector: (row) => row.ProductName,
-      cell: (row) => (
-        <div className="food-info">
-          <img
-            src={row.ProductImage || DEFAULT_PRODUCT_IMAGE}
-            alt={row.ProductName}
-            className="food-photo"
-            onError={(e) => {
-              e.target.onerror = null;
-              e.target.src = DEFAULT_PRODUCT_IMAGE;
-            }}
-          />
-          <div>
-            <div className="food-name">{row.ProductName}</div>
+  const columns = useMemo(() => {
+    if (activeTab === "merch") {
+      return [
+        {
+          name: "MERCHANDISE IMAGE",
+          selector: (row) => row.MerchandiseImage,
+          cell: (row) => (
+            <img
+              src={row.MerchandiseImage || DEFAULT_PRODUCT_IMAGE}
+              alt={row.MerchandiseName}
+              className="food-photo"
+              onError={(e) => {
+                e.target.onerror = null;
+                e.target.src = DEFAULT_PRODUCT_IMAGE;
+              }}
+            />
+          ),
+          width: "30%"
+        },
+        {
+          name: "MERCHANDISE NAME",
+          selector: (row) => row.MerchandiseName,
+          sortable: true,
+          width: "40%",
+        },
+        {
+          name: "PRICE",
+          selector: (row) => `₱${parseFloat(row.MerchandisePrice || 0).toFixed(2)}`,
+          sortable: true,
+          width: "30%",
+        },
+      ];
+    }
+
+    return [
+      {
+        name: "PRODUCT",
+        selector: (row) => row.ProductName,
+        cell: (row) => (
+          <div className="food-info">
+            <img
+              src={row.ProductImage || DEFAULT_PRODUCT_IMAGE}
+              alt={row.ProductName}
+              className="food-photo"
+              onError={(e) => {
+                e.target.onerror = null;
+                e.target.src = DEFAULT_PRODUCT_IMAGE;
+              }}
+            />
+            <div>
+              <div className="food-name">{row.ProductName}</div>
+            </div>
           </div>
-        </div>
-      ),
-      sortable: true,
-      width: "20%",
-    },
-    {
-      name: "DESCRIPTION",
-      selector: (row) => row.ProductDescription,
-      wrap: true,
-      width: "20%",
-    },
-    {
-      name: "CATEGORY",
-      selector: (row) => row.ProductCategory,
-      center: true,
-      sortable: true,
-      width: "20%",
-    },
-    {
-      name: "SIZES",
-      selector: (row) => row.ProductSizes?.join(" & ") || "N/A",
-      center: true,
-      width: "20%",
-    },
-    {
-      name: "PRICE",
-      selector: (row) => `₱${parseFloat(row.ProductPrice).toFixed(2)}`,
-      center: true,
-      sortable: true,
-      width: "20%",
-    },
-  ];
+        ),
+        sortable: true,
+        width: "20%",
+      },
+      {
+        name: "DESCRIPTION",
+        selector: (row) => row.ProductDescription,
+        wrap: true,
+        width: "20%",
+      },
+      {
+        name: "CATEGORY",
+        selector: (row) => row.ProductCategory,
+        center: true,
+        sortable: true,
+        width: "20%",
+      },
+      {
+        name: "SIZES",
+        selector: (row) => row.ProductSizes?.join(" & ") || "N/A",
+        center: true,
+        width: "20%",
+      },
+      {
+        name: "PRICE",
+        selector: (row) => `₱${parseFloat(row.ProductPrice).toFixed(2)}`,
+        center: true,
+        sortable: true,
+        width: "20%",
+      },
+    ];
+  }, [activeTab]);
 
   return (
-  <div className="productList"> 
-    <Sidebar />
+    <div className="productList">
+      <Sidebar />
       <div className="products">
         <Header pageTitle="Products" />
 
         <div className="products-content">
-          {isLoading ? (
+          {error ? (
             <div
               style={{
                 display: "flex",
-                justifyContent: "start",
-                alignItems: "start",
-                height: "400px",
-                fontSize: "18px",
-              }}
-            >
-              <p>Loading Products...</p>
-            </div>
-          ) : error ? (
-            <div
-              style={{
-                display: "flex",
-                justifyContent: "center",
                 alignItems: "center",
+                justifyContent: "center",
                 height: "400px",
-                fontSize: "18px",
                 color: "red",
               }}
             >
@@ -221,38 +288,51 @@ function Products() {
                     {type.productTypeName}
                   </button>
                 ))}
+
+                <button
+                  className={`tab ${activeTab === "merch" ? "active-tab" : ""}`}
+                  onClick={() => setActiveTab("merch")}
+                >
+                  Merchandise
+                </button>
               </div>
 
               <div className="tab-content">
                 <div className="filter-bar">
                   <input
                     type="text"
-                    placeholder="Search Products..."
+                    placeholder={activeTab === "merch" ? "Search Merchandise..." : "Search Products..."}
                     value={searchTerm}
                     onChange={(e) => setSearchTerm(e.target.value)}
                   />
-                  <select
-                    value={categoryFilter}
-                    onChange={(e) => setCategoryFilter(e.target.value)}
-                  >
-                    <option value="">Category: All</option>
-                    {uniqueCategories.map((cat) => (
-                      <option key={cat} value={cat}>
-                        {cat}
-                      </option>
-                    ))}
-                  </select>
-                  <select
-                    value={sizeFilter}
-                    onChange={(e) => setSizeFilter(e.target.value)}
-                  >
-                    <option value="">Size: All</option>
-                    {uniqueSizes.map((size) => (
-                      <option key={size} value={size}>
-                        {size}
-                      </option>
-                    ))}
-                  </select>
+
+                  {activeTab !== "merch" && (
+                    <>
+                      <select
+                        value={categoryFilter}
+                        onChange={(e) => setCategoryFilter(e.target.value)}
+                      >
+                        <option value="">Category: All</option>
+                        {uniqueCategories.map((cat) => (
+                          <option key={cat} value={cat}>
+                            {cat}
+                          </option>
+                        ))}
+                      </select>
+
+                      <select
+                        value={sizeFilter}
+                        onChange={(e) => setSizeFilter(e.target.value)}
+                      >
+                        <option value="">Size: All</option>
+                        {uniqueSizes.map((size) => (
+                          <option key={size} value={size}>
+                            {size}
+                          </option>
+                        ))}
+                      </select>
+                    </>
+                  )}
                 </div>
 
                 <div className="products-table-container">
@@ -267,8 +347,24 @@ function Products() {
                     fixedHeaderScrollHeight="60vh"
                     onRowClicked={(row) => setSelectedProduct(row)}
                     noDataComponent={
-                      <div style={{ padding: "24px" }}>
-                        No products found in this category.
+                      <div style={{ padding: "24px", textAlign: "center" }}>
+                        {error ? (
+                          <span style={{ color: "red" }}>Error: {error}</span>
+                        ) : activeTab === "merch" ? (
+                          "No merchandise found."
+                        ) : (
+                          "No products found in this category."
+                        )}
+                      </div>
+                    }
+                    progressPending={isLoading}
+                    progressComponent={
+                      <div style={{ padding: "24px", textAlign: "center" }}>
+                        {error ? (
+                          <span style={{ color: "red" }}>Error: {error}</span>
+                        ) : (
+                          "Loading..."
+                        )}
                       </div>
                     }
                     customStyles={{
@@ -284,12 +380,7 @@ function Products() {
                           letterSpacing: "1px",
                         },
                       },
-                      rows: {
-                        style: {
-                          minHeight: "55px",
-                          padding: "5px",
-                        },
-                      },
+                      rows: { style: { minHeight: "55px", padding: "5px" } },
                     }}
                   />
                 </div>

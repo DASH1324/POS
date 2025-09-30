@@ -8,7 +8,7 @@ import sys
 import os
 import httpx
 import logging
-from datetime import datetime, date
+from datetime import datetime, date, timedelta
 import asyncio
 
 # Configure logging
@@ -77,6 +77,31 @@ class TransactionRecord(BaseModel):
     discountsAndPromotions: str
     cashierName: str
     GCashReferenceNumber: Optional[str] = None
+
+# Pydantic Models for Transaction Reports
+class TransactionDataPoint(BaseModel):
+    date: str
+    transactions: int
+
+class StatusDataPoint(BaseModel):
+    name: str
+    transactions: int
+
+class StoreVsOnlineDataPoint(BaseModel):
+    date: str
+    store: int
+    online: int
+
+class DiscountPromoDataPoint(BaseModel):
+    name: str
+    value: int
+
+class TransactionReportResponse(BaseModel):
+    totalTransactions: List[TransactionDataPoint]
+    statusData: List[StatusDataPoint]
+    storeVsOnline: List[StoreVsOnlineDataPoint]
+    discountPromoData: List[DiscountPromoDataPoint]
+    summary: Dict[str, Any]
 
 # Main endpoint to get all transactions for transaction history
 @router_transaction_history.get(
@@ -236,7 +261,7 @@ async def get_all_transaction_history(
         if conn:
             await conn.close()
 
-# Additional endpoint to get transaction statistics
+# Endpoint for transaction statistics
 @router_transaction_history.get(
     "/statistics",
     summary="Get Transaction Statistics"
@@ -310,6 +335,216 @@ async def get_transaction_statistics(
     except Exception as e:
         logger.error(f"Error fetching transaction statistics: {e}", exc_info=True)
         raise HTTPException(status_code=500, detail="Failed to fetch transaction statistics.")
+    finally:
+        if conn:
+            await conn.close()
+
+# NEW ENDPOINT: Transaction Report Data for Charts
+@router_transaction_history.get(
+    "/report",
+    response_model=TransactionReportResponse,
+    summary="Get Transaction Report Data for Charts"
+)
+async def get_transaction_report(
+    period: str = Query("daily", description="Period type: daily, weekly, monthly, yearly, custom"),
+    start_date: Optional[str] = Query(None, description="Start date for custom period (YYYY-MM-DD)"),
+    end_date: Optional[str] = Query(None, description="End date for custom period (YYYY-MM-DD)"),
+    current_user: dict = Depends(get_current_active_user)
+):
+    """
+    Get aggregated transaction data for charts based on the selected period.
+    Supports: daily, weekly, monthly, yearly, and custom date ranges.
+    """
+    allowed_roles = ["admin", "manager"]
+    if current_user.get("userRole") not in allowed_roles:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="You do not have permission to view transaction reports."
+        )
+
+    # Calculate date range based on period
+    today = datetime.now().date()
+    
+    if period == "daily":
+        calc_start_date = today
+        calc_end_date = today
+    elif period == "weekly":
+    # Last 7 days including today
+        calc_end_date = today
+        calc_start_date = today - timedelta(days=6)
+    elif period == "monthly":
+        calc_start_date = today.replace(day=1)
+        # Last day of current month
+        if today.month == 12:
+            calc_end_date = today.replace(day=31)
+        else:
+            calc_end_date = (today.replace(month=today.month + 1, day=1) - timedelta(days=1))
+    elif period == "yearly":
+        calc_start_date = today.replace(month=1, day=1)
+        calc_end_date = today.replace(month=12, day=31)
+    elif period == "custom":
+        if not start_date or not end_date:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Start date and end date are required for custom period."
+            )
+        calc_start_date = datetime.strptime(start_date, "%Y-%m-%d").date()
+        calc_end_date = datetime.strptime(end_date, "%Y-%m-%d").date()
+    else:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Invalid period type."
+        )
+
+    conn = None
+    try:
+        conn = await get_db_connection()
+        async with conn.cursor() as cursor:
+            
+            # 1. Total Transactions Over Time
+            total_transactions_sql = """
+                SELECT 
+                    CAST(s.CreatedAt AS DATE) as transaction_date,
+                    COUNT(*) as transaction_count
+                FROM Sales s
+                WHERE CAST(s.CreatedAt AS DATE) BETWEEN ? AND ?
+                GROUP BY CAST(s.CreatedAt AS DATE)
+                ORDER BY transaction_date ASC
+            """
+            await cursor.execute(total_transactions_sql, str(calc_start_date), str(calc_end_date))
+            total_trans_rows = await cursor.fetchall()
+            
+            total_transactions_data = [
+                TransactionDataPoint(
+                    date=row.transaction_date.strftime("%b %d") if period in ["daily", "weekly", "custom"] 
+                         else row.transaction_date.strftime("%b") if period == "monthly"
+                         else row.transaction_date.strftime("%b"),
+                    transactions=row.transaction_count
+                )
+                for row in total_trans_rows
+            ]
+            
+            # 2. Transaction Status Distribution
+            status_sql = """
+                SELECT 
+                    s.Status,
+                    COUNT(*) as status_count
+                FROM Sales s
+                WHERE CAST(s.CreatedAt AS DATE) BETWEEN ? AND ?
+                GROUP BY s.Status
+            """
+            await cursor.execute(status_sql, str(calc_start_date), str(calc_end_date))
+            status_rows = await cursor.fetchall()
+            
+            status_map = {
+                'processing': 'Processing',
+                'completed': 'Completed',
+                'cancelled': 'Cancelled',
+                'refunded': 'Refund'
+            }
+            
+            status_data = [
+                StatusDataPoint(
+                    name=status_map.get(row.Status.lower(), row.Status.capitalize()),
+                    transactions=row.status_count
+                )
+                for row in status_rows
+            ]
+            
+            # 3. Store vs Online Transactions
+            store_online_sql = """
+                SELECT 
+                    CAST(s.CreatedAt AS DATE) as transaction_date,
+                    SUM(CASE WHEN s.OrderType IN ('Dine in', 'Take Out') THEN 1 ELSE 0 END) as store_count,
+                    SUM(CASE WHEN s.OrderType IN ('Delivery', 'Pick Up') THEN 1 ELSE 0 END) as online_count
+                FROM Sales s
+                WHERE CAST(s.CreatedAt AS DATE) BETWEEN ? AND ?
+                GROUP BY CAST(s.CreatedAt AS DATE)
+                ORDER BY transaction_date ASC
+            """
+            await cursor.execute(store_online_sql, str(calc_start_date), str(calc_end_date))
+            store_online_rows = await cursor.fetchall()
+            
+            store_vs_online_data = [
+                StoreVsOnlineDataPoint(
+                    date=row.transaction_date.strftime("%b %d") if period in ["daily", "weekly", "custom"] 
+                         else row.transaction_date.strftime("%b") if period == "monthly"
+                         else row.transaction_date.strftime("%b"),
+                    store=row.store_count,
+                    online=row.online_count
+                )
+                for row in store_online_rows
+            ]
+            
+            # 4. Discount and Promotion Distribution
+            discount_promo_sql = """
+                SELECT 
+                    SUM(CASE WHEN s.TotalDiscountAmount > 0 THEN 1 ELSE 0 END) as with_discount,
+                    SUM(CASE WHEN s.TotalDiscountAmount = 0 THEN 1 ELSE 0 END) as no_discount
+                FROM Sales s
+                WHERE CAST(s.CreatedAt AS DATE) BETWEEN ? AND ?
+            """
+            await cursor.execute(discount_promo_sql, str(calc_start_date), str(calc_end_date))
+            discount_row = await cursor.fetchone()
+            
+            discount_promo_data = [
+                DiscountPromoDataPoint(name="With Discount", value=discount_row.with_discount or 0),
+                DiscountPromoDataPoint(name="No Discount/Promo", value=discount_row.no_discount or 0)
+            ]
+            
+            # 5. Summary Statistics - Use CTE to avoid nested aggregates
+            summary_sql = """
+                WITH SaleRevenue AS (
+                    SELECT 
+                        s.SaleID,
+                        s.Status,
+                        s.TotalDiscountAmount,
+                        (
+                            SELECT SUM(si.Quantity * si.UnitPrice)
+                            FROM SaleItems si
+                            WHERE si.SaleID = s.SaleID
+                        ) +
+                        COALESCE((
+                            SELECT SUM(sia.Quantity * a.Price)
+                            FROM SaleItems si
+                            JOIN SaleItemAddons sia ON si.SaleItemID = sia.SaleItemID
+                            JOIN Addons a ON sia.AddonID = a.AddonID
+                            WHERE si.SaleID = s.SaleID
+                        ), 0) - s.TotalDiscountAmount as revenue
+                    FROM Sales s
+                    WHERE CAST(s.CreatedAt AS DATE) BETWEEN ? AND ?
+                )
+                SELECT 
+                    COUNT(*) as total_transactions,
+                    SUM(CASE WHEN Status = 'completed' THEN 1 ELSE 0 END) as completed_count,
+                    COALESCE(SUM(CASE WHEN Status = 'completed' THEN revenue ELSE 0 END), 0) as total_revenue,
+                    COALESCE(AVG(CASE WHEN Status = 'completed' THEN revenue ELSE NULL END), 0) as avg_transaction_value
+                FROM SaleRevenue
+            """
+            await cursor.execute(summary_sql, str(calc_start_date), str(calc_end_date))
+            summary_row = await cursor.fetchone()
+            
+            summary = {
+                "totalTransactions": summary_row.total_transactions or 0,
+                "completedTransactions": summary_row.completed_count or 0,
+                "totalRevenue": float(summary_row.total_revenue or 0),
+                "averageTransactionValue": float(summary_row.avg_transaction_value or 0),
+                "period": period,
+                "startDate": str(calc_start_date),
+                "endDate": str(calc_end_date)
+            }
+            
+            return TransactionReportResponse(
+                totalTransactions=total_transactions_data,
+                statusData=status_data,
+                storeVsOnline=store_vs_online_data,
+                discountPromoData=discount_promo_data,
+                summary=summary
+            )
+            
+    except Exception as e:
+        logger.error(f"Error fetching transaction report: {e}", exc_info=True)
+        raise HTTPException(status_code=500, detail=f"Failed to fetch transaction report: {str(e)}")
     finally:
         if conn:
             await conn.close()
