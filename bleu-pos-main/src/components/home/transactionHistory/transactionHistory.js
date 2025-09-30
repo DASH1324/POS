@@ -20,6 +20,16 @@ const API_URL = "http://127.0.0.1:9000/auth/transaction_history/all";
 
 // Transform API data
 const transformApiData = (apiTransaction) => {
+  // Determine the type based on orderType
+  let transactionType = apiTransaction.type;
+  
+  // Override type based on orderType
+  if (apiTransaction.orderType === "Dine in" || apiTransaction.orderType === "Take out") {
+    transactionType = "Store";
+  } else if (apiTransaction.orderType === "Pick Up" || apiTransaction.orderType === "Delivery") {
+    transactionType = "Online";
+  }
+  
   return {
     id: apiTransaction.id,
     date: new Date(apiTransaction.date).toISOString(),
@@ -30,7 +40,7 @@ const transformApiData = (apiTransaction) => {
     discount: apiTransaction.discount,
     status: apiTransaction.status,
     paymentMethod: apiTransaction.paymentMethod,
-    type: apiTransaction.type,
+    type: transactionType, // Use the determined type
     discountsAndPromotions: apiTransaction.discountsAndPromotions,
     cashierName: apiTransaction.cashierName,
     GCashReferenceNumber: apiTransaction.GCashReferenceNumber,
