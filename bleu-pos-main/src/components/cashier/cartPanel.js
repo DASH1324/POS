@@ -435,9 +435,10 @@ const CartPanel = ({
           isProcessing={isProcessing}
         />
 
-        <OrderConfirmationModal
+        <OrderConfirmationModal 
           showConfirmation={showConfirmation}
           setShowConfirmation={setShowConfirmation}
+          onClose={() => setShowConfirmation(false)}
         />
     </>
   );

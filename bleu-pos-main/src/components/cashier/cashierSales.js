@@ -1,5 +1,3 @@
-// FILE: cashierSales.js - UPDATED WITH DYNAMIC SECTION TITLES BASED ON PRODUCT FILTER
-
 import React, { useState, useMemo, useEffect } from 'react';
 import './cashierSales.css';
 import Navbar from '../navbar';
@@ -16,7 +14,7 @@ import {
   faCashRegister,
   faDownload,
   faSpinner,
-  faFilter
+  faFilter,
 } from '@fortawesome/free-solid-svg-icons';
 import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
 import jsPDF from 'jspdf';
@@ -202,9 +200,9 @@ function CashierSales({ shiftLabel = "Morning Shift", shiftTime = "6:00AM – 2:
   const todayString = today.toISOString().split('T')[0];
 
   const salesMetrics = [
-    { title: 'Total Sales', key: 'totalSales', format: 'currency', icon: faMoneyBillWave, isLoading: isSalesLoading, error: salesError },
-    { title: 'Cash Sales', key: 'cashSales', format: 'currency', icon: faReceipt, isLoading: isSalesLoading, error: salesError },
-    { title: 'GCash Sales', key: 'gcashSales', format: 'currency', icon: faChartLine, isLoading: isSalesLoading, error: salesError },
+    { title: 'Total Sales', key: 'totalSales', format: 'currency', icon: faCashRegister, isLoading: isSalesLoading, error: salesError },
+    { title: 'Cash Sales', key: 'cashSales', format: 'currency', icon: faMoneyBillWave, isLoading: isSalesLoading, error: salesError },
+    { title: 'GCash Sales', key: 'gcashSales', format: 'currency', icon: faCoins, isLoading: isSalesLoading, error: salesError },
     { title: 'Items Sold', key: 'itemsSold', format: 'number', icon: faShoppingCart, isLoading: isSalesLoading, error: salesError },
   ];
 
@@ -281,21 +279,55 @@ function CashierSales({ shiftLabel = "Morning Shift", shiftTime = "6:00AM – 2:
 
   const renderModal = () => {
     if (!modalType) return null;
-    let modalTitle = ''; let data = []; let columns = [];
+    let modalTitle = '';
+    let data = [];
+    let columns = [];
     const sectionTitles = getSectionTitles();
     
     switch (modalType) {
-        case 'topProducts':
-            modalTitle = sectionTitles.topSelling; data = topProducts; columns = topProductsColumns; break;
-        case 'cancelledOrders':
-            modalTitle = sectionTitles.cancelled; data = cancelledOrders; columns = modalCancelledColumns; break;
-        default: return null;
+      case 'topProducts':
+        modalTitle = sectionTitles.topSelling;
+        data = topProducts;
+        columns = topProductsColumns;
+        break;
+      case 'cancelledOrders':
+        modalTitle = sectionTitles.cancelled;
+        data = cancelledOrders;
+        columns = modalCancelledColumns;
+        break;
+      default:
+        return null;
     }
+
     return (
       <div className="cashier-modal-overlay" onClick={closeModal}>
         <div className="cashier-modal" onClick={(e) => e.stopPropagation()}>
-          <div className="cashier-modal-header"><h2>{modalTitle}</h2><button className="cashier-modal-close" onClick={closeModal}><FontAwesomeIcon icon={faTimes} /></button></div>
-          <div className="cashier-modal-content"><div className="cashier-modal-table-container"><DataTable columns={columns} data={data} striped highlightOnHover responsive pagination fixedHeader fixedHeaderScrollHeight="60vh" noDataComponent={<div style={{ padding: "24px" }}>No data available for this filter.</div>} customStyles={customTableStyles} /></div></div>
+          <div className="cashier-modal-header">
+            <h3>{modalTitle}</h3>
+            <button className="cashier-modal-close" onClick={closeModal}>
+              ×
+            </button>
+          </div>
+          <div className="cashier-modal-content">
+            <div className="cashier-modal-table-container">
+              <DataTable
+                columns={columns}
+                data={data}
+                striped
+                highlightOnHover
+                responsive
+                pagination
+                fixedHeader
+                fixedHeaderScrollHeight="60vh"
+                noDataComponent={
+                  <div style={{ padding: "24px" }}>
+                    No data available for this filter.
+                  </div>
+                }
+                customStyles={customTableStyles}
+              />
+            </div>
+          </div>
         </div>
       </div>
     );
@@ -344,28 +376,48 @@ function CashierSales({ shiftLabel = "Morning Shift", shiftTime = "6:00AM – 2:
   const renderTopProductsContent = () => {
     if (isTopProductsLoading) {
       return (
-        <div className="cashier-loading-container" style={{ minHeight: '200px', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+        <div
+          className="cashier-loading-container"
+          style={{
+            minHeight: "200px",
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "center",
+          }}
+        >
           <FontAwesomeIcon icon={faSpinner} spin size="2x" />
         </div>
       );
     }
     if (topProductsError) {
       return (
-        <div className="cashier-error-container" style={{ padding: '24px' }}>
+        <div className="cashier-error-container" style={{ padding: "24px" }}>
           <FontAwesomeIcon icon={faExclamationTriangle} />
           <p>Could not load top products.</p>
         </div>
       );
     }
     if (topProducts.length === 0) {
-      return <div style={{ padding: "24px", textAlign: 'center' }}>No sales recorded for this filter.</div>;
+      return (
+        <div style={{ padding: "24px", textAlign: "center" }}>
+          No sales recorded for this filter.
+        </div>
+      );
     }
+
     return topProducts.slice(0, 7).map((product, idx) => (
       <div key={idx} className="cashier-top-product-bar">
-        <span className="cashier-product-name">{product.name}</span>
+        <div className="cashier-product-header">
+          <div className={`cashier-rank-badge rank-${idx + 1}`}>{idx + 1}</div>
+          <span className="cashier-product-name">{product.name}</span>
+          <span className="cashier-product-sales">{product.sales} sold</span>
+        </div>
         <div className="cashier-product-bar">
-          <div style={{ width: `${(product.sales / topProducts[0].sales) * 100}%` }} />
-          <span>{product.sales}</span>
+          <div
+            style={{
+              width: `${(product.sales / topProducts[0].sales) * 100}%`,
+            }}
+          />
         </div>
       </div>
     ));
@@ -386,16 +438,14 @@ function CashierSales({ shiftLabel = "Morning Shift", shiftTime = "6:00AM – 2:
           {activeTab === 'summary' && (
             <div className="cashier-sales-header">
               <div className="cashier-filter-item">
-                <FontAwesomeIcon icon={faFilter} />
                 <span>Order Type:</span>
                 <select value={orderTypeFilter} onChange={(e) => setOrderTypeFilter(e.target.value)} className="cashier-filter-select">
                   <option value="All">All</option>
-                  <option value="Store">Store (Dine In/Take Out)</option>
-                  <option value="Online">Online (Pick Up/Delivery)</option>
+                  <option value="Store">In Store</option>
+                  <option value="Online">Online</option>
                 </select>
               </div>
               <div className="cashier-filter-item">
-                <FontAwesomeIcon icon={faFilter} />
                 <span>Product Type:</span>
                 <select value={productTypeFilter} onChange={(e) => setProductTypeFilter(e.target.value)} className="cashier-filter-select">
                   <option value="All">All</option>
@@ -407,7 +457,6 @@ function CashierSales({ shiftLabel = "Morning Shift", shiftTime = "6:00AM – 2:
                 <span>Date:</span>
                 <input type="date" value={selectedDate} onChange={handleDateChange} max={todayString} className="cashier-date-input" />
               </div>
-              <div className="cashier-employee">Employee: {loggedInUser}</div>
               <button className="cashier-export-report-btn" onClick={openExportModal} title="Export Sales Report"><FontAwesomeIcon icon={faDownload} /> Export Report</button>
             </div>
           )}

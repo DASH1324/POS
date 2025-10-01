@@ -1,8 +1,8 @@
-// FILE: OrderPanel.js - FIXED VERSION WITH CORRECT REFUND API URL
-
 import React, { useState } from "react";
-import "./orderPanel.css"; // Make sure you've added the @media print styles here
+import "./orderPanel.css";
 import dayjs from 'dayjs';
+import qr from '../../assets/qr.png';
+import { toast } from 'react-toastify';
 
 function OrderPanel({ order, onClose, isOpen, isStore, onUpdateStatus }) {
   const [showPinModal, setShowPinModal] = useState(false);
@@ -88,7 +88,7 @@ function OrderPanel({ order, onClose, isOpen, isStore, onUpdateStatus }) {
         }
         
         // Optional: Show success message
-        alert("Order refunded successfully!");
+        toast.success("Order refunded successfully!");
       } else {
         // Handle both JSON and non-JSON error responses
         let errorMessage = "Failed to process refund";
@@ -353,30 +353,44 @@ function OrderPanel({ order, onClose, isOpen, isStore, onUpdateStatus }) {
             {renderActionButtons()}
         </div>
 
-        {/* PIN Modal for Cancellation */}
+        {/* PIN Modal for Cancellation */} 
         {showPinModal && (
           <div className="orderpanel-modal-overlay" onClick={() => setShowPinModal(false)}>
             <div className="orderpanel-modal-content" onClick={(e) => e.stopPropagation()}>
-              <h3 className="orderpanel-modal-title">Manager PIN Required</h3>
-              <p className="orderpanel-modal-description">Please ask a manager to enter their PIN to cancel this order.</p>
-              <input
-                type="password"
-                inputMode="numeric"
-                pattern="[0-9]*"
-                maxLength={6}
-                className="orderpanel-modal-input"
-                placeholder="Enter Manager PIN"
-                value={enteredPin}
-                onChange={(e) => {
-                  const value = e.target.value;
-                  if (/^\d*$/.test(value)) {
-                    setEnteredPin(value);
-                    setPinError("");
-                  }
-                }}
-              />
-              {pinError && <p className="orderpanel-modal-error">{pinError}</p>}
-              <div className="orderpanel-modal-buttons">
+              
+              {/* Header */}
+              <div className="orderpanel-modal-header">
+                <h3 className="orderpanel-modal-title">Manager PIN Required</h3>
+                <button className="orderpanel-close-modal" onClick={() => setShowPinModal(false)}>×</button>
+              </div>
+              
+              {/* Body / Content */}
+              <div className="orderpanel-modal-body">
+                <p className="orderpanel-modal-description">
+                  Please ask a manager to enter their PIN to cancel this order.
+                </p>
+                <input
+                  type="password"
+                  inputMode="numeric"
+                  pattern="[0-9]*"
+                  maxLength={6}
+                  className="orderpanel-modal-input"
+                  placeholder="Enter PIN"
+                  value={enteredPin}
+                  onChange={(e) => {
+                    const value = e.target.value;
+                    if (/^\d*$/.test(value)) {
+                      setEnteredPin(value);
+                      setPinError("");
+                    }
+                  }}
+                  autoFocus
+                />
+                {pinError && <p className="orderpanel-modal-error">{pinError}</p>}
+              </div>
+              
+              {/* Footer */}
+              <div className="orderpanel-modal-footer">
                 <button 
                     className="orderpanel-modal-btn orderpanel-modal-cancel" 
                     onClick={() => setShowPinModal(false)}
@@ -387,11 +401,12 @@ function OrderPanel({ order, onClose, isOpen, isStore, onUpdateStatus }) {
                 <button 
                     className="orderpanel-modal-btn orderpanel-modal-confirm" 
                     onClick={confirmCancelOrder}
-                    disabled={isProcessing}
+                    disabled={isProcessing || enteredPin.length < 4}
                 >
-                    {isProcessing ? "Processing..." : "Confirm"}
+                    {isProcessing ? "Verifying..." : "Confirm"}
                 </button>
               </div>
+              
             </div>
           </div>
         )}
@@ -400,26 +415,40 @@ function OrderPanel({ order, onClose, isOpen, isStore, onUpdateStatus }) {
         {showRefundModal && (
           <div className="orderpanel-modal-overlay" onClick={() => setShowRefundModal(false)}>
             <div className="orderpanel-modal-content" onClick={(e) => e.stopPropagation()}>
-              <h3 className="orderpanel-modal-title">Manager PIN Required</h3>
-              <p className="orderpanel-modal-description">Please ask a manager to enter their PIN to refund this order.</p>
-              <input
-                type="password"
-                inputMode="numeric"
-                pattern="[0-9]*"
-                maxLength={6}
-                className="orderpanel-modal-input"
-                placeholder="Enter Manager PIN"
-                value={enteredPin}
-                onChange={(e) => {
-                  const value = e.target.value;
-                  if (/^\d*$/.test(value)) {
-                    setEnteredPin(value);
-                    setPinError("");
-                  }
-                }}
-              />
-              {pinError && <p className="orderpanel-modal-error">{pinError}</p>}
-              <div className="orderpanel-modal-buttons">
+              
+              {/* Header */}
+              <div className="orderpanel-modal-header">
+                <h3 className="orderpanel-modal-title">Manager PIN Required</h3>
+                <button className="orderpanel-close-modal" onClick={() => setShowRefundModal(false)}>×</button>
+              </div>
+              
+              {/* Body */}
+              <div className="orderpanel-modal-body">
+                <p className="orderpanel-modal-description">
+                  Please ask a manager to enter their PIN to refund this order.
+                </p>
+                <input
+                  type="password"
+                  inputMode="numeric"
+                  pattern="[0-9]*"
+                  maxLength={6}
+                  className="orderpanel-modal-input"
+                  placeholder="Enter Manager PIN"
+                  value={enteredPin}
+                  onChange={(e) => {
+                    const value = e.target.value;
+                    if (/^\d*$/.test(value)) {
+                      setEnteredPin(value);
+                      setPinError("");
+                    }
+                  }}
+                  autoFocus
+                />
+                {pinError && <p className="orderpanel-modal-error">{pinError}</p>}
+              </div>
+              
+              {/* Footer */}
+              <div className="orderpanel-modal-footer">
                 <button 
                     className="orderpanel-modal-btn orderpanel-modal-cancel" 
                     onClick={() => setShowRefundModal(false)}
@@ -430,11 +459,12 @@ function OrderPanel({ order, onClose, isOpen, isStore, onUpdateStatus }) {
                 <button 
                     className="orderpanel-modal-btn orderpanel-modal-confirm" 
                     onClick={confirmRefundOrder}
-                    disabled={isProcessing}
+                    disabled={isProcessing || enteredPin.length < 4}
                 >
-                    {isProcessing ? "Processing..." : "Confirm Refund"}
+                    {isProcessing ? "Verifying..." : "Confirm"}
                 </button>
               </div>
+
             </div>
           </div>
         )}
@@ -443,47 +473,111 @@ function OrderPanel({ order, onClose, isOpen, isStore, onUpdateStatus }) {
         {showReceiptModal && (
           <div className="orderpanel-modal-overlay" onClick={() => setShowReceiptModal(false)}>
             <div className="orderpanel-modal-content orderpanel-receipt-modal" onClick={(e) => e.stopPropagation()}>
-              <div className="orderpanel-receipt-print" id="orderpanel-print-section">
-                <div className="orderpanel-receipt-header">
-                  <div className="orderpanel-store-name">Bleu Bean Cafe</div>
-                  <div className="orderpanel-receipt-date">Date: {dayjs(order.date).format("MMMM D, YYYY - h:mm A")}</div>
-                  <div className="orderpanel-receipt-id">Order #: {order.id}</div>
-                </div>
-                <div className="orderpanel-receipt-body">
-                  {order.orderItems.map((item, i) => (
-                    <div key={i} className="orderpanel-receipt-item">
-                      <div className="orderpanel-receipt-line">
-                        <span className="orderpanel-receipt-item-name">{item.name} x{item.quantity}</span>
-                        <span className="orderpanel-receipt-item-price">₱{(item.price * item.quantity).toFixed(2)}</span>
+
+              {/* Header */}
+              <div className="orderpanel-modal-header">
+                <h3 className="orderpanel-modal-title">Order Receipt</h3>
+                <button className="orderpanel-close-modal" onClick={() => setShowReceiptModal(false)}>×</button>
+              </div>
+
+              {/* Body */}
+              <div className="orderpanel-modal-body">
+                <div className="orderpanel-receipt-print" id="orderpanel-print-section">
+                  <div className="orderpanel-receipt-header">
+                    <div className="orderpanel-store-name">BLEU BEAN CAFE</div>
+                    <div className="orderpanel-store-address">Don Fabian St., Commonwealth</div>
+                    <div className="orderpanel-store-address">Quezon City, Philippines</div>
+                    <div className="orderpanel-store-contact">Phone: +63 961 687 2463</div>
+                    <div className="orderpanel-receipt-divider">================================</div>
+                    <div className="orderpanel-receipt-info">
+                      <div className="orderpanel-receipt-info-left">
+                        <div>Order #: {order.id}</div>
+                        <div>Cashier: {order.cashierName || 'Staff'}</div>
                       </div>
-                      {item.addons && item.addons.length > 0 && item.addons.map((addon, addonIdx) => (
-                        <div key={addonIdx} className="orderpanel-receipt-line orderpanel-receipt-addon">
-                          <span>  + {addon.quantity}x {addon.addonName || addon.name}</span>
-                          <span>₱{(addon.price * addon.quantity).toFixed(2)}</span>
-                        </div>
-                      ))}
+                      <div className="orderpanel-receipt-info-right">
+                        <div>Date: {dayjs(order.date).format("MM/DD/YYYY")}</div>
+                        <div>Time: {dayjs(order.date).format("hh:mm A")}</div>
+                      </div>
                     </div>
-                  ))}
-                </div>
-                <div className="orderpanel-receipt-summary">
-                  <div className="orderpanel-receipt-line"><span>Subtotal:</span><span>₱{subtotal.toFixed(2)}</span></div>
-                  {displayAddOns > 0 && (
-                    <div className="orderpanel-receipt-line"><span>Add-ons:</span><span>+ ₱{displayAddOns.toFixed(2)}</span></div>
-                  )}
-                  {displayDiscount > 0 && (
-                    <div className="orderpanel-receipt-line"><span>Discount:</span><span>- ₱{displayDiscount.toFixed(2)}</span></div>
-                  )}
-                  <div className="orderpanel-receipt-line orderpanel-receipt-total"><strong>Total:</strong><strong>₱{order.total.toFixed(2)}</strong></div>
-                </div>
-                <div className="orderpanel-receipt-footer">
-                  <div className="orderpanel-thankyou">*** THANK YOU ***</div>
-                  <div className="orderpanel-served-by">Cashier: {order.cashierName || 'Staff'}</div>
+                    <div className="orderpanel-receipt-divider">================================</div>
+                  </div>
+
+                  <div className="orderpanel-receipt-body">
+                    {order.orderItems.map((item, i) => (
+                      <div key={i} className="orderpanel-receipt-item">
+                        <div className="orderpanel-receipt-line">
+                          <span className="orderpanel-receipt-item-name">
+                            {item.name}
+                          </span>
+                        </div>
+                        <div className="orderpanel-receipt-line orderpanel-receipt-qty-price">
+                          <span>{item.quantity} x ₱{item.price.toFixed(2)}</span>
+                          <span>₱{(item.price * item.quantity).toFixed(2)}</span>
+                        </div>
+                        {item.addons && item.addons.length > 0 && item.addons.map((addon, addonIdx) => (
+                          <div key={addonIdx}>
+                            <div className="orderpanel-receipt-line orderpanel-receipt-addon">
+                              <span>  + {addon.addonName || addon.name}</span>
+                            </div>
+                            <div className="orderpanel-receipt-line orderpanel-receipt-addon orderpanel-receipt-qty-price">
+                              <span>  {addon.quantity} x ₱{addon.price.toFixed(2)}</span>
+                              <span>₱{(addon.price * addon.quantity).toFixed(2)}</span>
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    ))}
+                  </div>
+
+                  <div className="orderpanel-receipt-divider">================================</div>
+
+                  <div className="orderpanel-receipt-summary">
+                    <div className="orderpanel-receipt-line">
+                      <span>SUBTOTAL:</span>
+                      <span>₱{subtotal.toFixed(2)}</span>
+                    </div>
+                    {displayAddOns > 0 && (
+                      <div className="orderpanel-receipt-line">
+                        <span>ADD-ONS:</span>
+                        <span>₱{displayAddOns.toFixed(2)}</span>
+                      </div>
+                    )}
+                    {displayDiscount > 0 && (
+                      <div className="orderpanel-receipt-line">
+                        <span>DISCOUNT:</span>
+                        <span>-₱{displayDiscount.toFixed(2)}</span>
+                      </div>
+                    )}
+                    <div className="orderpanel-receipt-line orderpanel-receipt-total">
+                      <strong>TOTAL:</strong>
+                      <strong>₱{order.total.toFixed(2)}</strong>
+                    </div>
+                    <div className="orderpanel-receipt-divider">================================</div>
+                  </div>
+
+                  <div className="orderpanel-receipt-footer">
+                    <div className="orderpanel-thankyou">THANK YOU FOR YOUR PURCHASE!</div>
+                    <div className="orderpanel-thankyou">PLEASE COME AGAIN</div>
+                    <div className="orderpanel-receipt-divider">================================</div>
+                    <div className="orderpanel-qr-section">
+                      <img src={qr} alt="QR Code" className="orderpanel-qr-code" />
+                      <div className="orderpanel-qr-text">Scan to learn more about us!</div>
+                      <div className="orderpanel-qr-subtext">Follow us for updates & promos</div>
+                    </div>
+                  </div>
                 </div>
               </div>
-              <div className="orderpanel-modal-buttons">
-                <button className="orderpanel-modal-btn orderpanel-modal-cancel" onClick={() => setShowReceiptModal(false)}>Cancel</button>
-                <button className="orderpanel-modal-btn orderpanel-modal-confirm" onClick={confirmPrintReceipt}>Print</button>
+
+              {/* Footer */}
+              <div className="orderpanel-modal-footer">
+                <button className="orderpanel-modal-btn orderpanel-modal-cancel" onClick={() => setShowReceiptModal(false)}>
+                  Cancel
+                </button>
+                <button className="orderpanel-modal-btn orderpanel-modal-confirm" onClick={confirmPrintReceipt}>
+                  Print
+                </button>
               </div>
+
             </div>
           </div>
         )}

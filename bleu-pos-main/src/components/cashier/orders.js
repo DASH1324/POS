@@ -1,10 +1,9 @@
-// FILE: orders.js - FINAL VERSION
-
 import React, { useState, useEffect, useCallback } from "react";
 import "./orders.css";
 import Navbar from "../navbar";
 import DataTable from "react-data-table-component";
 import OrderPanel from "./orderPanel";
+import { toast } from 'react-toastify';
 
 const SALES_API_BASE_URL = 'http://127.0.0.1:9000';
 const ONLINE_API_BASE_URL = 'http://127.0.0.1:7004';
@@ -169,7 +168,7 @@ function Orders() {
   }, [fetchOrders]);
 
   const storeColumns = [
-    { name: "ORDER ID", selector: (row) => row.id, sortable: true, width: "25%" }, 
+    { name: "ORDER NO.", selector: (row) => row.id, sortable: true, width: "25%" }, 
     { name: "DATE & TIME", selector: (row) => row.dateDisplay, sortable: true, width: "30%" },
     { name: "ITEMS", selector: (row) => `${row.items} Items`, sortable: true, width: "15%" }, 
     { name: "TOTAL", selector: (row) => `₱${row.total.toFixed(2)}`, sortable: true, width: "15%" },
@@ -207,7 +206,7 @@ function Orders() {
   const handleUpdateStatus = async (orderToUpdate, newStatus, details) => {
     const token = localStorage.getItem('authToken');
     if (!token) {
-      alert("Authentication error. Please log in again.");
+      toast.error("Authentication error. Please log in again.");
       return;
     }
 
@@ -233,10 +232,10 @@ function Orders() {
                 const cancelResponse = await fetch(cancelUrl, { method: 'PATCH', headers, body: cancelBody });
                 if (!cancelResponse.ok) throw new Error((await cancelResponse.json()).detail || "Failed to cancel the store order.");
                 
-                alert("Store order successfully cancelled!");
+                toast.success("Store order successfully cancelled!");
             } catch (err) {
                 console.error("Store Cancellation Error:", err);
-                alert(`Error: ${err.message}`);
+                toast.error(`Error: ${err.message}`);
             }
         } else if (orderToUpdate.source === 'online') {
             // This path is for cancelling PENDING online orders
@@ -246,10 +245,10 @@ function Orders() {
                 const response = await fetch(url, { method: 'PATCH', headers, body });
                 if (!response.ok) throw new Error((await response.json()).detail || 'Failed to cancel online order.');
                 
-                alert("Online order successfully cancelled!");
+                toast.success("Online order successfully cancelled!");
             } catch (err) {
                 console.error("Online Cancellation Error:", err);
-                alert(`Error: ${err.message}`);
+                toast.error(`Error: ${err.message}`);
             }
         }
     
@@ -325,11 +324,11 @@ function Orders() {
           const onlineResponse = await fetch(onlineStatusUrl, { method: 'PATCH', headers, body: onlineStatusBody });
           if (!onlineResponse.ok) throw new Error((await onlineResponse.json()).detail || 'POS/Inventory updated, but failed to update online order status.');
           
-          alert("Order accepted and is now being prepared!");
+          toast.success("Order accepted and is now being prepared!");
   
         } catch (err) {
           console.error("Error accepting order:", err);
-          alert(`Error: ${err.message}`);
+          toast.error(`Error: ${err.message}`);
         }
       // GENERAL WORKFLOW: For all other status changes
       } else {
@@ -359,7 +358,7 @@ function Orders() {
                     updatePromises.push(fetch(posUrl, { method: 'PATCH', headers, body: posBody }));
                 }
             } else {
-                alert("Cannot update order: Unknown source.");
+                toast.error("Cannot update order: Unknown source.");
                 return;
             }
 
@@ -378,11 +377,11 @@ function Orders() {
               throw new Error('One or more status updates failed. Check the console for details.');
             }
             
-            alert("Order status updated successfully!");
+            toast.success("Order status updated successfully!");
 
         } catch (err) {
             console.error("Error updating status:", err);
-            alert(`Error: ${err.message}`);
+            toast.error(`Error: ${err.message}`);
         }
       }
     }
@@ -444,8 +443,8 @@ function Orders() {
 
   return (
     <div className="orders-main-container">
-      <Navbar isOrderPanelOpen={true} username={username} />
-      <div className="orders-content-container orders-panel-open">
+      <Navbar isOrderPanelOpen={!!selectedOrder} username={username} />
+      <div className={`orders-content-container ${selectedOrder ? 'orders-panel-open' : ''}`}>
         <div className="orders-tab-container">
           <button 
             className={`orders-tab ${activeTab === "store" ? "active" : ""}`} 
@@ -461,51 +460,51 @@ function Orders() {
           </button>
         </div>
         
-        <div className="orders-filter-bar">
-          <input 
-            type="text" 
-            placeholder="Search..." 
-            value={searchText} 
-            onChange={(e) => setSearchText(e.target.value)} 
-            className="orders-filter-input" 
-          />
-          <input 
-            type="date" 
-            value={filterDate || ''} 
-            onChange={(e) => setFilterDate(e.target.value)} 
-            className="orders-filter-input" 
-            max={getTodayLocalDate()} 
-          />
-          <select 
-            value={filterStatus} 
-            onChange={(e) => setFilterStatus(e.target.value)} 
-            className="orders-filter-input"
-          >
-            <option value="">All Status</option>
-            {activeTab === 'store' 
-              ? (
-                <> 
-                  <option value="COMPLETED">Completed</option> 
-                  <option value="PROCESSING">Processing</option> 
-                  <option value="CANCELLED">Cancelled</option> 
-                  <option value="REFUNDED">Refunded</option> 
-                </> 
-              ) 
-              : (
-                <> 
-                  <option value="PENDING">Pending</option> 
-                  <option value="PREPARING">Preparing</option> 
-                  <option value="WAITING FOR PICK UP">Waiting For Pick Up</option>
-                  <option value="DELIVERING">Delivering</option>
-                  <option value="COMPLETED">Completed</option> 
-                  <option value="CANCELLED">Cancelled</option> 
-                </>
-              )}
-          </select>
-          <button className="orders-clear-btn" onClick={clearFilters}>
-            Clear Filters
-          </button>
-        </div>
+        <div className="cOrders-filter-bar">
+        <input 
+          type="text" 
+          placeholder="Search..." 
+          value={searchText} 
+          onChange={(e) => setSearchText(e.target.value)} 
+          className="cOrders-filter-input" 
+        />
+        <input 
+          type="date" 
+          value={filterDate || ''} 
+          onChange={(e) => setFilterDate(e.target.value)} 
+          className="cOrders-filter-input" 
+          max={getTodayLocalDate()} 
+        />
+        <select 
+          value={filterStatus} 
+          onChange={(e) => setFilterStatus(e.target.value)} 
+          className="cOrders-filter-input"
+        >
+          <option value="">All Status</option>
+          {activeTab === 'store' 
+            ? (
+              <> 
+                <option value="COMPLETED">Completed</option> 
+                <option value="PROCESSING">Processing</option> 
+                <option value="CANCELLED">Cancelled</option> 
+                <option value="REFUNDED">Refunded</option> 
+              </> 
+            ) 
+            : (
+              <> 
+                <option value="PENDING">Pending</option> 
+                <option value="PREPARING">Preparing</option> 
+                <option value="WAITING FOR PICK UP">Waiting For Pick Up</option>
+                <option value="DELIVERING">Delivering</option>
+                <option value="COMPLETED">Completed</option> 
+                <option value="CANCELLED">Cancelled</option> 
+              </>
+            )}
+        </select>
+        <button className="cOrders-clear-btn" onClick={clearFilters}>
+          Clear Filters
+        </button>
+      </div>
         
         <div className="orders-table-container">
           {loading && ordersData.length === 0 ? (

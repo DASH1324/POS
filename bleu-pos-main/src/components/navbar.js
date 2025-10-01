@@ -2,7 +2,7 @@ import React, { useState, useEffect, useCallback } from "react";
 import { useNavigate, useLocation, Link } from 'react-router-dom';
 import './navbar.css';
 import logo from '../assets/logo.png';
-import { HiOutlineShoppingBag, HiOutlineClipboardList, HiOutlineChartBar, HiOutlineTrash } from 'react-icons/hi';
+import { HiOutlineShoppingBag, HiOutlineClipboardList, HiOutlineChartBar, HiOutlineTrash, HiOutlineExclamation } from 'react-icons/hi';
 import { FaBell, FaChevronDown } from 'react-icons/fa';
 import { jwtDecode } from 'jwt-decode';
 import { confirmAlert } from 'react-confirm-alert';
@@ -28,21 +28,25 @@ const Navbar = ({ isCartOpen, isOrderPanelOpen }) => {
   }, [navigate]);
 
   const confirmLogout = () => {
-    confirmAlert({
-      title: 'Confirm Logout',
-      message: 'Are you sure you want to log out?',
-      buttons: [
-        {
-          label: 'Yes',
-          onClick: () => handleLogout()
-        },
-        {
-          label: 'No',
-          onClick: () => {}
-        }
-      ]
-    });
-  };
+        confirmAlert({
+          customUI: ({ onClose }) => {
+            return (
+              <>
+                <div className="react-confirm-alert-close" onClick={onClose}>&times;</div>
+                <div className="react-confirm-alert-icon alert-danger">
+                  <HiOutlineExclamation />
+                </div>
+                <h1>Confirm Logout</h1>
+                <p>Are you sure you want to log out?</p>
+                <div className="react-confirm-alert-button-group">
+                  <button onClick={() => { handleLogout(); onClose(); }}>Yes</button>
+                  <button onClick={onClose}>No</button>
+                </div>
+              </>
+            );
+          }
+        });
+      };
 
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);

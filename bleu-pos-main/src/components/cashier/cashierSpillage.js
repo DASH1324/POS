@@ -1,10 +1,18 @@
 import React, { useState, useEffect } from 'react';
 import DataTable from "react-data-table-component";
 import './cashierSpillage.css';
-import Navbar from '../navbar';
+import Navbar from '../navbar'; 
+import { FaPlus, FaTimes } from 'react-icons/fa';
 
 function CashierSpillage() {
   const [spillageEntries, setSpillageEntries] = useState([]);
+  const [showModal, setShowModal] = useState(false);
+  const [searchTerm, setSearchTerm] = useState("");
+
+  // New filter states
+  const [dateFilter, setDateFilter] = useState("");
+  const [typeFilter, setTypeFilter] = useState("");
+
   const [formData, setFormData] = useState({
     type: '',
     productName: '',
@@ -12,9 +20,6 @@ function CashierSpillage() {
     quantitySpilled: '',
     unit: 'pieces',
     reason: '',
-    location: '',
-    estimatedValue: '',
-    notes: ''
   });
 
   // Searchable dropdown states
@@ -88,10 +93,8 @@ function CashierSpillage() {
   // Get available products based on type and category
   const getAvailableProducts = () => {
     if (formData.type === 'Ingredients') {
-      // For ingredients, return all ingredient products
       return productsByCategory['Ingredients'] || [];
     } else if (formData.type === 'Product' && formData.category) {
-      // For products, return products from selected category
       return productsByCategory[formData.category] || [];
     }
     return [];
@@ -107,7 +110,7 @@ function CashierSpillage() {
     if (formData.type === 'Ingredients') {
       setFormData(prev => ({
         ...prev,
-        category: '', // Clear category for ingredients
+        category: '',
         productName: '',
       }));
       setProductSearchTerm('');
@@ -163,28 +166,51 @@ function CashierSpillage() {
   };
 
   const handleProductInputBlur = () => {
-    // Delay closing to allow for click on dropdown items
     setTimeout(() => {
       setIsProductDropdownOpen(false);
     }, 200);
   };
 
+  const handleModalOpen = () => {
+    setShowModal(true);
+    setFormData({
+      type: '',
+      productName: '',
+      category: '',
+      quantitySpilled: '',
+      unit: 'pieces',
+      reason: '',
+    });
+    setProductSearchTerm('');
+  };
+
+  const handleModalClose = () => {
+    setShowModal(false);
+    setFormData({
+      type: '',
+      productName: '',
+      category: '',
+      quantitySpilled: '',
+      unit: 'pieces',
+      reason: '',
+    });
+    setProductSearchTerm('');
+  };
+
   const handleSubmit = (e) => {
     e.preventDefault();
-    
-    // Validation based on type
+
     let validationErrors = [];
-    
+
     if (!formData.type) validationErrors.push('Type');
     if (!formData.productName) validationErrors.push('Product Name');
     if (!formData.quantitySpilled) validationErrors.push('Quantity');
     if (!formData.reason) validationErrors.push('Reason');
-    
-    // Additional validation for Product type
+
     if (formData.type === 'Product' && !formData.category) {
       validationErrors.push('Category');
     }
-    
+
     if (validationErrors.length > 0) {
       alert(`Please fill in all required fields: ${validationErrors.join(', ')}`);
       return;
@@ -193,13 +219,13 @@ function CashierSpillage() {
     const newEntry = {
       ...formData,
       id: Date.now(),
-      timestamp: new Date().toLocaleString(),
+      timestamp: new Date().toLocaleDateString() + " " + new Date().toLocaleTimeString(),
       reportedBy: 'Current User'
     };
 
     setSpillageEntries(prev => [newEntry, ...prev]);
-    
-    // Reset form
+    setShowModal(false);
+
     setFormData({
       type: '',
       productName: '',
@@ -207,9 +233,6 @@ function CashierSpillage() {
       quantitySpilled: '',
       unit: 'pieces',
       reason: '',
-      location: '',
-      estimatedValue: '',
-      notes: ''
     });
     setProductSearchTerm('');
 
@@ -222,278 +245,294 @@ function CashierSpillage() {
     }
   };
 
+  // Apply filters
+  const filteredSpillageEntries = spillageEntries.filter(entry => {
+    const matchesSearch =
+      entry.productName.toLowerCase().includes(searchTerm.toLowerCase()) ||
+      entry.type.toLowerCase().includes(searchTerm.toLowerCase()) ||
+      (entry.category && entry.category.toLowerCase().includes(searchTerm.toLowerCase())) ||
+      entry.reason.toLowerCase().includes(searchTerm.toLowerCase());
+
+    const matchesType = typeFilter ? entry.type === typeFilter : true;
+    const matchesDate = dateFilter
+      ? entry.timestamp.startsWith(new Date(dateFilter).toLocaleDateString())
+      : true;
+
+    return matchesSearch && matchesType && matchesDate;
+  });
+
   // DataTable columns configuration
   const columns = [
+    {
+      name: "TIMESTAMP",
+      selector: (row) => row.timestamp,
+      sortable: true,
+      minWidth: "180px",
+    },
     {
       name: "TYPE",
       selector: (row) => row.type,
       sortable: true,
-      width: "12%",
-      center: true,
-    },
-    {
-      name: "PRODUCT NAME",
-      selector: (row) => row.productName,
-      cell: (row) => (
-        <div className="spillage-product-cell">
-          <div className="spillage-product-name">{row.productName}</div>
-        </div>
-      ),
-      sortable: true,
-      width: "18%",
-    },
-    {
-      name: "QUANTITY",
-      selector: (row) => `${row.quantitySpilled} ${row.unit}`,
-      center: true,
-      sortable: true,
-      width: "12%",
+      minWidth: "120px",
     },
     {
       name: "CATEGORY",
       selector: (row) => row.category || '-',
-      center: true,
       sortable: true,
-      width: "12%",
+      minWidth: "130px",
+    },
+    {
+      name: "PRODUCT NAME",
+      selector: (row) => row.productName,
+      sortable: true,
+      minWidth: "200px",
+    },
+    {
+      name: "QUANTITY",
+      selector: (row) => `${row.quantitySpilled} ${row.unit}`,
+      sortable: true,
+      minWidth: "120px",
     },
     {
       name: "REASON",
       selector: (row) => row.reason,
       wrap: true,
-      width: "20%",
-    },
-    {
-      name: "LOCATION",
-      selector: (row) => row.location || '-',
-      center: true,
-      width: "12%",
-    },
-    {
-      name: "TIMESTAMP",
-      selector: (row) => row.timestamp,
-      cell: (row) => (
-        <span className="spillage-timestamp">{row.timestamp}</span>
-      ),
-      sortable: true,
-      width: "14%",
-    },
-    {
-      name: "ACTIONS",
-      cell: (row) => (
-        <button 
-          onClick={() => handleDelete(row.id)}
-          className="spillage-delete-btn"
-        >
-          ×
-        </button>
-      ),
-      ignoreRowClick: true,
-      allowOverflow: true,
-      button: true,
-      width: "10%",
-      center: true,
+      minWidth: "200px",
     },
   ];
 
   return (
     <div className='cashier-spillage'>
       <Navbar />
-      
+
       <div className="spillage-container">
-        <div className="spillage-content spillage-reversed">
-          {/* Spillage History - now on the left with bigger width */}
-          <div className="spillage-history-section">
-            {spillageEntries.length === 0 ? (
-              <div className="spillage-no-entries">
-                <div className="spillage-no-entries-text">No spillage entries recorded yet.</div>
-              </div>
-            ) : (
-              <div className="spillage-datatable-container">
-                <DataTable 
-                  columns={columns} 
-                  data={spillageEntries} 
-                  striped 
-                  highlightOnHover 
-                  responsive 
-                  pagination
-                  fixedHeader
-                  fixedHeaderScrollHeight="60vh"
-                  noDataComponent={
-                    <div style={{padding: "24px"}}>
-                      No spillage entries found.
-                    </div>
-                  }
-                  customStyles={{
-                    headCells: {
-                      style: {
-                        fontWeight: "600",
-                        fontSize: "14px",
-                        padding: "12px",
-                        textTransform: "uppercase",
-                        textAlign: "center",
-                        letterSpacing: "1px",
-                      },
-                    },
-                    rows: {
-                      style: {
-                        minHeight: "55px",
-                        padding: "5px",
-                      },
-                    },
-                  }}
-                />
-              </div>
-            )}
+        <div className="spillage-content">
+          {/* Filter and Add Button */}
+          <div className="filter-bar">
+            <input
+              type="text"
+              className="search-input"
+              placeholder="Search spillage entries..."
+              value={searchTerm}
+              onChange={(e) => setSearchTerm(e.target.value)}
+            />
+
+            <input
+              type="date"
+              className="date-input"
+              value={dateFilter}
+              onChange={(e) => setDateFilter(e.target.value)}
+            />
+
+            <select
+              className="type-filter"
+              value={typeFilter}
+              onChange={(e) => setTypeFilter(e.target.value)}
+            >
+              <option value="">All Types</option>
+              {types.map((type) => (
+                <option key={type} value={type}>
+                  {type}
+                </option>
+              ))}
+            </select>
+
+            <button className="add-btn" onClick={handleModalOpen}>
+              <FaPlus /> Add Spillage Log
+            </button>
           </div>
 
-          {/* Spillage Form - now on the right with smaller width */}
-          <div className="spillage-form-section">
-            <div className="spillage-section-title">Log New Spillage</div>
-            <div className="spillage-form">
-              <div className="spillage-form-row">
-                <div className="spillage-form-group">
-                  <label htmlFor="type" className="spillage-form-label">Type *</label>
-                  <select
-                    id="type"
-                    name="type"
-                    value={formData.type}
-                    onChange={handleInputChange}
-                    className="spillage-form-select"
-                    required
-                  >
-                    <option value="">Select type</option>
-                    {types.map(type => (
-                      <option key={type} value={type}>{type}</option>
-                    ))}
-                  </select>
-                </div>
+          {/* Spillage History Table */}
+          <div className="spillage-table-container">
+            <DataTable
+              columns={columns}
+              data={filteredSpillageEntries}
+              pagination
+              striped
+              highlightOnHover
+              persistTableHead
+              noDataComponent="No spillage entries found"
+              customStyles={{
+                headCells: {
+                  style: {
+                    backgroundColor: "#4B929D",
+                    color: "#fff",
+                    fontWeight: "600",
+                    fontSize: "14px",
+                    padding: "12px",
+                    textTransform: "uppercase"
+                  },
+                },
+                rows: {
+                  style: {
+                    minHeight: "55px",
+                    padding: "5px"
+                  },
+                },
+              }}
+            />
+          </div>
 
-                {/* Category field - only visible when type is 'Product' */}
-                {formData.type === 'Product' && (
-                  <div className="spillage-form-group">
-                    <label htmlFor="category" className="spillage-form-label">Category *</label>
-                    <select
-                      id="category"
-                      name="category"
-                      value={formData.category}
-                      onChange={handleInputChange}
-                      className="spillage-form-select"
-                      required
-                    >
-                      <option value="">Select category</option>
-                      {categories.map(cat => (
-                        <option key={cat} value={cat}>{cat}</option>
-                      ))}
-                    </select>
-                  </div>
-                )}
+          {showModal && (
+          <div className="cSpillage-modal-overlay" onClick={handleModalClose}>
+            <div className="cSpillage-modal-content" onClick={(e) => e.stopPropagation()}>
+              {/* Header */}
+              <div className="cSpillage-modal-header">
+                <h2 className="cSpillage-modal-title">Log New Spillage</h2>
+                <button className="cSpillage-modal-close" onClick={handleModalClose}>
+                  <FaTimes />
+                </button>
               </div>
 
-              {/* Product Name field - only show when type is selected and (for Product type, category is also selected) */}
-              {(formData.type === 'Ingredients' || (formData.type === 'Product' && formData.category)) && (
-                <div className="spillage-form-row">
-                  <div className="spillage-form-group spillage-full-width">
-                    <label htmlFor="productName" className="spillage-form-label">Product Name *</label>
-                    <div className="spillage-searchable-dropdown">
-                      <input
-                        type="text"
-                        id="productName"
-                        name="productName"
-                        value={productSearchTerm}
-                        onChange={handleProductSearch}
-                        onFocus={handleProductInputFocus}
-                        onBlur={handleProductInputBlur}
-                        placeholder="Search for a product..."
-                        className="spillage-form-input spillage-searchable-input"
+              {/* Body */}
+              <div className="cSpillage-modal-body">
+                <form onSubmit={handleSubmit} className="cSpillage-form">
+                  <div className="cSpillage-form-row">
+                    <div className="cSpillage-form-group">
+                      <label htmlFor="type" className="cSpillage-form-label">Type *</label>
+                      <select
+                        id="type"
+                        name="type"
+                        value={formData.type}
+                        onChange={handleInputChange}
+                        className="cSpillage-form-input"
                         required
-                        autoComplete="off"
-                      />
-                      {isProductDropdownOpen && (
-                        <div className="spillage-dropdown-menu">
-                          {filteredProducts.length > 0 ? (
-                            filteredProducts.slice(0, 10).map((product, index) => (
-                              <div
-                                key={index}
-                                className="spillage-dropdown-item"
-                                onMouseDown={() => handleProductSelect(product)}
-                              >
-                                {product}
+                      >
+                        <option value="">Select type</option>
+                        {types.map(type => (
+                          <option key={type} value={type}>{type}</option>
+                        ))}
+                      </select>
+                    </div>
+
+                    {formData.type === 'Product' && (
+                      <div className="cSpillage-form-group">
+                        <label htmlFor="category" className="cSpillage-form-label">Category *</label>
+                        <select
+                          id="category"
+                          name="category"
+                          value={formData.category}
+                          onChange={handleInputChange}
+                          className="cSpillage-form-input"
+                          required
+                        >
+                          <option value="">Select category</option>
+                          {categories.map(cat => (
+                            <option key={cat} value={cat}>{cat}</option>
+                          ))}
+                        </select>
+                      </div>
+                    )}
+                  </div>
+
+                  {(formData.type === 'Ingredients' || (formData.type === 'Product' && formData.category)) && (
+                    <div className="cSpillage-form-group">
+                      <label htmlFor="productName" className="cSpillage-form-label">Product Name *</label>
+                      <div className="cSpillage-dropdown">
+                        <input
+                          type="text"
+                          id="productName"
+                          name="productName"
+                          value={productSearchTerm}
+                          onChange={handleProductSearch}
+                          onFocus={handleProductInputFocus}
+                          onBlur={handleProductInputBlur}
+                          placeholder="Search for an item..."
+                          className="cSpillage-form-input"
+                          required
+                          autoComplete="off"
+                        />
+                        {isProductDropdownOpen && (
+                          <div className="cSpillage-dropdown-menu">
+                            {filteredProducts.length > 0 ? (
+                              filteredProducts.slice(0, 10).map((product, index) => (
+                                <div
+                                  key={index}
+                                  className="cSpillage-dropdown-item"
+                                  onMouseDown={() => handleProductSelect(product)}
+                                >
+                                  {product}
+                                </div>
+                              ))
+                            ) : (
+                              <div className="cSpillage-dropdown-item no-results">
+                                {getAvailableProducts().length === 0
+                                  ? `No products available for ${formData.type === 'Ingredients' ? 'ingredients' : formData.category}`
+                                  : 'No products found'}
                               </div>
-                            ))
-                          ) : (
-                            <div className="spillage-dropdown-item spillage-no-results">
-                              {getAvailableProducts().length === 0 
-                                ? `No products available for ${formData.type === 'Ingredients' ? 'ingredients' : formData.category}`
-                                : 'No products found'
-                              }
-                            </div>
-                          )}
-                          {filteredProducts.length > 10 && (
-                            <div className="spillage-dropdown-item spillage-more-results">
-                              ... and {filteredProducts.length - 10} more results
-                            </div>
-                          )}
-                        </div>
-                      )}
+                            )}
+                            {filteredProducts.length > 10 && (
+                              <div className="cSpillage-dropdown-item more-results">
+                                ... and {filteredProducts.length - 10} more results
+                              </div>
+                            )}
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                  )}
+
+                  <div className="cSpillage-form-row">
+                    <div className="cSpillage-form-group">
+                      <label htmlFor="quantitySpilled" className="cSpillage-form-label">Quantity Spilled *</label>
+                      <input
+                        type="number"
+                        id="quantitySpilled"
+                        name="quantitySpilled"
+                        value={formData.quantitySpilled}
+                        onChange={handleInputChange}
+                        placeholder="0"
+                        min="0"
+                        step="0.01"
+                        className="cSpillage-form-input"
+                        required
+                      />
+                    </div>
+
+                    <div className="cSpillage-form-group">
+                      <label htmlFor="unit" className="cSpillage-form-label">Unit</label>
+                      <select
+                        id="unit"
+                        name="unit"
+                        value={formData.unit}
+                        onChange={handleInputChange}
+                        className="cSpillage-form-input"
+                      >
+                        {units.map(unit => (
+                          <option key={unit} value={unit}>{unit}</option>
+                        ))}
+                      </select>
                     </div>
                   </div>
-                </div>
-              )}
 
-              <div className="spillage-form-row">
-                <div className="spillage-form-group">
-                  <label htmlFor="quantitySpilled" className="spillage-form-label">Quantity Spilled *</label>
-                  <input
-                    type="number"
-                    id="quantitySpilled"
-                    name="quantitySpilled"
-                    value={formData.quantitySpilled}
-                    onChange={handleInputChange}
-                    placeholder="0"
-                    min="0"
-                    step="0.01"
-                    className="spillage-form-input"
-                    required
-                  />
-                </div>
+                  <div className="cSpillage-form-group">
+                    <label htmlFor="reason" className="cSpillage-form-label">Reason for Spillage *</label>
+                    <input
+                      type="text"
+                      id="reason"
+                      name="reason"
+                      value={formData.reason}
+                      onChange={handleInputChange}
+                      placeholder="Describe the reason for spillage"
+                      className="cSpillage-form-input"
+                      required
+                    />
+                  </div>
 
-                <div className="spillage-form-group">
-                  <label htmlFor="unit" className="spillage-form-label">Unit</label>
-                  <select
-                    id="unit"
-                    name="unit"
-                    value={formData.unit}
-                    onChange={handleInputChange}
-                    className="spillage-form-select"
-                  >
-                    {units.map(unit => (
-                      <option key={unit} value={unit}>{unit}</option>
-                    ))}
-                  </select>
-                </div>
+                  {/* Footer actions */}
+                  <div className="cSpillage-modal-actions">
+                    <button type="button" className="cSpillage-cancel-btn" onClick={handleModalClose}>
+                      Cancel
+                    </button>
+                    <button type="submit" className="cSpillage-save-btn">
+                      Log Spillage
+                    </button>
+                  </div>
+                </form>
               </div>
-
-              <div className="spillage-form-row">
-                <div className="spillage-form-group spillage-full-width">
-                  <label htmlFor="reason" className="spillage-form-label">Reason for Spillage *</label>
-                  <input
-                    type="text"
-                    id="reason"
-                    name="reason"
-                    value={formData.reason}
-                    onChange={handleInputChange}
-                    placeholder="Describe the reason for spillage"
-                    className="spillage-form-input"
-                    required
-                  />
-                </div>
-              </div>
-
-              <button type="submit" className="spillage-submit-btn" onClick={handleSubmit}>
-                Log Spillage
-              </button>
             </div>
           </div>
+        )}
         </div>
       </div>
     </div>

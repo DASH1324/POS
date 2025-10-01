@@ -406,20 +406,25 @@ body, html {
 
 .menu-product-unavailable-overlay {
   position: absolute;
-  top: 0;
-  left: 0;
-  width: 100%;
-  height: 100%;
-  background-color: rgba(50, 50, 50, 0.7);
+  inset: 0;
   display: flex;
   justify-content: center;
   align-items: center;
-  color: white;
-  font-size: 1.5rem;
-  font-weight: bold;
-  text-align: center;
-  z-index: 5;
+  background: rgba(0, 0, 0, 0.4); /* subtle dark overlay */
   border-radius: 12px;
+  font-size: 1rem;
+  font-weight: 500;
+  color: #fff; /* white text for contrast */
+  z-index: 5;
+}
+
+.menu-product-unavailable-overlay span {
+  font-size: 1.5rem;
+  font-weight: 700;
+  color: rgba(255, 255, 255, 0.8);
+  transform: rotate(-20deg);
+  letter-spacing: 3px;
+  text-transform: uppercase;
 }
 
 .menu-add-button:disabled {

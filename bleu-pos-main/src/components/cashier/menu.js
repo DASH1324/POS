@@ -286,12 +286,12 @@ function Menu() {
         <div key={`${product.category}-${product.name}`} className="menu-product-item">
           {product.status === 'Unavailable' && (
             <div className="menu-product-unavailable-overlay">
-              <span>Not Available</span>
+              <span>Unavailable</span>
             </div>
           )}
           <div className="menu-product-main">
             <div className="menu-product-img-container">
-              <img src={product.image} alt={product.name} />
+              <img src={product.image} alt={product.name} /> 
             </div>
             <div className="menu-product-details">
               <div className="menu-product-title">{product.name}</div>

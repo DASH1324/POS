@@ -1,17 +1,16 @@
 import React, { useState, useEffect } from 'react'; // Added useEffect
 import { useNavigate } from 'react-router-dom';
 import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
+import { HiOutlineCheck } from 'react-icons/hi';
 import { faPercent } from '@fortawesome/free-solid-svg-icons';
+import './cartModals.css';
 
-// --- NEW: Manager PIN Modal Component ---
 export const ManagerPinModal = ({
   show,
   onClose,
   onSubmit,
   isProcessing,
   error,
-  title = "Manager PIN Required",
-  description = "Please enter a manager's PIN to authorize this action."
 }) => {
   const [pin, setPin] = useState('');
 
@@ -39,30 +38,30 @@ export const ManagerPinModal = ({
   if (!show) return null;
 
   return (
-    <div className="modal-overlay" onClick={onClose}>
-      <div className="pin-modal" onClick={(e) => e.stopPropagation()}>
-        <div className="modal-header">
-          <h3>{title}</h3>
-          <button className="close-modal" onClick={onClose}>×</button>
+    <div className="discPin-modal-overlay" onClick={onClose}>
+      <div className="discPin-modal" onClick={(e) => e.stopPropagation()}>
+        <div className="discPin-modal-header">
+          <h3>Manager PIN Required</h3>
+          <button className="discPin-close-modal" onClick={onClose}>×</button>
         </div>
-        <div className="pin-modal-content">
-          <p>{description}</p>
+        <div className="discPin-modal-content">
+          <p>Please ask a manager to enter their PIN to apply discount.</p>
           <input
             type="password"
             inputMode="numeric"
             value={pin}
             onChange={handlePinChange}
             placeholder="Enter PIN"
-            className="pin-input"
+            className="discPin-input"
             autoFocus
           />
-          {error && <p className="pin-error-message">{error}</p>}
+          {error && <p className="discPin-error-message">{error}</p>}
         </div>
-        <div className="pin-modal-footer">
-          <button onClick={onClose} disabled={isProcessing} className="btn-cancel">
+        <div className="discPin-modal-footer">
+          <button onClick={onClose} disabled={isProcessing} className="discPin-btn-cancel">
             Cancel
           </button>
-          <button onClick={handleSubmit} disabled={isProcessing || pin.length < 4} className="btn-confirm">
+          <button onClick={handleSubmit} disabled={isProcessing || pin.length < 4} className="discPin-btn-confirm">
             {isProcessing ? 'Verifying...' : 'Confirm'}
           </button>
         </div>
@@ -71,8 +70,7 @@ export const ManagerPinModal = ({
   );
 };
 
-
-// --- MODIFICATION: AddonsModal is now fully dynamic ---
+// AddonsModal
 export const AddonsModal = ({
   showAddonsModal,
   closeAddonsModal,
@@ -84,32 +82,32 @@ export const AddonsModal = ({
 }) => {
   if (!showAddonsModal) return null;
 
-  // Helper to find the quantity of a currently selected addon
   const getQuantity = (addonId) => {
     const found = addons.find(a => a.addonId === addonId);
     return found ? found.quantity : 0;
   };
 
   return (
-    <div className="modal-overlay" onClick={closeAddonsModal}>
-      <div className="addons-modal" onClick={(e) => e.stopPropagation()}>
-        <div className="modal-header">
+    <div className="cAddons-modal-overlay" onClick={closeAddonsModal}>
+      <div className="cAddons-modal" onClick={(e) => e.stopPropagation()}>
+        <div className="cAddons-modal-header">
           <h3>Customize Order</h3>
-          <button className="close-modal" onClick={closeAddonsModal}>×</button>
+          <button className="cAddons-close-modal" onClick={closeAddonsModal}>×</button>
         </div>
-        <div className="addons-content">
+
+        <div className="cAddons-content">
           {isLoading ? (
-            <p style={{ textAlign: 'center' }}>Loading Add-ons...</p>
+            <p className="cAddons-loading">Loading Add-ons...</p>
           ) : availableAddons.length > 0 ? (
             availableAddons.map((availAddon) => {
               const currentQuantity = getQuantity(availAddon.AddOnID);
               return (
-                <div key={availAddon.AddOnID} className="addon-item">
-                  <div className="addon-info">
-                    <span className="addon-name">{availAddon.AddOnName}</span>
-                    <span className="addon-price">+₱{availAddon.Price.toFixed(2)} each</span>
+                <div key={availAddon.AddOnID} className="cAddons-item">
+                  <div className="cAddons-info">
+                    <span className="cAddons-name">{availAddon.AddOnName}</span>
+                    <span className="cAddons-price">+₱{availAddon.Price.toFixed(2)} each</span>
                   </div>
-                  <div className="addon-controls">
+                  <div className="cAddons-controls">
                     <button onClick={() => updateAddons(availAddon.AddOnID, availAddon.AddOnName, availAddon.Price, Math.max(0, currentQuantity - 1))}>−</button>
                     <span>{currentQuantity}</span>
                     <button onClick={() => updateAddons(availAddon.AddOnID, availAddon.AddOnName, availAddon.Price, currentQuantity + 1)}>+</button>
@@ -118,19 +116,30 @@ export const AddonsModal = ({
               );
             })
           ) : (
-            <p style={{ textAlign: 'center', color: '#888' }}>No add-ons available for this item.</p>
+            <p className="cAddons-empty">No add-ons available for this item.</p>
           )}
         </div>
-        <div className="modal-footer-addons">
-          <button className="addon-save-btn" onClick={saveAddons}>Save Add-ons</button>
+
+        <div className="cAddons-footer">
+          <button
+            className="discPin-btn-cancel"
+            onClick={closeAddonsModal}
+          >
+            Cancel
+          </button>
+          <button
+            className="cAddons-save-btn"
+            onClick={saveAddons}
+          >
+            Add
+          </button>
         </div>
       </div>
     </div>
   );
 };
 
-
-// --- MODIFICATION: Discounts Modal now requires a manager PIN ---
+// Discounts Modal
 export const DiscountsModal = ({
   showDiscountsModal,
   closeDiscountsModal,
@@ -147,19 +156,15 @@ export const DiscountsModal = ({
   const [pinError, setPinError] = useState('');
   const [isVerifyingPin, setIsVerifyingPin] = useState(false);
 
-  // This function is triggered when the "Apply Discounts" button is clicked
   const handleDiscountRequest = () => {
-    // Only show the PIN modal if there are discounts to apply
     if (stagedDiscounts.length > 0) {
-      setPinError(''); // Clear previous errors
+      setPinError(''); 
       setShowPinModal(true);
     } else {
-      // If no discounts are selected, just close the modal
       applyDiscounts();
     }
   };
 
-  // This function handles the PIN verification with the backend
   const handlePinVerification = async (pin) => {
     setIsVerifyingPin(true);
     setPinError('');
@@ -179,9 +184,8 @@ export const DiscountsModal = ({
         throw new Error(errorData.detail || 'Invalid Manager PIN.');
       }
 
-      // If PIN is correct, proceed to apply discounts
       setShowPinModal(false);
-      applyDiscounts(); // This is the original function passed via props
+      applyDiscounts();
 
     } catch (err) {
       setPinError(err.message);
@@ -190,7 +194,6 @@ export const DiscountsModal = ({
     }
   };
   
-  // Hide internal PIN modal if the main discount modal is closed
   useEffect(() => {
     if (!showDiscountsModal) {
       setShowPinModal(false);
@@ -201,15 +204,15 @@ export const DiscountsModal = ({
 
   return (
     <>
-      <div className="modal-overlay" onClick={closeDiscountsModal}>
-        <div className="discounts-modal" onClick={(e) => e.stopPropagation()}>
-          <div className="modal-header">
-            <h3>Apply Discounts</h3>
-            <button className="close-modal" onClick={closeDiscountsModal}>×</button>
+      <div className="cDiscount-modal-overlay" onClick={closeDiscountsModal}>
+        <div className="cDiscount-modal" onClick={(e) => e.stopPropagation()}>
+          <div className="cDiscount-modal-header">
+            <h3>Discounts</h3>
+            <button className="cDiscount-close-modal" onClick={closeDiscountsModal}>×</button>
           </div>
-          <div className="discounts-content">
+          <div className="cDiscount-content">
             {isLoading && <p>Loading discounts...</p>}
-            {error && <p className="error-message">{error}</p>}
+            {error && <p className="cDiscount-error-message">{error}</p>}
             {!isLoading && !error && availableDiscounts.map(discount => {
               const isStaged = stagedDiscounts.includes(discount.id);
               const subtotal = getSubtotal();
@@ -218,10 +221,10 @@ export const DiscountsModal = ({
               return (
                 <div 
                   key={discount.id} 
-                  className={`discount-item ${isStaged ? 'selected' : ''} ${!isEligible ? 'disabled' : ''}`} 
+                  className={`cDiscount-item ${isStaged ? 'cDiscount-selected' : ''} ${!isEligible ? 'cDiscount-disabled' : ''}`} 
                   onClick={() => isEligible && toggleStagedDiscount(discount.id)}
                 >
-                  <div className="discount-checkbox">
+                  <div className="cDiscount-checkbox">
                     <input 
                       type="checkbox" 
                       checked={isStaged} 
@@ -229,28 +232,28 @@ export const DiscountsModal = ({
                       disabled={!isEligible} 
                     />
                   </div>
-                  <div className="discount-info">
-                    <div className="discount-name">{discount.name}</div>
-                    <div className="discount-description">
+                  <div className="cDiscount-info">
+                    <div className="cDiscount-name">{discount.name}</div>
+                    <div className="cDiscount-description">
                       {discount.description}
                       {!isEligible && discount.minAmount && (
-                        <span className="min-requirement"> (Min. ₱{discount.minAmount})</span>
+                        <span className="cDiscount-min-requirement"> (Min. ₱{discount.minAmount})</span>
                       )}
                     </div>
                   </div>
-                  <div className="discount-icon">
+                  <div className="cDiscount-icon">
                     <FontAwesomeIcon icon={faPercent} />
                   </div>
                 </div>
               );
             })}
           </div>
-          <div className="modal-footer-discount">
-            <div className="discount-summary">
+          <div className="cDiscount-modal-footer">
+            <div className="cDiscount-summary">
               <span>Total Discount: ₱{getStagedDiscount().toFixed(0)}</span>
             </div>
             {/* MODIFIED: This button now triggers the PIN modal flow */}
-            <button className="apply-btn" onClick={handleDiscountRequest}>Apply Discounts</button>
+            <button className="cDiscount-apply-btn" onClick={handleDiscountRequest}>Apply Discount</button>
           </div>
         </div>
       </div>
@@ -269,7 +272,7 @@ export const DiscountsModal = ({
   );
 };
 
-// --- MODIFICATION: TransactionSummaryModal now renders addons dynamically ---
+// TransactionSummaryModal
 export const TransactionSummaryModal = ({
   showTransactionSummary,
   setShowTransactionSummary,
@@ -368,7 +371,6 @@ export const TransactionSummaryModal = ({
                 <span>-₱{getDiscount().toFixed(0)}</span>
               </div>
             )}
-            <hr />
             <div className="trnsSummary-breakdown-row trnsSummary-total">
               <span>Total Amount:</span>
               <span>₱{getTotal().toFixed(0)}</span>
@@ -395,14 +397,23 @@ export const TransactionSummaryModal = ({
 };
 
 
-// GCash Reference Modal Component (No changes needed)
+// GCash Reference Modal
+
 export const GCashReferenceModal = ({
   showGCashReference,
   setShowGCashReference,
   onSubmit,
-  isProcessing
+  isProcessing,
+  error
 }) => {
-  const [referenceNumber, setReferenceNumber] = useState('');
+  const [referenceNumber, setReferenceNumber] = useState("");
+
+  // Reset input when modal closes
+  useEffect(() => {
+    if (!showGCashReference) {
+      setReferenceNumber("");
+    }
+  }, [showGCashReference]);
 
   if (!showGCashReference) return null;
 
@@ -410,75 +421,90 @@ export const GCashReferenceModal = ({
     e.preventDefault();
     if (referenceNumber.trim()) {
       onSubmit(referenceNumber.trim());
-      setReferenceNumber('');
+      setReferenceNumber("");
     }
   };
 
   return (
-    <div className="gcash-modal-overlay" onClick={() => setShowGCashReference(false)}>
-      <div className="gcash-reference-modal" onClick={(e) => e.stopPropagation()}>
-        <div className="gcash-modal-header">
+    <div
+      className="discPin-modal-overlay"
+      onClick={() => setShowGCashReference(false)}
+    >
+      <div
+        className="discPin-modal"
+        onClick={(e) => e.stopPropagation()}
+      >
+        {/* Header */}
+        <div className="discPin-modal-header">
           <h3>GCash Payment</h3>
-          <button className="gcash-close-modal" onClick={() => setShowGCashReference(false)}>×</button>
+          <button
+            className="discPin-close-modal"
+            onClick={() => setShowGCashReference(false)}
+          >
+            ×
+          </button>
         </div>
-        <div className="gcash-modal-content">
-          <p>Please enter your GCash reference number:</p>
-          <form onSubmit={handleSubmit}>
-            <input
-              type="text"
-              placeholder="Enter GCash reference number"
-              value={referenceNumber}
-              onChange={(e) => setReferenceNumber(e.target.value)}
-              className="gcash-reference-input"
-              required
-              disabled={isProcessing}
-            />
-            <div className="gcash-modal-footer">
-              <button 
-                type="submit" 
-                className="gcash-submit-btn"
-                disabled={!referenceNumber.trim() || isProcessing}
-              >
-                {isProcessing ? 'Processing...' : 'Submit Reference'}
-              </button>
-            </div>
-          </form>
+
+        {/* Content */}
+        <div className="discPin-modal-content">
+          <p>Please enter GCash reference number:</p>
+          <input
+            type="text"
+            placeholder="Enter reference number"
+            value={referenceNumber}
+            onChange={(e) => setReferenceNumber(e.target.value)}
+            className="discPin-input"
+            disabled={isProcessing}
+            autoFocus
+          />
+          {error && <p className="discPin-error-message">{error}</p>}
+        </div>
+
+        {/* Footer */}
+        <div className="discPin-modal-footer">
+          <button
+            onClick={() => setShowGCashReference(false)}
+            disabled={isProcessing}
+            className="discPin-btn-cancel"
+          >
+            Cancel
+          </button>
+          <button
+            onClick={handleSubmit}
+            disabled={!referenceNumber.trim() || isProcessing}
+            className="discPin-btn-confirm"
+          >
+            {isProcessing ? "Processing..." : "Submit Reference"}
+          </button>
         </div>
       </div>
     </div>
   );
 };
 
-// Order Confirmation Modal Component (No changes needed)
 export const OrderConfirmationModal = ({
   showConfirmation,
-  setShowConfirmation
+  setShowConfirmation,
+  onClose, // <-- add this
 }) => {
   const navigate = useNavigate();
 
   if (!showConfirmation) return null;
 
   return (
-    <div className="order-confirmation-overlay">
-      <div className="order-confirmation-modal">
-        <div className="order-confirmation-icon">✔</div>
-        <div className="order-confirmation-title">Order Confirmed!</div>
-        <div className="order-confirmation-subtext">
-          Order has been placed successfully.
+    <div className="Oconfirm-overlay">
+      <div className="Oconfirm-modal">
+        <div className="Oconfirm-close" onClick={onClose}>
+          &times;
         </div>
-        <div className="order-confirmation-buttons-row">
-          <button
-            className="order-confirmation-btn secondary"
-            onClick={() => setShowConfirmation(false)}
-          >
-            Stay Here
-          </button>
-          <button
-            className="order-confirmation-btn"
-            onClick={() => navigate('/cashier/orders')}
-          >
-            Go to Orders
-          </button>
+        <div className="Oconfirm-icon Oconfirm-success">
+          <HiOutlineCheck />
+        </div>
+        <h1>Order Confirmed!</h1>
+        <p>Order has been placed successfully.</p>
+        <div className="Oconfirm-button-group">
+          <button onClick={onClose}>Stay Here</button>
+          <button onClick={() => navigate('/cashier/orders')}>Go to Orders</button>
         </div>
       </div>
     </div>
