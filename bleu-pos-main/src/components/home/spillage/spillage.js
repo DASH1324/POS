@@ -32,6 +32,9 @@ function Spillage() {
   const [customStart, setCustomStart] = useState("");
   const [customEnd, setCustomEnd] = useState("");
   const [selectedSpillage, setSelectedSpillage] = useState(null);
+  const [spillageData, setSpillageData] = useState([]);
+  const [isLoading, setIsLoading] = useState(true);
+  const [cashiersMap, setCashiersMap] = useState({});
 
   const [userRole, setUserRole] = useState("");
 
@@ -40,7 +43,63 @@ function Spillage() {
     if (role) {
       setUserRole(role);
     }
-  }, []); // Empty dependency array ensures this runs only once on mount
+  }, []);
+
+  // Fetch cashiers for mapping usernames to full names
+  useEffect(() => {
+    fetchCashiers();
+  }, []);
+
+  // Fetch spillage data from API
+  useEffect(() => {
+    fetchSpillageData();
+  }, []);
+
+  const fetchCashiers = async () => {
+    try {
+      const token = localStorage.getItem("authToken");
+      const response = await fetch("http://localhost:4000/users/cashiers", {
+        headers: {
+          Authorization: `Bearer ${token}`,
+        },
+      });
+
+      if (response.ok) {
+        const cashiers = await response.json();
+        // Create a map of username -> full name
+        const map = {};
+        cashiers.forEach(c => {
+          map[c.Username] = c.FullName;
+        });
+        setCashiersMap(map);
+      }
+    } catch (error) {
+      console.error("Error fetching cashiers:", error);
+    }
+  };
+
+  const fetchSpillageData = async () => {
+    setIsLoading(true);
+    try {
+      const token = localStorage.getItem("authToken");
+      const response = await fetch("http://localhost:9003/wastelogs/", {
+        headers: {
+          Authorization: `Bearer ${token}`,
+        },
+      });
+
+      if (!response.ok) {
+        throw new Error("Failed to fetch spillage data");
+      }
+
+      const data = await response.json();
+      setSpillageData(data);
+    } catch (error) {
+      console.error("Error fetching spillage data:", error);
+    } finally {
+      setIsLoading(false);
+    }
+  };
 
   const getDateRange = () => {
     const now = new Date();
@@ -48,10 +107,9 @@ function Spillage() {
       case "today":
         return [startOfToday(), endOfToday()];
       case "thisWeek":
-        return [
-          startOfWeek(now, { weekStartsOn: 1 }),
-          endOfWeek(now, { weekStartsOn: 1 }),
-        ];
+        const sevenDaysAgo = new Date(now);
+        sevenDaysAgo.setDate(now.getDate() - 7);
+        return [sevenDaysAgo, now];
       case "thisMonth":
         return [startOfMonth(now), endOfMonth(now)];
       case "thisYear":
@@ -65,61 +123,22 @@ function Spillage() {
     }
   };
 
-  const [spillageData, setSpillageData] = useState([
-    {
-      id: 1,
-      productName: "Cappuccino",
-      type: "Drink",
-      amount: 2,
-      size: "12oz",
-      loggedBy: "Cashier A",
-      spilledBy: "Cashier A",
-      reason: "Customer returned due to wrong order",
-      date: "2025-09-20",
-    },
-    {
-      id: 2,
-      productName: "Cheeseburger",
-      type: "Food",
-      amount: 1,
-      size: "Solo",
-      loggedBy: "Cashier C",
-      spilledBy: "Cashier B",
-      reason: "Dropped accidentally",
-      date: "2025-09-21",
-    },
-    {
-      id: 3,
-      productName: "Latte",
-      type: "Drink",
-      amount: 1,
-      size: "22oz",
-      loggedBy: "Cashier C",
-      spilledBy: "Customer",
-      reason: "Spilled while serving",
-      date: "2025-09-22",
-    },
-  ]);
-
   const handleAddSpillage = (newSpillage) => {
-    setSpillageData((prev) => [
-      ...prev,
-      { id: prev.length + 1, ...newSpillage },
-    ]);
+    setSpillageData((prev) => [newSpillage, ...prev]);
   };
 
   const handleUpdateSpillage = (updatedSpillage) => {
     setSpillageData((prev) =>
       prev.map((item) =>
-        item.id === updatedSpillage.id ? updatedSpillage : item
+        item.spillage_id === updatedSpillage.spillage_id ? updatedSpillage : item
       )
     );
     setSelectedSpillage(updatedSpillage);
   };
 
   const handleDeleteSpillage = (id) => {
-    setSpillageData((prev) => prev.filter((item) => item.id !== id));
-    if (selectedSpillage && selectedSpillage.id === id) {
+    setSpillageData((prev) => prev.filter((item) => item.spillage_id !== id));
+    if (selectedSpillage && selectedSpillage.spillage_id === id) {
       setSelectedSpillage(null);
       setIsDetailsModalOpen(false);
     }
@@ -136,57 +155,76 @@ function Spillage() {
   const filteredData = useMemo(() => {
     const [start, end] = getDateRange();
     return spillageData.filter((item) => {
-      const matchesSearch = item.productName
+      const productName = item.product_name || "";
+      const matchesSearch = productName
         .toLowerCase()
         .includes(searchTerm.toLowerCase());
+      
+      const category = item.category || "";
       const matchesCategory =
         categoryFilter === "" ||
-        item.type.toLowerCase() === categoryFilter.toLowerCase();
-      const itemDate = new Date(item.date);
+        category.toLowerCase() === categoryFilter.toLowerCase();
+      
+      const itemDate = new Date(item.spillage_date);
       const matchesDate =
         !start || !end || (itemDate >= start && itemDate <= end);
+      
       return matchesSearch && matchesCategory && matchesDate;
     });
   }, [spillageData, searchTerm, categoryFilter, dateRange, customStart, customEnd]);
 
   const uniqueCategories = useMemo(() => {
-    return [...new Set(spillageData.map((item) => item.type))];
+    return [...new Set(spillageData.map((item) => item.category).filter(Boolean))];
   }, [spillageData]);
 
   const columns = useMemo(() => {
     const baseColumns = [
       {
         name: "PRODUCT NAME",
-        selector: (row) => row.productName,
+        selector: (row) => row.product_name,
         sortable: true,
         width: "15%",
       },
-      { name: "TYPE", selector: (row) => row.type, sortable: true, width: "7%" },
-      { name: "AMOUNT", selector: (row) => row.amount, center: true, width: "9%" },
-      { name: "SIZE", selector: (row) => row.size, center: true, width: "10%" },
-      {
-        name: "SPILLED BY",
-        selector: (row) => row.spilledBy,
-        sortable: true,
-        width: "12%",
+      { 
+        name: "CATEGORY", 
+        selector: (row) => row.category, 
+        sortable: true, 
+        width: "10%" 
+      },
+      { 
+        name: "QUANTITY", 
+        selector: (row) => row.quantity, 
+        sortable: true, 
+        width: "8%",
+        center: true,
       },
       {
-        name: "LOGGED BY",
-        selector: (row) => row.loggedBy,
+        name: "CASHIER",
+        selector: (row) => cashiersMap[row.cashier_name] || row.cashier_name,
         sortable: true,
         width: "12%",
       },
       {
         name: "DATE",
-        selector: (row) => row.date,
+        selector: (row) => new Date(row.spillage_date).toLocaleDateString(),
         sortable: true,
         width: "10%",
         center: true,
       },
-      { name: "REASON", selector: (row) => row.reason, center: true, width: "10%" },
+      { 
+        name: "REASON", 
+        selector: (row) => row.reason, 
+        width: "25%",
+        wrap: true,
+      },
+      {
+        name: "LOGGED AT",
+        selector: (row) => new Date(row.logged_at).toLocaleString(),
+        sortable: true,
+        width: "12%",
+      },
     ];
 
-    // Add the "Actions" column only if the user is NOT an admin
     if (userRole !== 'admin') {
       baseColumns.push({
         name: "ACTIONS",
@@ -219,12 +257,12 @@ function Spillage() {
           </div>
         ),
         center: true,
-        width: "15%",
+        width: "10%",
       });
     }
 
     return baseColumns;
-  }, [userRole]); // Recalculate columns only when userRole changes
+  }, [userRole, cashiersMap]);
 
   return (
     <div className="spillage-page">
@@ -267,7 +305,6 @@ function Spillage() {
             Clear Filters
           </button>
           
-          
           {userRole !== 'admin' && (
             <button
               className="spillage-add-btn"
@@ -276,13 +313,11 @@ function Spillage() {
               <FaPlus /> Log Spillage
             </button>
           )}
-
         </div>
         <div className="spillage-table-container">
           <DataTable
             columns={columns}
             data={filteredData}
-            // ... (rest of DataTable props are unchanged)
             striped
             highlightOnHover
             responsive
@@ -290,6 +325,7 @@ function Spillage() {
             fixedHeader
             fixedHeaderScrollHeight="60vh"
             pointerOnHover
+            progressPending={isLoading}
             onRowClicked={(row) => {
               setSelectedSpillage(row);
               setIsDetailsModalOpen(true);
@@ -322,7 +358,7 @@ function Spillage() {
             show={isDetailsModalOpen}
             onClose={() => setIsDetailsModalOpen(false)}
             spillage={selectedSpillage}
-            // Pass userRole to the modal so it can hide its own Edit/Delete buttons if needed
+            cashiersMap={cashiersMap}
             userRole={userRole}
             onEdit={() => {
               setIsDetailsModalOpen(false);
