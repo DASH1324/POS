@@ -336,10 +336,6 @@ function CashierSpillage() {
                 </option>
               ))}
             </select>
-
-            <button className="add-btn" onClick={handleModalOpen}>
-              <FaPlus /> Add Spillage Log
-            </button>
           </div>
 
           {/* Spillage History Table */}

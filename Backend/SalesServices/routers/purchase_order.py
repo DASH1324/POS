@@ -606,6 +606,7 @@ async def refund_order(
     """
     Process a refund for a completed order.
     Only allows refunding orders that have status 'completed'.
+    Refunds must be processed within 30 minutes of order completion.
     Requires manager authorization.
     """
     allowed_roles = ["admin", "manager", "cashier"]
@@ -626,7 +627,7 @@ async def refund_order(
         async with conn.cursor() as cursor:
             # First, verify the order exists and is completed
             await cursor.execute(
-                "SELECT Status, CashierName, TotalDiscountAmount FROM Sales WHERE SaleID = ?", 
+                "SELECT Status, CashierName, TotalDiscountAmount, UpdatedAt FROM Sales WHERE SaleID = ?", 
                 parsed_id
             )
             order_result = await cursor.fetchone()
@@ -644,6 +645,32 @@ async def refund_order(
                     detail=f"Only completed orders can be refunded. Current status: {current_status}"
                 )
             
+            # Check if order was completed within the last 30 minutes
+            completion_time = order_result.UpdatedAt
+            from datetime import datetime, timedelta
+            
+            if completion_time:
+                time_since_completion = datetime.now() - completion_time
+                if time_since_completion > timedelta(minutes=30):
+                    raise HTTPException(
+                        status_code=400,
+                        detail="Refund window expired. Orders can only be refunded within 30 minutes of completion."
+                    )
+            else:
+                # If no UpdatedAt timestamp, check CreatedAt as fallback
+                await cursor.execute(
+                    "SELECT CreatedAt FROM Sales WHERE SaleID = ?", 
+                    parsed_id
+                )
+                fallback_result = await cursor.fetchone()
+                if fallback_result and fallback_result.CreatedAt:
+                    time_since_completion = datetime.now() - fallback_result.CreatedAt
+                    if time_since_completion > timedelta(minutes=30):
+                        raise HTTPException(
+                            status_code=400,
+                            detail="Refund window expired. Orders can only be refunded within 30 minutes of completion."
+                        )
+            
             # --- START: Database transaction for refund ---
             try:
                 # Update order status to refunded
@@ -652,7 +679,7 @@ async def refund_order(
                     parsed_id
                 )
                 
-                # Insert into RefundedOrders table (create this table if it doesn't exist)
+                # Insert into RefundedOrders table
                 await cursor.execute("""
                     IF NOT EXISTS (SELECT * FROM sysobjects WHERE name='RefundedOrders' AND xtype='U')
                     BEGIN
@@ -680,10 +707,6 @@ async def refund_order(
                 logger.error(f"DB error during refund for order {order_id}: {db_exc}", exc_info=True)
                 raise HTTPException(status_code=500, detail="Failed to process refund in database.")
             # --- END: Database transaction for refund ---
-            
-            # --- MODIFICATION START ---
-            # The entire inventory restocking block has been removed as per the request.
-            # --- MODIFICATION END ---
             
             return {
                 "message": "Order has been successfully refunded.",

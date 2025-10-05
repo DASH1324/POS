@@ -29,10 +29,6 @@ const TransHisModal = ({ show, transaction, onClose }) => {
               </span>
             </div>
             <div className="detail-row">
-              <label>Transaction Number:</label>
-              <span>{transaction.id}</span>
-            </div>
-            <div className="detail-row">
               <label>Date & Time:</label>
               <span>{new Date(transaction.date).toLocaleString()}</span>
             </div>

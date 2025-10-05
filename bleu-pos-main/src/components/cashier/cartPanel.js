@@ -112,7 +112,7 @@ const CartPanel = ({
         
         const data = await response.json();
         setAvailableAddons(data);
-        setAddons(item.addons || []); // Pre-populate with current addons
+        setAddons(item.addons || []);
     } catch (error) {
         console.error("Failed to fetch available add-ons:", error);
         closeAddonsModal();
@@ -211,26 +211,31 @@ const CartPanel = ({
 
   const updateQuantity = (index, amount) => {
     setCartItems(prev => {
-        const updated = [...prev];
-        const currentItem = updated[index];
-        const newQuantity = currentItem.quantity + amount;
-        
-        if (newQuantity <= 0) {
-            // Remove item if quantity becomes 0 or negative
-            return updated.filter((_, i) => i !== index);
-        } else {
-            // Update quantity and scale add-ons proportionally
-            const updatedItem = {
-                ...currentItem,
-                quantity: newQuantity
-            };
-            
-            // If item has add-ons, we don't need to scale them - the display calculation handles this
-            // The add-ons array represents the add-ons per single unit, and we multiply by quantity in display
-            
-            updated[index] = updatedItem;
-            return updated;
+      const updated = [...prev];
+      const currentItem = updated[index];
+      const newQuantity = currentItem.quantity + amount;
+      
+      // Check if we're trying to increase beyond max quantity
+      if (amount > 0 && currentItem.maxQuantity) {
+        if (newQuantity > currentItem.maxQuantity) {
+          alert(`Maximum quantity of ${currentItem.maxQuantity} reached for ${currentItem.name}. ${currentItem.limitedBy || ''}`);
+          return prev; // Don't update, return previous state
         }
+      }
+      
+      if (newQuantity <= 0) {
+        // Remove item if quantity becomes 0 or negative
+        return updated.filter((_, i) => i !== index);
+      } else {
+        // Update quantity
+        const updatedItem = {
+          ...currentItem,
+          quantity: newQuantity
+        };
+        
+        updated[index] = updatedItem;
+        return updated;
+      }
     });
   };
 
@@ -296,17 +301,6 @@ const CartPanel = ({
 
   const getAppliedDiscountNames = () => appliedDiscounts.map(id => availableDiscounts.find(d => d.id === id)?.name).filter(Boolean);
 
-  // Helper function to generate unique display text for items with add-ons
-  const getItemDisplayName = (item) => {
-    let displayName = item.name;
-    if (item.addons && item.addons.length > 0) {
-      const addonText = item.addons.map(addon => `+${addon.quantity} ${addon.addonName}`).join(', ');
-      displayName += ` (${addonText})`;
-    }
-    return displayName;
-  };
-
-  // Helper function to get addon summary for display (scaled by quantity)
   const getAddonsSummary = (itemAddons, quantity = 1) => {
     if (!Array.isArray(itemAddons) || itemAddons.length === 0) return null;
     return itemAddons.map(addon => {
@@ -331,6 +325,13 @@ const CartPanel = ({
                             <div className="item-details">
                                 <div className="item-name">{item.name}</div>
                                 
+                                {/* Show max quantity warning if close to limit */}
+                                {item.maxQuantity && item.quantity >= item.maxQuantity * 0.8 && (
+                                    <div className="max-qty-warning" style={{fontSize: '11px', color: '#ff9800', marginTop: '2px'}}>
+                                        Max: {item.maxQuantity} {item.limitedBy ? `(${item.limitedBy})` : ''}
+                                    </div>
+                                )}
+                                
                                 {/* Show add-ons link only if product supports add-ons */}
                                 {item.hasAddons && (
                                     <div className="addons-link" onClick={() => openAddonsModal(index)}>Add ons</div>
@@ -347,7 +348,16 @@ const CartPanel = ({
                                 <div className="qty-price">
                                     <button onClick={() => updateQuantity(index, -1)}><FiMinus /></button>
                                     <span>{item.quantity}</span>
-                                    <button onClick={() => updateQuantity(index, 1)}><FiPlus /></button>
+                                    <button 
+                                        onClick={() => updateQuantity(index, 1)}
+                                        disabled={item.maxQuantity && item.quantity >= item.maxQuantity}
+                                        style={{
+                                            opacity: item.maxQuantity && item.quantity >= item.maxQuantity ? 0.5 : 1,
+                                            cursor: item.maxQuantity && item.quantity >= item.maxQuantity ? 'not-allowed' : 'pointer'
+                                        }}
+                                    >
+                                        <FiPlus />
+                                    </button>
                                     <span className="item-price">₱{((item.price + getTotalAddonsPrice(item.addons)) * item.quantity).toFixed(0)}</span>
                                 </div>
                             </div>

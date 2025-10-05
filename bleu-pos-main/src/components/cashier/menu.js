@@ -179,64 +179,160 @@ function Menu() {
   }, [cartItems]);
 
   const filterProducts = () => {
-    if (selectedFilter.type === 'all') return products;
-    if (selectedFilter.type === 'group' && categories[selectedFilter.value]) {
-      return products.filter(p => categories[selectedFilter.value].includes(p.category));
+       let filtered = [];
+    if (selectedFilter.type === 'all') {
+      filtered = products;
+    } else if (selectedFilter.type === 'group' && categories[selectedFilter.value]) {
+      filtered = products.filter(p => categories[selectedFilter.value].includes(p.category));
+    } else if (selectedFilter.type === 'item') {
+      filtered = products.filter(p => p.category === selectedFilter.value);
     }
-    if (selectedFilter.type === 'item') {
-      return products.filter(p => p.category === selectedFilter.value);
-    }
-    return [];
+    
+    // Sort: available items first, unavailable items last
+    return filtered.sort((a, b) => {
+      const aUnavailable = a.status === 'Unavailable';
+      const bUnavailable = b.status === 'Unavailable';
+      if (aUnavailable && !bUnavailable) return 1;
+      if (!aUnavailable && bUnavailable) return -1;
+      return 0;
+    });
   };
 
   const filteredProducts = filterProducts();
-
-  const addToCart = (item, type = 'product') => {
-  if (item.Status === 'Not Available' || item.status === 'Unavailable') return;
-
-  if (type === 'product') {
-    const existingIndex = cartItems.findIndex(cartItem => 
-      cartItem.id === item.id && 
-      cartItem.type === 'product' && 
-      (!cartItem.addons || cartItem.addons.length === 0)
-    );
-
-    if (existingIndex !== -1) {
-      const updatedCart = [...cartItems];
-      updatedCart[existingIndex].quantity += 1;
-      setCartItems(updatedCart);
-    } else {
-      const newCartItem = { 
-        ...item, 
-        quantity: 1, 
-        type: 'product', 
-        addons: [],
-        cartId: Date.now() + Math.random()
-      };
-      setCartItems(prev => [...prev, newCartItem]);
+  // Helper function to get max quantity for a product
+  const getMaxQuantityForProduct = async (productName, category, productId) => {
+    const token = localStorage.getItem('authToken');
+    if (!token) {
+      console.error('No auth token found');
+      return null;
     }
-  } else if (type === 'merchandise') {
-    const existingIndex = cartItems.findIndex(cartItem => 
-      cartItem.id === item.MerchandiseID && cartItem.type === 'merchandise'
-    );
-  
-    if (existingIndex !== -1) {
-      const updatedCart = [...cartItems];
-      updatedCart[existingIndex].quantity += 1;
-      setCartItems(updatedCart);
-    } else {
-      // Create merchandise cart item with proper structure for POS system
-      setCartItems(prev => [...prev, { 
-        id: item.MerchandiseID, 
-        name: item.MerchandiseName, 
-        price: item.MerchandisePrice, 
-        quantity: 1, 
-        type: 'merchandise',        // Explicitly set type as merchandise
-        image: item.MerchandiseImage,
-        category: 'Merchandise',    // Set category as Merchandise
-        addons: [],                 // Empty addons array as required by backend
-        cartId: Date.now() + Math.random()
-      }]);
+
+    try {
+      // If we don't have productId, look it up first
+      let actualProductId = productId;
+      
+      if (!actualProductId) {
+        const lookupResponse = await fetch(`${PRODUCTS_API_URL}/is_products/products/lookup`, {
+          method: 'POST',
+          headers: {
+            'Authorization': `Bearer ${token}`,
+            'Content-Type': 'application/json'
+          },
+          body: JSON.stringify({
+            productName: productName,
+            category: category
+          })
+        });
+
+        if (!lookupResponse.ok) {
+          console.error('Failed to lookup product ID');
+          return null;
+        }
+
+        const lookupData = await lookupResponse.json();
+        actualProductId = lookupData.productId;
+      }
+
+      // Now get max quantity
+      const maxQtyResponse = await fetch(
+        `${PRODUCTS_API_URL}/is_products/products/${actualProductId}/max-quantity`,
+        {
+          headers: { 'Authorization': `Bearer ${token}` }
+        }
+      );
+
+      if (!maxQtyResponse.ok) {
+        console.error('Failed to fetch max quantity');
+        return null;
+      }
+
+      const maxQtyData = await maxQtyResponse.json();
+      return {
+        maxQuantity: maxQtyData.maxQuantity,
+        limitedBy: maxQtyData.limitedBy,
+        productName: maxQtyData.productName
+      };
+
+    } catch (error) {
+      console.error('Error fetching max quantity:', error);
+      return null;
+    }
+  };
+
+  const addToCart = async (item, type = 'product') => {
+    if (item.Status === 'Not Available' || item.status === 'Unavailable') return;
+
+    if (type === 'product') {
+      // Fetch max quantity for this product
+      const maxQtyInfo = await getMaxQuantityForProduct(item.name, item.category, item.id);
+      
+      // If max quantity is 0, show alert and don't add
+      if (maxQtyInfo && maxQtyInfo.maxQuantity === 0) {
+        alert(`Cannot add ${item.name}. ${maxQtyInfo.limitedBy || 'Insufficient stock'}`);
+        return;
+      }
+
+      const existingIndex = cartItems.findIndex(cartItem => 
+        cartItem.id === item.id && 
+        cartItem.type === 'product' && 
+        (!cartItem.addons || cartItem.addons.length === 0)
+      );
+
+      // Check if adding one more would exceed max quantity
+      if (existingIndex !== -1) {
+        const currentQty = cartItems[existingIndex].quantity;
+        const maxQty = maxQtyInfo ? maxQtyInfo.maxQuantity : 999;
+        
+        if (currentQty >= maxQty) {
+          alert(`Maximum quantity of ${maxQty} reached for ${item.name}. ${maxQtyInfo?.limitedBy || ''}`);
+          return;
+        }
+
+        const updatedCart = [...cartItems];
+        updatedCart[existingIndex].quantity += 1;
+        updatedCart[existingIndex].maxQuantity = maxQty;
+        updatedCart[existingIndex].limitedBy = maxQtyInfo?.limitedBy;
+        setCartItems(updatedCart);
+      } else {
+        const maxQty = maxQtyInfo ? maxQtyInfo.maxQuantity : 999;
+        const newCartItem = { 
+          ...item, 
+          quantity: 1, 
+          type: 'product', 
+          addons: [],
+          maxQuantity: maxQty,
+          limitedBy: maxQtyInfo?.limitedBy,
+          cartId: Date.now() + Math.random()
+        };
+        setCartItems(prev => [...prev, newCartItem]);
+      }
+    } else if (type === 'merchandise') {
+      const existingIndex = cartItems.findIndex(cartItem => 
+        cartItem.id === item.MerchandiseID && cartItem.type === 'merchandise'
+      );
+    
+      if (existingIndex !== -1) {
+        const updatedCart = [...cartItems];
+        // Check merchandise quantity limit
+        if (updatedCart[existingIndex].quantity >= item.MerchandiseQuantity) {
+          alert(`Maximum stock of ${item.MerchandiseQuantity} reached for ${item.MerchandiseName}`);
+          return;
+        }
+        updatedCart[existingIndex].quantity += 1;
+        setCartItems(updatedCart);
+      } else {
+        setCartItems(prev => [...prev, { 
+          id: item.MerchandiseID, 
+          name: item.MerchandiseName, 
+          price: item.MerchandisePrice, 
+          quantity: 1, 
+          type: 'merchandise',
+          image: item.MerchandiseImage,
+          category: 'Merchandise',
+          addons: [],
+          maxQuantity: item.MerchandiseQuantity,
+          cartId: Date.now() + Math.random()
+        }]);
       }
     }
   };
@@ -315,7 +411,7 @@ function Menu() {
   );
 
   const MerchandiseList = ({ merchandise, addToCart }) => {
-    const placeholderImage = 'https://via.placeholder.com/150'; // A generic placeholder
+    const placeholderImage = 'https://via.placeholder.com/150';
 
     return (
       <div className="menu-product-grid">

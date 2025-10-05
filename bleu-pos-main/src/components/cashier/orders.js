@@ -167,25 +167,37 @@ function Orders() {
     return () => clearInterval(interval);
   }, [fetchOrders]);
 
-  const storeColumns = [
-    { name: "ORDER NO.", selector: (row) => row.id, sortable: true, width: "25%" }, 
-    { name: "DATE & TIME", selector: (row) => row.dateDisplay, sortable: true, width: "30%" },
-    { name: "ITEMS", selector: (row) => `${row.items} Items`, sortable: true, width: "15%" }, 
-    { name: "TOTAL", selector: (row) => `₱${row.total.toFixed(2)}`, sortable: true, width: "15%" },
-    { 
-      name: "STATUS", 
-      selector: (row) => row.status, 
-      cell: (row) => (
-        <span className={`orderpanel-status-badge orderpanel-${row.status.toLowerCase().replace(/\s+/g, '')}`}>
-          {row.status}
-        </span>
-      ), 
-      width: "15%" 
-    },
-  ];
+ const storeColumns = [
+  { 
+    name: "ORDER COUNT", 
+    selector: (row, index) => index + 1, 
+    cell: (row, index) => `${index + 1}.`,
+    sortable: false, 
+    width: "15%" 
+  }, 
+  { name: "DATE & TIME", selector: (row) => row.dateDisplay, sortable: true, width: "30%" },
+  { name: "ITEMS", selector: (row) => `${row.items} Items`, sortable: true, width: "20%" }, 
+  { name: "TOTAL", selector: (row) => `₱${row.total.toFixed(2)}`, sortable: true, width: "15%" },
+  { 
+    name: "STATUS", 
+    selector: (row) => row.status, 
+    cell: (row) => (
+      <span className={`orderpanel-status-badge orderpanel-${row.status.toLowerCase().replace(/\s+/g, '')}`}>
+        {row.status}
+      </span>
+    ), 
+    width: "20%" 
+  },
+];
   
   const onlineColumns = [
-    { name: "ORDER ID", selector: (row) => row.id, sortable: true, width: "15%" }, 
+    { 
+      name: "ORDER COUNT", 
+      selector: (row, index) => index + 1, 
+      cell: (row, index) => `${index + 1}.`,
+      sortable: false, 
+      width: "15%" 
+    }, 
     { name: "CUSTOMER", selector: (row) => row.customerName, sortable: true, width: "20%" },
     { name: "DATE & TIME", selector: (row) => row.dateDisplay, sortable: true, width: "25%" }, 
     { name: "TOTAL", selector: (row) => `₱${row.total.toFixed(2)}`, sortable: true, width: "15%" },

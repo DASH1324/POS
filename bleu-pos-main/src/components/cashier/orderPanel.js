@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import "./orderPanel.css";
 import dayjs from 'dayjs';
 import qr from '../../assets/qr.png';
@@ -10,7 +10,34 @@ function OrderPanel({ order, onClose, isOpen, isStore, onUpdateStatus }) {
   const [pinError, setPinError] = useState("");
   const [showReceiptModal, setShowReceiptModal] = useState(false);
   const [showRefundModal, setShowRefundModal] = useState(false);
+  const [showRefundExpiredModal, setShowRefundExpiredModal] = useState(false);
   const [isProcessing, setIsProcessing] = useState(false);
+  const [isRefundAvailable, setIsRefundAvailable] = useState(true);
+
+  // Check if refund is still available (within 30 minutes)
+  useEffect(() => {
+    if (!order || !isStore || order.status.toUpperCase() !== 'COMPLETED') {
+      return;
+    }
+
+    const checkRefundAvailability = () => {
+      // Use updatedAt if available, otherwise fall back to date
+      const completionTime = dayjs(order.updatedAt || order.date);
+      const now = dayjs();
+      const minutesPassed = now.diff(completionTime, 'minute');
+      
+      if (minutesPassed >= 30) {
+        setIsRefundAvailable(false);
+      } else {
+        setIsRefundAvailable(true);
+      }
+    };
+
+    checkRefundAvailability();
+    const interval = setInterval(checkRefundAvailability, 60000); // Check every minute
+
+    return () => clearInterval(interval);
+  }, [order, isStore]);
 
   if (!order) return null;
 
@@ -21,9 +48,14 @@ function OrderPanel({ order, onClose, isOpen, isStore, onUpdateStatus }) {
   const displayAddOns = Math.abs(addOnsCost);
   const displayDiscount = Math.abs(actualDiscount);
 
-  // Get auth token from localStorage or context
+  // Get auth token from memory or context
   const getAuthToken = () => {
-    return localStorage.getItem('authToken') || localStorage.getItem('token') || '';
+    // Try multiple possible token locations
+    const token = localStorage.getItem('authToken') || 
+                  localStorage.getItem('token') || 
+                  sessionStorage.getItem('authToken') ||
+                  sessionStorage.getItem('token');
+    return token || '';
   };
 
   const handleStoreCancel = () => {
@@ -33,6 +65,12 @@ function OrderPanel({ order, onClose, isOpen, isStore, onUpdateStatus }) {
   };
 
   const handleStoreRefund = () => {
+    // Check if refund window has expired
+    if (!isRefundAvailable) {
+      setShowRefundExpiredModal(true);
+      return;
+    }
+
     setEnteredPin("");
     setPinError("");
     setShowRefundModal(true);
@@ -46,7 +84,6 @@ function OrderPanel({ order, onClose, isOpen, isStore, onUpdateStatus }) {
     
     setIsProcessing(true);
     try {
-      // Use the existing onUpdateStatus function for cancellation
       await onUpdateStatus(order, "CANCELLED", { pin: enteredPin });
       setShowPinModal(false);
     } catch (error) {
@@ -65,7 +102,8 @@ function OrderPanel({ order, onClose, isOpen, isStore, onUpdateStatus }) {
     setIsProcessing(true);
     try {
       const token = getAuthToken();
-      // FIXED: Use the correct sales service URL
+      // TODO: Update this URL to match your actual API endpoint
+      // Common patterns: /api/purchase_orders/, /purchase_orders/, /sales/
       const response = await fetch(`http://127.0.0.1:9000/auth/purchase_orders/${order.id}/refund`, {
         method: 'POST',
         headers: {
@@ -73,7 +111,7 @@ function OrderPanel({ order, onClose, isOpen, isStore, onUpdateStatus }) {
           'Authorization': `Bearer ${token}`
         },
         body: JSON.stringify({
-          managerUsername: `manager_${enteredPin}`, // You might want to validate PIN against actual manager username
+          managerUsername: `manager_${enteredPin}`,
           refundReason: "Customer requested refund"
         })
       });
@@ -82,21 +120,24 @@ function OrderPanel({ order, onClose, isOpen, isStore, onUpdateStatus }) {
         const result = await response.json();
         setShowRefundModal(false);
         
-        // Update the order status locally or refresh the order list
         if (onUpdateStatus) {
           await onUpdateStatus(order, "REFUNDED");
         }
         
-        // Optional: Show success message
         toast.success("Order refunded successfully!");
       } else {
-        // Handle both JSON and non-JSON error responses
         let errorMessage = "Failed to process refund";
         try {
           const errorData = await response.json();
           errorMessage = errorData.detail || errorMessage;
+          
+          // Check if error is about refund window expiration
+          if (errorMessage.includes("30 minutes") || errorMessage.includes("expired")) {
+            setShowRefundModal(false);
+            setShowRefundExpiredModal(true);
+            return;
+          }
         } catch (jsonError) {
-          // If response is not JSON (like HTML error page), use status text
           errorMessage = `${response.status}: ${response.statusText}`;
         }
         setPinError(errorMessage);
@@ -116,7 +157,6 @@ function OrderPanel({ order, onClose, isOpen, isStore, onUpdateStatus }) {
     setShowReceiptModal(false);
   };
 
-  // Renders the correct set of action buttons based on the order's state
   const renderActionButtons = () => {
     const status = order.status.toUpperCase();
     const type = order.orderType ? order.orderType.toLowerCase() : '';
@@ -126,7 +166,6 @@ function OrderPanel({ order, onClose, isOpen, isStore, onUpdateStatus }) {
     let printAction = null;
     let refundAction = null;
 
-    // --- Determine Main Progressive Action Button ---
     if (isStore) {
         if (status === 'PROCESSING') {
             mainAction = (
@@ -139,7 +178,7 @@ function OrderPanel({ order, onClose, isOpen, isStore, onUpdateStatus }) {
                 </button>
             );
         }
-    } else { // Online Order Workflow
+    } else {
         if (status === 'PENDING') {
             mainAction = (
                 <button 
@@ -161,7 +200,7 @@ function OrderPanel({ order, onClose, isOpen, isStore, onUpdateStatus }) {
                         Ready for Pick Up
                     </button>
                 );
-            } else { // Delivery
+            } else {
                 mainAction = (
                     <button 
                         className="orderpanel-btn orderpanel-btn-complete" 
@@ -195,7 +234,6 @@ function OrderPanel({ order, onClose, isOpen, isStore, onUpdateStatus }) {
         }
     }
 
-    // --- Determine Cancel Button Visibility ---
     if (isStore) {
         if (status === 'PROCESSING') {
             cancelAction = (
@@ -222,7 +260,6 @@ function OrderPanel({ order, onClose, isOpen, isStore, onUpdateStatus }) {
         }
     }
 
-    // --- Determine Print and Refund Button Visibility for Store ---
     if (isStore && status === 'COMPLETED') {
         printAction = (
              <button 
@@ -235,7 +272,7 @@ function OrderPanel({ order, onClose, isOpen, isStore, onUpdateStatus }) {
         );
         refundAction = (
              <button 
-                 className="orderpanel-btn orderpanel-btn-refund" 
+                 className={`orderpanel-btn orderpanel-btn-refund ${!isRefundAvailable ? 'orderpanel-btn-disabled' : ''}`}
                  onClick={handleStoreRefund}
                  disabled={isProcessing}
              >
@@ -244,7 +281,6 @@ function OrderPanel({ order, onClose, isOpen, isStore, onUpdateStatus }) {
         );
     }
 
-    // Show refunded status but no actions
     if (status === 'REFUNDED') {
         return (
             <div className="orderpanel-status-message">
@@ -272,7 +308,6 @@ function OrderPanel({ order, onClose, isOpen, isStore, onUpdateStatus }) {
 
       <div className="orderpanel-content">
         <div className="orderpanel-info">
-            <p className="orderpanel-info-item"><span className="orderpanel-label">Order ID:</span> #{order.id}</p>
             <p className="orderpanel-info-item"><span className="orderpanel-label">Order Type:</span> {order.orderType || (isStore ? "Store" : "Online")}</p>
             <p className="orderpanel-info-item"><span className="orderpanel-label">Date:</span> {dayjs(order.date).format("MMMM D, YYYY - h:mm A")}</p>
             <p className="orderpanel-info-item"><span className="orderpanel-label">Payment Method:</span> {order.paymentMethod}</p>
@@ -357,14 +392,10 @@ function OrderPanel({ order, onClose, isOpen, isStore, onUpdateStatus }) {
         {showPinModal && (
           <div className="orderpanel-modal-overlay" onClick={() => setShowPinModal(false)}>
             <div className="orderpanel-modal-content" onClick={(e) => e.stopPropagation()}>
-              
-              {/* Header */}
               <div className="orderpanel-modal-header">
                 <h3 className="orderpanel-modal-title">Manager PIN Required</h3>
                 <button className="orderpanel-close-modal" onClick={() => setShowPinModal(false)}>×</button>
               </div>
-              
-              {/* Body / Content */}
               <div className="orderpanel-modal-body">
                 <p className="orderpanel-modal-description">
                   Please ask a manager to enter their PIN to cancel this order.
@@ -388,8 +419,6 @@ function OrderPanel({ order, onClose, isOpen, isStore, onUpdateStatus }) {
                 />
                 {pinError && <p className="orderpanel-modal-error">{pinError}</p>}
               </div>
-              
-              {/* Footer */}
               <div className="orderpanel-modal-footer">
                 <button 
                     className="orderpanel-modal-btn orderpanel-modal-cancel" 
@@ -406,7 +435,6 @@ function OrderPanel({ order, onClose, isOpen, isStore, onUpdateStatus }) {
                     {isProcessing ? "Verifying..." : "Confirm"}
                 </button>
               </div>
-              
             </div>
           </div>
         )}
@@ -415,14 +443,10 @@ function OrderPanel({ order, onClose, isOpen, isStore, onUpdateStatus }) {
         {showRefundModal && (
           <div className="orderpanel-modal-overlay" onClick={() => setShowRefundModal(false)}>
             <div className="orderpanel-modal-content" onClick={(e) => e.stopPropagation()}>
-              
-              {/* Header */}
               <div className="orderpanel-modal-header">
                 <h3 className="orderpanel-modal-title">Manager PIN Required</h3>
                 <button className="orderpanel-close-modal" onClick={() => setShowRefundModal(false)}>×</button>
               </div>
-              
-              {/* Body */}
               <div className="orderpanel-modal-body">
                 <p className="orderpanel-modal-description">
                   Please ask a manager to enter their PIN to refund this order.
@@ -446,8 +470,6 @@ function OrderPanel({ order, onClose, isOpen, isStore, onUpdateStatus }) {
                 />
                 {pinError && <p className="orderpanel-modal-error">{pinError}</p>}
               </div>
-              
-              {/* Footer */}
               <div className="orderpanel-modal-footer">
                 <button 
                     className="orderpanel-modal-btn orderpanel-modal-cancel" 
@@ -464,7 +486,34 @@ function OrderPanel({ order, onClose, isOpen, isStore, onUpdateStatus }) {
                     {isProcessing ? "Verifying..." : "Confirm"}
                 </button>
               </div>
+            </div>
+          </div>
+        )}
 
+        {/* Refund Expired Modal */}
+        {showRefundExpiredModal && (
+          <div className="orderpanel-modal-overlay" onClick={() => setShowRefundExpiredModal(false)}>
+            <div className="orderpanel-modal-content" onClick={(e) => e.stopPropagation()}>
+              <div className="orderpanel-modal-header">
+                <h3 className="orderpanel-modal-title">Refund Not Available</h3>
+                <button className="orderpanel-close-modal" onClick={() => setShowRefundExpiredModal(false)}>×</button>
+              </div>
+              <div className="orderpanel-modal-body">
+                <p className="orderpanel-modal-description">
+                  ⚠️ Cannot process refund after 30 minutes of order completion.
+                </p>
+                <p className="orderpanel-modal-subdescription">
+                  This order was completed more than 30 minutes ago. Refunds are only available within 30 minutes of completion.
+                </p>
+              </div>
+              <div className="orderpanel-modal-footer">
+                <button 
+                    className="orderpanel-modal-btn orderpanel-modal-confirm" 
+                    onClick={() => setShowRefundExpiredModal(false)}
+                >
+                    OK
+                </button>
+              </div>
             </div>
           </div>
         )}
@@ -473,14 +522,10 @@ function OrderPanel({ order, onClose, isOpen, isStore, onUpdateStatus }) {
         {showReceiptModal && (
           <div className="orderpanel-modal-overlay" onClick={() => setShowReceiptModal(false)}>
             <div className="orderpanel-modal-content orderpanel-receipt-modal" onClick={(e) => e.stopPropagation()}>
-
-              {/* Header */}
               <div className="orderpanel-modal-header">
                 <h3 className="orderpanel-modal-title">Order Receipt</h3>
                 <button className="orderpanel-close-modal" onClick={() => setShowReceiptModal(false)}>×</button>
               </div>
-
-              {/* Body */}
               <div className="orderpanel-modal-body">
                 <div className="orderpanel-receipt-print" id="orderpanel-print-section">
                   <div className="orderpanel-receipt-header">
@@ -568,7 +613,6 @@ function OrderPanel({ order, onClose, isOpen, isStore, onUpdateStatus }) {
                 </div>
               </div>
 
-              {/* Footer */}
               <div className="orderpanel-modal-footer">
                 <button className="orderpanel-modal-btn orderpanel-modal-cancel" onClick={() => setShowReceiptModal(false)}>
                   Cancel

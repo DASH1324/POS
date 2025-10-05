@@ -743,3 +743,22 @@
     display: none;
   }
 }
+
+.orderpanel-btn-disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.orderpanel-modal-warning {
+  color: #f59e0b;
+  font-weight: 500;
+  margin: 10px 0;
+  text-align: center;
+}
+
+.orderpanel-modal-subdescription {
+  color: #6b7280;
+  font-size: 0.9em;
+  margin-top: 10px;
+  text-align: center;
+}

@@ -244,7 +244,12 @@ function TransactionHistory() {
   };
 
   const columns = [
-    { name: "TRANSACTION #", selector: (row) => row.id, sortable: true, width: "14%" },
+    { name: "TRANSACTION COUNT", 
+      selector: (row, index) => index + 1, 
+      cell: (row, index) => `${index + 1}.`,
+      sortable: false, 
+      width: "15%" 
+    }, 
     { name: "DATE", selector: (row) => new Date(row.date).toLocaleDateString(), sortable: true, width: "8%" },
     { name: "CASHIER", selector: (row) => row.cashierName || "—", width: "12%" },
     { name: "ORDER TYPE", selector: (row) => row.orderType || "—", width: "10%" },
