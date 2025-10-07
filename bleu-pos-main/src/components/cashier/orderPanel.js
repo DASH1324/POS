@@ -102,8 +102,6 @@ function OrderPanel({ order, onClose, isOpen, isStore, onUpdateStatus }) {
     setIsProcessing(true);
     try {
       const token = getAuthToken();
-      // TODO: Update this URL to match your actual API endpoint
-      // Common patterns: /api/purchase_orders/, /purchase_orders/, /sales/
       const response = await fetch(`http://127.0.0.1:9000/auth/purchase_orders/${order.id}/refund`, {
         method: 'POST',
         headers: {
@@ -159,12 +157,14 @@ function OrderPanel({ order, onClose, isOpen, isStore, onUpdateStatus }) {
 
   const renderActionButtons = () => {
     const status = order.status.toUpperCase();
-    const type = order.orderType ? order.orderType.toLowerCase() : '';
+    const type = order.orderType ? order.orderType.toLowerCase().trim() : '';
 
     let mainAction = null;
     let cancelAction = null;
     let printAction = null;
     let refundAction = null;
+
+    console.log('Order Type:', order.orderType, 'Normalized:', type, 'Status:', status);
 
     if (isStore) {
         if (status === 'PROCESSING') {
@@ -179,7 +179,9 @@ function OrderPanel({ order, onClose, isOpen, isStore, onUpdateStatus }) {
             );
         }
     } else {
+        // Online orders
         if (status === 'PENDING') {
+            // Show Accept Order button for all online orders regardless of type
             mainAction = (
                 <button 
                     className="orderpanel-btn orderpanel-btn-complete" 
@@ -190,37 +192,38 @@ function OrderPanel({ order, onClose, isOpen, isStore, onUpdateStatus }) {
                 </button>
             );
         } else if (status === 'PREPARING') {
-            if (type === 'pick up') {
-                mainAction = (
-                    <button 
-                        className="orderpanel-btn orderpanel-btn-complete" 
-                        onClick={() => onUpdateStatus(order, "WAITING FOR PICK UP")}
-                        disabled={isProcessing}
-                    >
-                        Ready for Pick Up
-                    </button>
-                );
-            } else {
+            mainAction = (
+                <button 
+                    className="orderpanel-btn orderpanel-btn-complete" 
+                    onClick={() => onUpdateStatus(order, "WAITING FOR PICK UP")}
+                    disabled={isProcessing}
+                >
+                    {type === 'delivery' ? 'Ready for Pick Up (Rider)' : 'Ready for Pick Up'}
+                </button>
+            );
+        } else if (status === 'WAITING FOR PICK UP') {
+            if (type === 'delivery') {
                 mainAction = (
                     <button 
                         className="orderpanel-btn orderpanel-btn-complete" 
                         onClick={() => onUpdateStatus(order, "DELIVERING")}
                         disabled={isProcessing}
                     >
-                        Ready to Deliver
+                        Pick Up by Rider
+                    </button>
+                );
+            } else {
+                // Pick-up type
+                mainAction = (
+                    <button 
+                        className="orderpanel-btn orderpanel-btn-complete" 
+                        onClick={() => onUpdateStatus(order, "COMPLETED")}
+                        disabled={isProcessing}
+                    >
+                        Pick Up
                     </button>
                 );
             }
-        } else if (status === 'WAITING FOR PICK UP') {
-            mainAction = (
-                <button 
-                    className="orderpanel-btn orderpanel-btn-complete" 
-                    onClick={() => onUpdateStatus(order, "COMPLETED")}
-                    disabled={isProcessing}
-                >
-                    Pick Up
-                </button>
-            );
         } else if (status === 'DELIVERING') {
             mainAction = (
                 <button 

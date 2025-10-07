@@ -72,12 +72,17 @@ class ProcessingOrder(BaseModel):
     GCashReferenceNumber: Optional[str] = None
     orderItems: List[ProcessingSaleItem]
 
+class OnlineAddonItem(BaseModel):
+    addon_id: int
+    addon_name: str
+    price: float
+
 class OnlineSaleItem(BaseModel):
     name: str
     quantity: int
     price: float
     category: Optional[str] = None  # Changed: Removed default "Online"
-    addons: List[AddonItem] = []
+    addons: List[OnlineAddonItem] = []
 
 class OnlineOrderRequest(BaseModel):
     online_order_id: int
@@ -223,7 +228,7 @@ async def save_online_order(
     order_data: OnlineOrderRequest,
     current_user: dict = Depends(get_current_active_user)
 ):
-    # Role validation (no changes needed)
+    # Role validation
     allowed_roles = ["admin", "staff", "cashier", "user"]
     if current_user.get("userRole") not in allowed_roles:
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="You do not have permission to create orders.")
@@ -234,9 +239,11 @@ async def save_online_order(
         conn.autocommit = False 
 
         async with conn.cursor() as cursor:
+            # Calculate discount and determine initial status
             discount_amount = Decimal(order_data.subtotal) - Decimal(order_data.total_amount)
             pos_order_status = 'processing'
 
+            # Insert the main sale record
             sql_insert_sale = """
                 INSERT INTO Sales (
                     OrderType, PaymentMethod, CashierName, CustomerName, 
@@ -263,26 +270,19 @@ async def save_online_order(
                 raise Exception("Failed to create sale record and retrieve new SaleID.")
             new_sale_id = sale_id_row.SaleID
 
-            # Insert items and their addons with proper category handling
+            # Insert items and their addons
             for item in order_data.items:
                 sql_insert_item = """
                     INSERT INTO SaleItems (SaleID, ItemName, Quantity, UnitPrice, Category)
                     OUTPUT INSERTED.SaleItemID
                     VALUES (?, ?, ?, ?, ?)
                 """
-                # FIXED: Access the correct 'category' attribute from the model
-                item_category = item.category or 'Online'  # Default to 'Online' if no category
-                
-                # Log for debugging
-                logger.info(f"Inserting item: {item.name}, Category: {item_category}")
+                item_category = item.category or 'Online'
                 
                 await cursor.execute(
                     sql_insert_item, 
-                    new_sale_id, 
-                    item.name, 
-                    item.quantity, 
-                    Decimal(str(item.price)), 
-                    item_category
+                    new_sale_id, item.name, item.quantity, 
+                    Decimal(str(item.price)), item_category
                 )
                 
                 sale_item_result = await cursor.fetchone()
@@ -294,6 +294,26 @@ async def save_online_order(
                 
                 # Insert addons for this item
                 for addon in item.addons:
+                    # --- START of FIX ---
+                    # Look up the correct AddonID from the POS database using its name.
+                    # This prevents foreign key errors.
+                    await cursor.execute(
+                        "SELECT AddonID FROM Addons WHERE AddonName = ?", 
+                        addon.addon_name
+                    )
+                    addon_id_row = await cursor.fetchone()
+                    
+                    if not addon_id_row:
+                        await conn.rollback()
+                        logger.error(f"POS Error: Addon '{addon.addon_name}' not found in the POS Addons table.")
+                        raise HTTPException(
+                            status_code=status.HTTP_400_BAD_REQUEST,
+                            detail=f"Addon '{addon.addon_name}' does not exist in the POS system."
+                        )
+                    
+                    correct_pos_addon_id = addon_id_row.AddonID
+                    # --- END of FIX ---
+
                     sql_insert_addon = """
                         INSERT INTO SaleItemAddons (SaleItemID, AddonID, Quantity)
                         VALUES (?, ?, ?)
@@ -301,8 +321,8 @@ async def save_online_order(
                     await cursor.execute(
                         sql_insert_addon,
                         new_sale_item_id,
-                        addon.addonId,
-                        addon.quantity
+                        correct_pos_addon_id,  # Use the looked-up ID
+                        1                      # Assuming addon quantity is 1 per instance
                     )
 
             await conn.commit()
@@ -316,6 +336,9 @@ async def save_online_order(
     except Exception as e:
         if conn: await conn.rollback()
         logger.error(f"Failed to save online order to POS: {e}", exc_info=True)
+        # Re-raise HTTP exceptions to show specific client errors
+        if isinstance(e, HTTPException):
+            raise e
         raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=f"An error occurred while saving the online order: {e}")
         
     finally:

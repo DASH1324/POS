@@ -23,7 +23,7 @@ app.add_middleware(
         "http://192.168.100.14:8002",
         "http://localhost:8002",
         "http://192.168.100.14:9003",
-        "http://localhost:9003",       
+        "http://localhost:9003"       
     ],
     allow_credentials=True,
     allow_methods=["*"],

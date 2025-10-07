@@ -37,14 +37,20 @@ function CashierSpillage() {
   };
   
   // --- 1. API DATA FETCHING ---
-  const fetchSpillageData = async () => {
+   const fetchSpillageData = async () => {
     setIsLoading(true);
     try {
         const token = localStorage.getItem('authToken');
+        const username = localStorage.getItem('username');
         if (!token) {
             throw new Error("Authentication token not found.");
         }
-        const response = await fetch('http://127.0.0.1:9003/wastelogs/', {
+        if (!username) {
+            throw new Error("Username not found in localStorage.");
+        }
+        // Build URL with cashier_name query parameter
+        const url = `http://127.0.0.1:9003/wastelogs/?cashier_name=${encodeURIComponent(username)}`;
+        const response = await fetch(url, {
             headers: { 'Authorization': `Bearer ${token}` }
         });
         if (!response.ok) {

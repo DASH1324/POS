@@ -8,7 +8,7 @@ import { toast } from 'react-toastify';
 const SALES_API_BASE_URL = 'http://127.0.0.1:9000';
 const ONLINE_API_BASE_URL = 'http://127.0.0.1:7004';
 const AUTH_API_BASE_URL = 'http://127.0.0.1:4000';
-const INVENTORY_API_BASE_URL = 'http://127.0.0.1:8002'; // Added for inventory service
+const INVENTORY_API_BASE_URL = 'http://127.0.0.1:8002';
 
 function Orders() {
   const [activeTab, setActiveTab] = useState("store");
@@ -17,6 +17,7 @@ function Orders() {
   const [filterStatus, setFilterStatus] = useState("");
   const [selectedOrder, setSelectedOrder] = useState(null);
   const [username, setUsername] = useState('');
+  const [userRole, setUserRole] = useState('');
   const [storeOrders, setStoreOrders] = useState([]);
   const [onlineOrders, setOnlineOrders] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -24,8 +25,12 @@ function Orders() {
 
   useEffect(() => {
     const storedUsername = localStorage.getItem('username');
+    const storedUserRole = localStorage.getItem('userRole');
     if (storedUsername) {
       setUsername(storedUsername);
+    }
+    if (storedUserRole) {
+      setUserRole(storedUserRole);
     }
   }, []);
 
@@ -49,15 +54,11 @@ function Orders() {
       if (!token) throw new Error("Authentication error: You must be logged in to view orders.");
       const headers = { 'Authorization': `Bearer ${token}` };
 
-      // Define all statuses to fetch for store orders
       const storeStatusesToFetch = ['processing', 'completed', 'cancelled', 'refunded'];
-
-      // Create an array of fetch promises for each store status
       const storeFetchPromises = storeStatusesToFetch.map(status =>
         fetch(`${SALES_API_BASE_URL}/auth/sales/status/${status}`, { headers })
       );
 
-      // Fetch online orders and all store order statuses concurrently
       const [onlineResponse, ...storeResponsesSettled] = await Promise.allSettled([
         fetch(`${ONLINE_API_BASE_URL}/cart/admin/orders/manage`, { headers }),
         ...storeFetchPromises
@@ -67,40 +68,45 @@ function Orders() {
       let newOnlineOrders = [];
       let errors = [];
 
-      // Process all the settled promises for store orders
+      // Process store orders
       for (const storeResponse of storeResponsesSettled) {
         if (storeResponse.status === 'fulfilled' && storeResponse.value.ok) {
           const data = await storeResponse.value.json();
+          console.log("Store orders data:", data); // Debug log
           const orders = Array.isArray(data) ? data : [];
-          const mappedOrders = orders.map(order => ({
-            id: order.id, 
-            customerName: 'In-Store', 
-            date: new Date(order.date), 
-            orderType: order.orderType,
-            paymentMethod: order.paymentMethod || 'N/A', 
-            total: order.total, 
-            status: order.status ? order.status.toUpperCase() : 'UNKNOWN',
-            items: order.orderItems ? order.orderItems.reduce((acc, item) => acc + item.quantity, 0) : 0,
-            orderItems: order.orderItems ? order.orderItems.map(item => ({
-              ...item, 
-              size: item.size || 'Standard', 
-              addons: item.addons || []
-            })) : [],
-            source: 'store',
-            discount: order.discount || order.appliedDiscount || 0,
-            addOns: order.addOns || order.appliedAddOns || order.addons || 0,
-          })).filter(o => o.orderType === 'Dine in' || o.orderType === 'Take out');
+          const mappedOrders = orders.map(order => {
+            console.log("Processing store order:", order.id, "Cashier:", order.cashierName); // Debug log
+            return {
+              id: order.id, 
+              customerName: 'In-Store', 
+              date: new Date(order.date), 
+              orderType: order.orderType,
+              paymentMethod: order.paymentMethod || 'N/A', 
+              total: order.total, 
+              status: order.status ? order.status.toUpperCase() : 'UNKNOWN',
+              items: order.orderItems ? order.orderItems.reduce((acc, item) => acc + item.quantity, 0) : 0,
+              orderItems: order.orderItems ? order.orderItems.map(item => ({
+                ...item, 
+                size: item.size || 'Standard', 
+                addons: item.addons || []
+              })) : [],
+              source: 'store',
+              discount: order.discount || order.appliedDiscount || 0,
+              addOns: order.addOns || order.appliedAddOns || order.addons || 0,
+              cashierName: order.cashierName || 'Unknown'
+            };
+          }).filter(o => o.orderType === 'Dine in' || o.orderType === 'Take out');
           
-          newStoreOrders.push(...mappedOrders); // Append orders from this status fetch
+          newStoreOrders.push(...mappedOrders);
         } else {
           errors.push("Failed to load some store orders.");
           console.error("Store Order Fetch Error:", storeResponse.reason || (storeResponse.value && storeResponse.value.statusText));
         }
       }
 
+      // Process online orders
       if (onlineResponse.status === 'fulfilled' && onlineResponse.value.ok) {
         const data = await onlineResponse.value.json();
-        // Added console.log to check the details received from the cart
         console.log("Received Online Order Data from Cart API:", JSON.stringify(data, null, 2));
         
         const orders = Array.isArray(data) ? data : [];
@@ -110,8 +116,8 @@ function Orders() {
                 quantity: item.quantity,
                 price: item.price,
                 size: item.size || 'Standard', 
-                category: item.category, // Keep the actual category from the database
-                addons: item.addons || [] // Corrected: Was 'extras', now 'addons' with array default
+                category: item.category,
+                addons: item.addons || []
             })) : [];
 
             const totalQuantity = parsedItems.reduce((sum, item) => sum + item.quantity, 0);
@@ -129,6 +135,7 @@ function Orders() {
                 source: 'online',
                 discount: order.discount || order.applied_discount || 0,
                 addOns: order.addOns || order.applied_addons || order.addon_cost || 0,
+                cashierName: order.cashier_name || 'Unknown'
             };
         });
       } else {
@@ -167,28 +174,28 @@ function Orders() {
     return () => clearInterval(interval);
   }, [fetchOrders]);
 
- const storeColumns = [
-  { 
-    name: "ORDER COUNT", 
-    selector: (row, index) => index + 1, 
-    cell: (row, index) => `${index + 1}.`,
-    sortable: false, 
-    width: "15%" 
-  }, 
-  { name: "DATE & TIME", selector: (row) => row.dateDisplay, sortable: true, width: "30%" },
-  { name: "ITEMS", selector: (row) => `${row.items} Items`, sortable: true, width: "20%" }, 
-  { name: "TOTAL", selector: (row) => `₱${row.total.toFixed(2)}`, sortable: true, width: "15%" },
-  { 
-    name: "STATUS", 
-    selector: (row) => row.status, 
-    cell: (row) => (
-      <span className={`orderpanel-status-badge orderpanel-${row.status.toLowerCase().replace(/\s+/g, '')}`}>
-        {row.status}
-      </span>
-    ), 
-    width: "20%" 
-  },
-];
+  const storeColumns = [
+    { 
+      name: "ORDER COUNT", 
+      selector: (row, index) => index + 1, 
+      cell: (row, index) => `${index + 1}.`,
+      sortable: false, 
+      width: "15%" 
+    }, 
+    { name: "DATE & TIME", selector: (row) => row.dateDisplay, sortable: true, width: "30%" },
+    { name: "ITEMS", selector: (row) => `${row.items} Items`, sortable: true, width: "20%" }, 
+    { name: "TOTAL", selector: (row) => `₱${row.total.toFixed(2)}`, sortable: true, width: "15%" },
+    { 
+      name: "STATUS", 
+      selector: (row) => row.status, 
+      cell: (row) => (
+        <span className={`orderpanel-status-badge orderpanel-${row.status.toLowerCase().replace(/\s+/g, '')}`}>
+          {row.status}
+        </span>
+      ), 
+      width: "20%" 
+    },
+  ];
   
   const onlineColumns = [
     { 
@@ -214,7 +221,6 @@ function Orders() {
     },
   ];
 
-  // --- START: UPDATED FUNCTION ---
   const handleUpdateStatus = async (orderToUpdate, newStatus, details) => {
     const token = localStorage.getItem('authToken');
     if (!token) {
@@ -224,7 +230,6 @@ function Orders() {
 
     const headers = { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` };
 
-    // Handle order cancellation (requires PIN for store orders)
     if (newStatus === 'CANCELLED') {
         if (orderToUpdate.source === 'store' && details && details.pin) {
             try {
@@ -250,7 +255,6 @@ function Orders() {
                 toast.error(`Error: ${err.message}`);
             }
         } else if (orderToUpdate.source === 'online') {
-            // This path is for cancelling PENDING online orders
             try {
                 const url = `${ONLINE_API_BASE_URL}/cart/admin/orders/${orderToUpdate.id}/status`;
                 const body = JSON.stringify({ new_status: newStatus });
@@ -264,16 +268,13 @@ function Orders() {
             }
         }
     
-    // Handle all other status updates
     } else {
-      // SPECIAL WORKFLOW: Accepting an online order (PENDING -> PREPARING)
       if (orderToUpdate.source === 'online' && newStatus === 'PREPARING' && orderToUpdate.status === 'PENDING') {
         try {
-          // Step 1: Post to POS and Deduct Inventory in parallel
            const posOrderPayload = {
             online_order_id: orderToUpdate.id,
             customer_name: orderToUpdate.customerName,
-            cashier_name: username, // Use the logged-in username
+            cashier_name: username,
             order_type: orderToUpdate.orderType,
             payment_method: orderToUpdate.paymentMethod,
             subtotal: orderToUpdate.total,
@@ -283,7 +284,7 @@ function Orders() {
                 name: item.name, 
                 quantity: item.quantity, 
                 price: item.price, 
-                category: item.category, // Keep actual category, no fallback to 'Online'
+                category: item.category,
                 addons: item.addons || [] 
             }))
           };
@@ -314,13 +315,11 @@ function Orders() {
               })
           ]);
 
-          // Check for critical failure (POS system)
           if (posResponse.status === 'rejected' || !posResponse.value.ok) {
               const errorText = posResponse.status === 'fulfilled' ? await posResponse.value.text() : posResponse.reason;
               throw new Error(`Critical Error: Could not save to POS. ${errorText}`);
           }
           
-          // Log non-critical failures (inventory)
           if (ingredientsResponse.status === 'rejected' || !ingredientsResponse.value.ok) {
             console.error("Failed to deduct ingredients:", ingredientsResponse.status === 'fulfilled' ? await ingredientsResponse.value.text() : ingredientsResponse.reason);
           }
@@ -330,9 +329,8 @@ function Orders() {
           
           console.log("Order saved to POS and inventory deduction initiated.");
   
-          // Step 2: Update the Online Order Status
           const onlineStatusUrl = `${ONLINE_API_BASE_URL}/cart/admin/orders/${orderToUpdate.id}/status`;
-          const onlineStatusBody = JSON.stringify({ new_status: newStatus }); // newStatus is 'PREPARING'
+          const onlineStatusBody = JSON.stringify({ new_status: newStatus });
           const onlineResponse = await fetch(onlineStatusUrl, { method: 'PATCH', headers, body: onlineStatusBody });
           if (!onlineResponse.ok) throw new Error((await onlineResponse.json()).detail || 'POS/Inventory updated, but failed to update online order status.');
           
@@ -342,29 +340,22 @@ function Orders() {
           console.error("Error accepting order:", err);
           toast.error(`Error: ${err.message}`);
         }
-      // GENERAL WORKFLOW: For all other status changes
       } else {
         try {
             const updatePromises = [];
 
-            // 1. Create the update promise for the primary system (Store or Online)
             if (orderToUpdate.source === 'store') {
                 const url = `${SALES_API_BASE_URL}/auth/purchase_orders/${orderToUpdate.id}/status`;
                 const body = JSON.stringify({ newStatus: newStatus.toLowerCase() });
                 updatePromises.push(fetch(url, { method: 'PATCH', headers, body }));
 
             } else if (orderToUpdate.source === 'online') {
-                // For online orders, we update BOTH the online system and the POS system
-                
-                // Promise to update the Online Ordering System (OOS)
                 const oosUrl = `${ONLINE_API_BASE_URL}/cart/admin/orders/${orderToUpdate.id}/status`;
                 const oosBody = JSON.stringify({ new_status: newStatus });
                 updatePromises.push(fetch(oosUrl, { method: 'PATCH', headers, body: oosBody }));
                 
-                // If the final status is COMPLETED, also update the POS status
-                // from 'processing' to 'completed'.
                 if (newStatus === 'COMPLETED') {
-                    const posStatus = 'completed'; // Map frontend status to backend status
+                    const posStatus = 'completed';
                     const posUrl = `${SALES_API_BASE_URL}/auth/purchase_orders/online/${orderToUpdate.id}/status`;
                     const posBody = JSON.stringify({ newStatus: posStatus });
                     updatePromises.push(fetch(posUrl, { method: 'PATCH', headers, body: posBody }));
@@ -374,7 +365,6 @@ function Orders() {
                 return;
             }
 
-            // 2. Execute all update promises concurrently
             const results = await Promise.allSettled(updatePromises);
             
             let hasErrors = false;
@@ -398,13 +388,13 @@ function Orders() {
       }
     }
 
-    // Refresh data and UI after any operation
     await fetchOrders();
     setSelectedOrder(prev => prev && prev.id === orderToUpdate.id ? { ...prev, status: newStatus.toUpperCase() } : null);
   };
-  // --- END: UPDATED FUNCTION ---
 
   const ordersData = activeTab === "store" ? storeOrders : onlineOrders;
+  
+  // Filter orders based on cashier and status
   const filteredData = ordersData.filter(order => {
     const text = searchText.toLowerCase();
     const matchesSearch = String(order.id).toLowerCase().includes(text) || 
@@ -413,7 +403,21 @@ function Orders() {
                          order.status.toLowerCase().includes(text);
     const matchesDate = filterDate ? order.localDateString === filterDate : true;
     const matchesStatus = filterStatus ? order.status.toUpperCase() === filterStatus.toUpperCase() : true;
-    return matchesSearch && matchesDate && matchesStatus;
+    
+    // Cashier filter logic
+    const isPending = order.status === 'PENDING';
+    
+    // Debug logging
+    console.log(`Order ${order.id}: Status=${order.status}, Cashier=${order.cashierName}, CurrentUser=${username}, Role=${userRole}`);
+    
+    // Only show:
+    // 1. PENDING orders (visible to everyone - not yet accepted)
+    // 2. Orders where the current user is the cashier (for all other statuses)
+    const matchesCashier = isPending || order.cashierName === username;
+    
+    console.log(`Order ${order.id}: matchesCashier=${matchesCashier} (isPending=${isPending}, cashierMatch=${order.cashierName === username})`);
+    
+    return matchesSearch && matchesDate && matchesStatus && matchesCashier;
   });
 
   const clearFilters = () => { 

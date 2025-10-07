@@ -368,8 +368,9 @@ function LogSpillageModal({ show, onClose, onSave }) {
                 onChange={(e) => setDate(e.target.value)}
                 onFocus={() => handleFocus("date")}
                 className={errors.date ? "error-field" : ""}
-                max={new Date().toISOString().split("T")[0]}
+                max={new Date().toLocaleDateString('en-CA')}  
               />
+
               {errors.date && <p className="error-message">{errors.date}</p>}
             </label>
           </div>
