@@ -225,15 +225,8 @@ function OrderPanel({ order, onClose, isOpen, isStore, onUpdateStatus }) {
                 );
             }
         } else if (status === 'DELIVERING') {
-            mainAction = (
-                <button 
-                    className="orderpanel-btn orderpanel-btn-complete" 
-                    onClick={() => onUpdateStatus(order, "COMPLETED")}
-                    disabled={isProcessing}
-                >
-                    Delivered
-                </button>
-            );
+            // No button is rendered when the order is being delivered by a rider.
+            mainAction = null;
         }
     }
 
