@@ -339,7 +339,7 @@ function OrderPanel({ order, onClose, isOpen, isStore, onUpdateStatus }) {
                     <div className="orderpanel-item-addons">
                       {item.addons.map((addon, addonIdx) => (
                         <div key={addonIdx} className="orderpanel-addon">
-                          + {addon.quantity}x {addon.addonName || addon.name} (₱{addon.price.toFixed(2)})
+                          + {addon.addon_name || addon.addonName || addon.name} (₱{(addon.price || 0).toFixed(2)})
                         </div>
                       ))}
                     </div>
@@ -563,16 +563,16 @@ function OrderPanel({ order, onClose, isOpen, isStore, onUpdateStatus }) {
                           <span>₱{(item.price * item.quantity).toFixed(2)}</span>
                         </div>
                         {item.addons && item.addons.length > 0 && item.addons.map((addon, addonIdx) => (
-                          <div key={addonIdx}>
-                            <div className="orderpanel-receipt-line orderpanel-receipt-addon">
-                              <span>  + {addon.addonName || addon.name}</span>
-                            </div>
-                            <div className="orderpanel-receipt-line orderpanel-receipt-addon orderpanel-receipt-qty-price">
-                              <span>  {addon.quantity} x ₱{addon.price.toFixed(2)}</span>
-                              <span>₱{(addon.price * addon.quantity).toFixed(2)}</span>
-                            </div>
+                        <div key={addonIdx}>
+                          <div className="orderpanel-receipt-line orderpanel-receipt-addon">
+                            <span>  + {addon.addon_name || addon.addonName || addon.name}</span>
                           </div>
-                        ))}
+                          <div className="orderpanel-receipt-line orderpanel-receipt-addon orderpanel-receipt-qty-price">
+                            <span>  ₱{(addon.price || 0).toFixed(2)}</span>
+                            <span>₱{(addon.price || 0).toFixed(2)}</span>
+                          </div>
+                        </div>
+                      ))}
                       </div>
                     ))}
                   </div>

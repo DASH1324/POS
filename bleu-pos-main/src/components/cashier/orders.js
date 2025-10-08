@@ -72,10 +72,8 @@ function Orders() {
       for (const storeResponse of storeResponsesSettled) {
         if (storeResponse.status === 'fulfilled' && storeResponse.value.ok) {
           const data = await storeResponse.value.json();
-          console.log("Store orders data:", data); // Debug log
           const orders = Array.isArray(data) ? data : [];
           const mappedOrders = orders.map(order => {
-            console.log("Processing store order:", order.id, "Cashier:", order.cashierName); // Debug log
             return {
               id: order.id, 
               customerName: 'In-Store', 
@@ -111,33 +109,44 @@ function Orders() {
         
         const orders = Array.isArray(data) ? data : [];
         newOnlineOrders = orders.map(order => {
-            const parsedItems = Array.isArray(order.items) ? order.items.map(item => ({
-                name: item.name,
-                quantity: item.quantity,
-                price: item.price,
-                size: item.size || 'Standard', 
-                category: item.category,
-                addons: item.addons || []
-            })) : [];
+    const parsedItems = Array.isArray(order.items) ? order.items.map(item => ({
+        name: item.name,
+        quantity: item.quantity,
+        price: item.price,
+        size: item.size || 'Standard', 
+        category: item.category,
+        addons: item.addons || []
+    })) : [];
 
-            const totalQuantity = parsedItems.reduce((sum, item) => sum + item.quantity, 0);
+    const totalQuantity = parsedItems.reduce((sum, item) => sum + item.quantity, 0);
+    
+    // Calculate total add-ons cost from all items
+    const totalAddOnsCost = parsedItems.reduce((sum, item) => {
+        if (item.addons && Array.isArray(item.addons)) {
+            const itemAddOnsCost = item.addons.reduce((addonSum, addon) => {
+                return addonSum + (addon.price || addon.Price || 0);
+            }, 0);
+            return sum + itemAddOnsCost;
+        }
+        return sum;
+    }, 0);
 
-            return {
-                id: order.order_id,
-                customerName: order.customer_name,
-                date: new Date(order.order_date),
-                orderType: order.order_type,
-                paymentMethod: order.payment_method,
-                total: order.total_amount,
-                status: order.order_status ? order.order_status.toUpperCase() : 'UNKNOWN',
-                items: totalQuantity,
-                orderItems: parsedItems,
-                source: 'online',
-                discount: order.discount || order.applied_discount || 0,
-                addOns: order.addOns || order.applied_addons || order.addon_cost || 0,
-                cashierName: order.cashier_name || 'Unknown'
-            };
-        });
+    return {
+        id: order.order_id,
+        customerName: order.customer_name,
+        date: new Date(order.order_date),
+        orderType: order.order_type,
+        paymentMethod: order.payment_method,
+        total: order.total_amount,
+        status: order.order_status ? order.order_status.toUpperCase() : 'UNKNOWN',
+        items: totalQuantity,
+        orderItems: parsedItems,
+        source: 'online',
+        discount: order.discount || order.applied_discount || 0,
+        addOns: totalAddOnsCost,  // ← Use calculated total instead
+        cashierName: order.cashier_name || 'Unknown'
+    };
+});
       } else {
           errors.push("Failed to load online orders.");
           console.error("Online Order Fetch Error:", onlineResponse.reason || (onlineResponse.value && onlineResponse.value.statusText));
@@ -293,10 +302,18 @@ function Orders() {
             cartItems: orderToUpdate.orderItems.map(item => ({
                 name: item.name,
                 quantity: item.quantity,
-                addons: item.addons || []
+                addons: (item.addons || []).map(addon => ({
+                    addon_id: addon.addon_id || addon.AddonID || 0,
+                    addon_name: addon.addon_name || addon.AddonName || '',
+                    price: addon.price || addon.Price || 0,
+                    quantity: 1  // Each addon instance has quantity 1
+                }))
             }))
           };
-          
+          console.log("=== DEDUCTION PAYLOAD BEING SENT TO IMS ===");
+          console.log(JSON.stringify(deductionPayload, null, 2));
+          console.log("=== RAW ORDER ITEMS (BEFORE MAPPING) ===");
+          console.log(JSON.stringify(orderToUpdate.orderItems, null, 2));
           const [posResponse, ingredientsResponse, materialsResponse] = await Promise.allSettled([
               fetch(`${SALES_API_BASE_URL}/auth/purchase_orders/online-order`, { 
                 method: 'POST', 
@@ -408,14 +425,12 @@ function Orders() {
     const isPending = order.status === 'PENDING';
     
     // Debug logging
-    console.log(`Order ${order.id}: Status=${order.status}, Cashier=${order.cashierName}, CurrentUser=${username}, Role=${userRole}`);
     
     // Only show:
     // 1. PENDING orders (visible to everyone - not yet accepted)
     // 2. Orders where the current user is the cashier (for all other statuses)
     const matchesCashier = isPending || order.cashierName === username;
     
-    console.log(`Order ${order.id}: matchesCashier=${matchesCashier} (isPending=${isPending}, cashierMatch=${order.cashierName === username})`);
     
     return matchesSearch && matchesDate && matchesStatus && matchesCashier;
   });

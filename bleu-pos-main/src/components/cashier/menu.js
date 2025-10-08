@@ -103,7 +103,16 @@ function Menu() {
           sizes: p.Sizes,
           hasAddons: p.HasAddOns,
         }));
-        setProducts(mappedProducts);
+        const productsWithAvailability = await Promise.all(
+          mappedProducts.map(async (product) => {
+            const maxQtyInfo = await getMaxQuantityForProduct(product.name, product.category, product.id);
+            if (maxQtyInfo && maxQtyInfo.maxQuantity === 0) {
+              return { ...product, status: 'Unavailable' };
+            }
+            return product;
+          })
+        );
+        setProducts(productsWithAvailability);
 
         const dynamicCategories = {};
         apiDetails.forEach(p => {

@@ -294,9 +294,7 @@ async def save_online_order(
                 
                 # Insert addons for this item
                 for addon in item.addons:
-                    # --- START of FIX ---
-                    # Look up the correct AddonID from the POS database using its name.
-                    # This prevents foreign key errors.
+                    # Check if addon exists in POS Addons table
                     await cursor.execute(
                         "SELECT AddonID FROM Addons WHERE AddonName = ?", 
                         addon.addon_name
@@ -304,16 +302,31 @@ async def save_online_order(
                     addon_id_row = await cursor.fetchone()
                     
                     if not addon_id_row:
-                        await conn.rollback()
-                        logger.error(f"POS Error: Addon '{addon.addon_name}' not found in the POS Addons table.")
-                        raise HTTPException(
-                            status_code=status.HTTP_400_BAD_REQUEST,
-                            detail=f"Addon '{addon.addon_name}' does not exist in the POS system."
+                        # AUTO-CREATE the addon if it doesn't exist
+                        logger.info(f"Addon '{addon.addon_name}' not found in POS. Creating it now with price {addon.price}")
+                        
+                        await cursor.execute(
+                            """
+                            INSERT INTO Addons (AddonName, Price)
+                            OUTPUT INSERTED.AddonID
+                            VALUES (?, ?)
+                            """,
+                            addon.addon_name,
+                            Decimal(str(addon.price))
                         )
-                    
-                    correct_pos_addon_id = addon_id_row.AddonID
-                    # --- END of FIX ---
+                        
+                        addon_creation_result = await cursor.fetchone()
+                        if not addon_creation_result:
+                            await conn.rollback()
+                            raise Exception(f"Failed to create addon: {addon.addon_name}")
+                        
+                        correct_pos_addon_id = addon_creation_result.AddonID
+                        logger.info(f"Successfully created addon '{addon.addon_name}' with ID {correct_pos_addon_id}")
+                    else:
+                        correct_pos_addon_id = addon_id_row.AddonID
+                        logger.info(f"Found existing addon '{addon.addon_name}' with ID {correct_pos_addon_id}")
 
+                    # Insert the addon link
                     sql_insert_addon = """
                         INSERT INTO SaleItemAddons (SaleItemID, AddonID, Quantity)
                         VALUES (?, ?, ?)
@@ -321,9 +334,10 @@ async def save_online_order(
                     await cursor.execute(
                         sql_insert_addon,
                         new_sale_item_id,
-                        correct_pos_addon_id,  # Use the looked-up ID
-                        1                      # Assuming addon quantity is 1 per instance
+                        correct_pos_addon_id,
+                        1  # Assuming addon quantity is 1 per instance
                     )
+                    logger.info(f"Linked addon '{addon.addon_name}' (ID: {correct_pos_addon_id}) to item '{item.name}'")
 
             await conn.commit()
             
