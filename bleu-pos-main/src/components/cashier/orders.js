@@ -105,51 +105,50 @@ function Orders() {
       // Process online orders
       if (onlineResponse.status === 'fulfilled' && onlineResponse.value.ok) {
         const data = await onlineResponse.value.json();
-        console.log("Received Online Order Data from Cart API:", JSON.stringify(data, null, 2));
         
         const orders = Array.isArray(data) ? data : [];
         newOnlineOrders = orders.map(order => {
-    const parsedItems = Array.isArray(order.items) ? order.items.map(item => ({
-        name: item.name,
-        quantity: item.quantity,
-        price: item.price,
-        size: item.size || 'Standard', 
-        category: item.category,
-        addons: item.addons || []
-    })) : [];
+          const parsedItems = Array.isArray(order.items) ? order.items.map(item => ({
+            name: item.name,
+            quantity: item.quantity,
+            price: item.price,
+            size: item.size || 'Standard', 
+            category: item.category,
+            addons: item.addons || []
+          })) : [];
 
-    const totalQuantity = parsedItems.reduce((sum, item) => sum + item.quantity, 0);
-    
-    // Calculate total add-ons cost from all items
-    const totalAddOnsCost = parsedItems.reduce((sum, item) => {
-        if (item.addons && Array.isArray(item.addons)) {
-            const itemAddOnsCost = item.addons.reduce((addonSum, addon) => {
+          const totalQuantity = parsedItems.reduce((sum, item) => sum + item.quantity, 0);
+          
+          // Calculate total add-ons cost from all items
+          const totalAddOnsCost = parsedItems.reduce((sum, item) => {
+            if (item.addons && Array.isArray(item.addons)) {
+              const itemAddOnsCost = item.addons.reduce((addonSum, addon) => {
                 return addonSum + (addon.price || addon.Price || 0);
-            }, 0);
-            return sum + itemAddOnsCost;
-        }
-        return sum;
-    }, 0);
+              }, 0);
+              return sum + itemAddOnsCost;
+            }
+            return sum;
+          }, 0);
 
-    return {
-        id: order.order_id,
-        customerName: order.customer_name,
-        date: new Date(order.order_date),
-        orderType: order.order_type,
-        paymentMethod: order.payment_method,
-        total: order.total_amount,
-        status: order.order_status ? order.order_status.toUpperCase() : 'UNKNOWN',
-        items: totalQuantity,
-        orderItems: parsedItems,
-        source: 'online',
-        discount: order.discount || order.applied_discount || 0,
-        addOns: totalAddOnsCost,  // ← Use calculated total instead
-        cashierName: order.cashier_name || 'Unknown'
-    };
-});
+          return {
+            id: order.order_id,
+            customerName: order.customer_name,
+            date: new Date(order.order_date),
+            orderType: order.order_type,
+            paymentMethod: order.payment_method,
+            total: order.total_amount,
+            status: order.order_status ? order.order_status.toUpperCase() : 'UNKNOWN',
+            items: totalQuantity,
+            orderItems: parsedItems,
+            source: 'online',
+            discount: order.discount || order.applied_discount || 0,
+            addOns: totalAddOnsCost,
+            cashierName: order.cashier_name || 'Unknown'
+          };
+        });
       } else {
-          errors.push("Failed to load online orders.");
-          console.error("Online Order Fetch Error:", onlineResponse.reason || (onlineResponse.value && onlineResponse.value.statusText));
+        errors.push("Failed to load online orders.");
+        console.error("Online Order Fetch Error:", onlineResponse.reason || (onlineResponse.value && onlineResponse.value.statusText));
       }
       
       if (errors.length > 0) setError(errors.join(' '));
@@ -240,47 +239,52 @@ function Orders() {
     const headers = { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` };
 
     if (newStatus === 'CANCELLED') {
-        if (orderToUpdate.source === 'store' && details && details.pin) {
-            try {
-                const pinResponse = await fetch(`${AUTH_API_BASE_URL}/users/verify-pin`, {
-                    method: 'POST',
-                    headers: headers,
-                    body: JSON.stringify({ pin: details.pin })
-                });
-                const pinData = await pinResponse.json();
-                if (!pinResponse.ok) throw new Error(pinData.detail || "Invalid Manager PIN.");
+      if (orderToUpdate.source === 'store' && details && details.pin) {
+        try {
+          const pinResponse = await fetch(`${AUTH_API_BASE_URL}/users/verify-pin`, {
+            method: 'POST',
+            headers: headers,
+            body: JSON.stringify({ pin: details.pin })
+          });
+          const pinData = await pinResponse.json();
+          if (!pinResponse.ok) throw new Error(pinData.detail || "Invalid Manager PIN.");
 
-                const cancelUrl = `${SALES_API_BASE_URL}/auth/purchase_orders/${orderToUpdate.id}/status`;
-                const cancelBody = JSON.stringify({ 
-                  newStatus: 'cancelled', 
-                  cancelDetails: { managerUsername: pinData.managerUsername } 
-                });
-                const cancelResponse = await fetch(cancelUrl, { method: 'PATCH', headers, body: cancelBody });
-                if (!cancelResponse.ok) throw new Error((await cancelResponse.json()).detail || "Failed to cancel the store order.");
-                
-                toast.success("Store order successfully cancelled!");
-            } catch (err) {
-                console.error("Store Cancellation Error:", err);
-                toast.error(`Error: ${err.message}`);
-            }
-        } else if (orderToUpdate.source === 'online') {
-            try {
-                const url = `${ONLINE_API_BASE_URL}/cart/admin/orders/${orderToUpdate.id}/status`;
-                const body = JSON.stringify({ new_status: newStatus });
-                const response = await fetch(url, { method: 'PATCH', headers, body });
-                if (!response.ok) throw new Error((await response.json()).detail || 'Failed to cancel online order.');
-                
-                toast.success("Online order successfully cancelled!");
-            } catch (err) {
-                console.error("Online Cancellation Error:", err);
-                toast.error(`Error: ${err.message}`);
-            }
+          const cancelUrl = `${SALES_API_BASE_URL}/auth/purchase_orders/${orderToUpdate.id}/status`;
+          const cancelBody = JSON.stringify({ 
+            newStatus: 'cancelled', 
+            cancelDetails: { managerUsername: pinData.managerUsername } 
+          });
+          const cancelResponse = await fetch(cancelUrl, { method: 'PATCH', headers, body: cancelBody });
+          if (!cancelResponse.ok) throw new Error((await cancelResponse.json()).detail || "Failed to cancel the store order.");
+          
+          toast.success("Store order successfully cancelled!");
+        } catch (err) {
+          console.error("Store Cancellation Error:", err);
+          toast.error(`Error: ${err.message}`);
         }
+      } else if (orderToUpdate.source === 'online') {
+        try {
+          const url = `${ONLINE_API_BASE_URL}/cart/admin/orders/${orderToUpdate.id}/status`;
+          const body = JSON.stringify({ new_status: newStatus });
+          const response = await fetch(url, { method: 'PATCH', headers, body });
+          if (!response.ok) throw new Error((await response.json()).detail || 'Failed to cancel online order.');
+          
+          toast.success("Online order successfully cancelled!");
+        } catch (err) {
+          console.error("Online Cancellation Error:", err);
+          toast.error(`Error: ${err.message}`);
+        }
+      }
     
     } else {
       if (orderToUpdate.source === 'online' && newStatus === 'PREPARING' && orderToUpdate.status === 'PENDING') {
         try {
-           const posOrderPayload = {
+          console.log("=== ORDER ITEMS BEFORE PROCESSING ===");
+          orderToUpdate.orderItems.forEach(item => {
+            console.log(`Item: ${item.name}, Category: "${item.category}", Quantity: ${item.quantity}`);
+          });
+
+          const posOrderPayload = {
             online_order_id: orderToUpdate.id,
             customer_name: orderToUpdate.customerName,
             cashier_name: username,
@@ -290,117 +294,217 @@ function Orders() {
             total_amount: orderToUpdate.total,
             status: 'processing',
             items: orderToUpdate.orderItems.map(item => ({ 
-                name: item.name, 
-                quantity: item.quantity, 
-                price: item.price, 
-                category: item.category,
-                addons: item.addons || [] 
+              name: item.name, 
+              quantity: item.quantity, 
+              price: item.price, 
+              category: item.category,
+              addons: item.addons || [] 
             }))
           };
 
-          const deductionPayload = {
-            cartItems: orderToUpdate.orderItems.map(item => ({
+          console.log("=== POS ORDER PAYLOAD ===");
+          console.log(JSON.stringify(posOrderPayload, null, 2));
+
+          // Separate items by category
+          const productItems = [];
+          const merchandiseItems = [];
+          
+          console.log("=== SEPARATING ITEMS BY CATEGORY ===");
+          orderToUpdate.orderItems.forEach(item => {
+            // Normalize category for comparison (trim and case-insensitive)
+            const normalizedCategory = (item.category || '').trim().toLowerCase();
+            
+            console.log(`Processing: ${item.name}`);
+            console.log(`  Original category: "${item.category}"`);
+            console.log(`  Normalized category: "${normalizedCategory}"`);
+            
+            // Check if it's merchandise (accept multiple possible values)
+            if (normalizedCategory === 'merchandise' || 
+                normalizedCategory === 'all items' || 
+                normalizedCategory === 'allitems') {
+              // Add to merchandise deduction
+              merchandiseItems.push({
                 name: item.name,
+                quantity: item.quantity
+              });
+              console.log(`  ✓ Added to MERCHANDISE deduction`);
+            } else {
+              // Add to product deduction (Coffee/Non-Coffee)
+              productItems.push({
+                product_name: item.name,
                 quantity: item.quantity,
-                addons: (item.addons || []).map(addon => ({
-                    addon_id: addon.addon_id || addon.AddonID || 0,
-                    addon_name: addon.addon_name || addon.AddonName || '',
-                    price: addon.price || addon.Price || 0,
-                    quantity: 1  // Each addon instance has quantity 1
+                category: item.category
+              });
+              console.log(`  ✓ Added to PRODUCT deduction`);
+            }
+          });
+
+          // Build deduction payload for products (ingredients/materials)
+          const productDeductionPayload = {
+            cartItems: productItems.map(item => ({
+              name: item.product_name,
+              quantity: item.quantity,
+              addons: (orderToUpdate.orderItems.find(oi => oi.name === item.product_name)?.addons || [])
+                .map(addon => ({
+                  addon_id: addon.addon_id || addon.AddonID || 0,
+                  addon_name: addon.addon_name || addon.AddonName || '',
+                  price: addon.price || addon.Price || 0,
+                  quantity: 1
                 }))
             }))
           };
-          console.log("=== DEDUCTION PAYLOAD BEING SENT TO IMS ===");
-          console.log(JSON.stringify(deductionPayload, null, 2));
-          console.log("=== RAW ORDER ITEMS (BEFORE MAPPING) ===");
-          console.log(JSON.stringify(orderToUpdate.orderItems, null, 2));
-          const [posResponse, ingredientsResponse, materialsResponse] = await Promise.allSettled([
-              fetch(`${SALES_API_BASE_URL}/auth/purchase_orders/online-order`, { 
-                method: 'POST', 
-                headers, 
-                body: JSON.stringify(posOrderPayload) 
-              }),
+
+          // Build deduction payload for merchandise
+          const merchandiseDeductionPayload = {
+            cartItems: merchandiseItems
+          };
+
+          console.log("=== PRODUCT DEDUCTION PAYLOAD ===");
+          console.log(JSON.stringify(productDeductionPayload, null, 2));
+          console.log("=== MERCHANDISE DEDUCTION PAYLOAD ===");
+          console.log(JSON.stringify(merchandiseDeductionPayload, null, 2));
+          console.log(`=== API CALLS TO BE MADE: ${1 + (productItems.length > 0 ? 2 : 0) + (merchandiseItems.length > 0 ? 1 : 0)} ===`);
+
+          // Prepare all API calls
+          const apiCalls = [
+            fetch(`${SALES_API_BASE_URL}/auth/purchase_orders/online-order`, { 
+              method: 'POST', 
+              headers, 
+              body: JSON.stringify(posOrderPayload) 
+            })
+          ];
+
+          // Add product deduction calls if there are products
+          if (productItems.length > 0) {
+            apiCalls.push(
               fetch(`${INVENTORY_API_BASE_URL}/ingredients/deduct-from-sale`, { 
                 method: 'POST', 
                 headers, 
-                body: JSON.stringify(deductionPayload) 
+                body: JSON.stringify(productDeductionPayload) 
               }),
               fetch(`${INVENTORY_API_BASE_URL}/materials/deduct-from-sale`, { 
                 method: 'POST', 
                 headers, 
-                body: JSON.stringify(deductionPayload) 
+                body: JSON.stringify(productDeductionPayload) 
               })
-          ]);
+            );
+          }
 
+          // Add merchandise deduction call if there are merchandise items
+          if (merchandiseItems.length > 0) {
+            apiCalls.push(
+              fetch(`${INVENTORY_API_BASE_URL}/merchandise/deduct-from-sale`, { 
+                method: 'POST', 
+                headers, 
+                body: JSON.stringify(merchandiseDeductionPayload) 
+              })
+            );
+          }
+
+          // Execute all calls
+          const results = await Promise.allSettled(apiCalls);
+
+          // Check POS save result (first call)
+          const posResponse = results[0];
           if (posResponse.status === 'rejected' || !posResponse.value.ok) {
-              const errorText = posResponse.status === 'fulfilled' ? await posResponse.value.text() : posResponse.reason;
-              throw new Error(`Critical Error: Could not save to POS. ${errorText}`);
+            const errorText = posResponse.status === 'fulfilled' ? await posResponse.value.text() : posResponse.reason;
+            throw new Error(`Critical Error: Could not save to POS. ${errorText}`);
           }
-          
-          if (ingredientsResponse.status === 'rejected' || !ingredientsResponse.value.ok) {
-            console.error("Failed to deduct ingredients:", ingredientsResponse.status === 'fulfilled' ? await ingredientsResponse.value.text() : ingredientsResponse.reason);
+
+          // Log other results
+          let callIndex = 1;
+          if (productItems.length > 0) {
+            const ingredientsResponse = results[callIndex++];
+            if (ingredientsResponse.status === 'rejected' || !ingredientsResponse.value.ok) {
+              console.error("Failed to deduct ingredients:", 
+                ingredientsResponse.status === 'fulfilled' ? await ingredientsResponse.value.text() : ingredientsResponse.reason);
+            }
+
+            const materialsResponse = results[callIndex++];
+            if (materialsResponse.status === 'rejected' || !materialsResponse.value.ok) {
+              console.error("Failed to deduct materials:", 
+                materialsResponse.status === 'fulfilled' ? await materialsResponse.value.text() : materialsResponse.reason);
+            }
           }
-          if (materialsResponse.status === 'rejected' || !materialsResponse.value.ok) {
-            console.error("Failed to deduct materials:", materialsResponse.status === 'fulfilled' ? await materialsResponse.value.text() : materialsResponse.reason);
+
+          if (merchandiseItems.length > 0) {
+            const merchandiseResponse = results[callIndex++];
+            if (merchandiseResponse.status === 'rejected' || !merchandiseResponse.value.ok) {
+              const errorText = merchandiseResponse.status === 'fulfilled' 
+                ? await merchandiseResponse.value.text() 
+                : merchandiseResponse.reason;
+              console.error("❌ MERCHANDISE DEDUCTION FAILED:");
+              console.error("  Status:", merchandiseResponse.status);
+              console.error("  Error:", errorText);
+              console.error("  Payload sent:", JSON.stringify(merchandiseDeductionPayload, null, 2));
+              toast.warning("Order accepted but merchandise deduction may have failed. Please check inventory.");
+            } else {
+              const successData = await merchandiseResponse.value.json();
+              console.log("✅ Successfully deducted merchandise inventory");
+              console.log("  Response:", successData);
+            }
           }
           
           console.log("Order saved to POS and inventory deduction initiated.");
-  
+
+          // Update online order status
           const onlineStatusUrl = `${ONLINE_API_BASE_URL}/cart/admin/orders/${orderToUpdate.id}/status`;
           const onlineStatusBody = JSON.stringify({ new_status: newStatus });
           const onlineResponse = await fetch(onlineStatusUrl, { method: 'PATCH', headers, body: onlineStatusBody });
-          if (!onlineResponse.ok) throw new Error((await onlineResponse.json()).detail || 'POS/Inventory updated, but failed to update online order status.');
+          if (!onlineResponse.ok) {
+            throw new Error((await onlineResponse.json()).detail || 'POS/Inventory updated, but failed to update online order status.');
+          }
           
           toast.success("Order accepted and is now being prepared!");
-  
+
         } catch (err) {
           console.error("Error accepting order:", err);
           toast.error(`Error: ${err.message}`);
         }
       } else {
         try {
-            const updatePromises = [];
+          const updatePromises = [];
 
-            if (orderToUpdate.source === 'store') {
-                const url = `${SALES_API_BASE_URL}/auth/purchase_orders/${orderToUpdate.id}/status`;
-                const body = JSON.stringify({ newStatus: newStatus.toLowerCase() });
-                updatePromises.push(fetch(url, { method: 'PATCH', headers, body }));
+          if (orderToUpdate.source === 'store') {
+            const url = `${SALES_API_BASE_URL}/auth/purchase_orders/${orderToUpdate.id}/status`;
+            const body = JSON.stringify({ newStatus: newStatus.toLowerCase() });
+            updatePromises.push(fetch(url, { method: 'PATCH', headers, body }));
 
-            } else if (orderToUpdate.source === 'online') {
-                const oosUrl = `${ONLINE_API_BASE_URL}/cart/admin/orders/${orderToUpdate.id}/status`;
-                const oosBody = JSON.stringify({ new_status: newStatus });
-                updatePromises.push(fetch(oosUrl, { method: 'PATCH', headers, body: oosBody }));
-                
-                if (newStatus === 'COMPLETED') {
-                    const posStatus = 'completed';
-                    const posUrl = `${SALES_API_BASE_URL}/auth/purchase_orders/online/${orderToUpdate.id}/status`;
-                    const posBody = JSON.stringify({ newStatus: posStatus });
-                    updatePromises.push(fetch(posUrl, { method: 'PATCH', headers, body: posBody }));
-                }
-            } else {
-                toast.error("Cannot update order: Unknown source.");
-                return;
-            }
-
-            const results = await Promise.allSettled(updatePromises);
+          } else if (orderToUpdate.source === 'online') {
+            const oosUrl = `${ONLINE_API_BASE_URL}/cart/admin/orders/${orderToUpdate.id}/status`;
+            const oosBody = JSON.stringify({ new_status: newStatus });
+            updatePromises.push(fetch(oosUrl, { method: 'PATCH', headers, body: oosBody }));
             
-            let hasErrors = false;
-            results.forEach(result => {
-              if (result.status === 'rejected' || (result.status === 'fulfilled' && !result.value.ok)) {
-                hasErrors = true;
-                console.error("An update failed:", result.reason || result.value.statusText);
-              }
-            });
-
-            if (hasErrors) {
-              throw new Error('One or more status updates failed. Check the console for details.');
+            if (newStatus === 'COMPLETED') {
+              const posStatus = 'completed';
+              const posUrl = `${SALES_API_BASE_URL}/auth/purchase_orders/online/${orderToUpdate.id}/status`;
+              const posBody = JSON.stringify({ newStatus: posStatus });
+              updatePromises.push(fetch(posUrl, { method: 'PATCH', headers, body: posBody }));
             }
-            
-            toast.success("Order status updated successfully!");
+          } else {
+            toast.error("Cannot update order: Unknown source.");
+            return;
+          }
+
+          const results = await Promise.allSettled(updatePromises);
+          
+          let hasErrors = false;
+          results.forEach(result => {
+            if (result.status === 'rejected' || (result.status === 'fulfilled' && !result.value.ok)) {
+              hasErrors = true;
+              console.error("An update failed:", result.reason || result.value.statusText);
+            }
+          });
+
+          if (hasErrors) {
+            throw new Error('One or more status updates failed. Check the console for details.');
+          }
+          
+          toast.success("Order status updated successfully!");
 
         } catch (err) {
-            console.error("Error updating status:", err);
-            toast.error(`Error: ${err.message}`);
+          console.error("Error updating status:", err);
+          toast.error(`Error: ${err.message}`);
         }
       }
     }
@@ -424,13 +528,10 @@ function Orders() {
     // Cashier filter logic
     const isPending = order.status === 'PENDING';
     
-    // Debug logging
-    
     // Only show:
     // 1. PENDING orders (visible to everyone - not yet accepted)
     // 2. Orders where the current user is the cashier (for all other statuses)
     const matchesCashier = isPending || order.cashierName === username;
-    
     
     return matchesSearch && matchesDate && matchesStatus && matchesCashier;
   });
@@ -492,50 +593,50 @@ function Orders() {
         </div>
         
         <div className="cOrders-filter-bar">
-        <input 
-          type="text" 
-          placeholder="Search..." 
-          value={searchText} 
-          onChange={(e) => setSearchText(e.target.value)} 
-          className="cOrders-filter-input" 
-        />
-        <input 
-          type="date" 
-          value={filterDate || ''} 
-          onChange={(e) => setFilterDate(e.target.value)} 
-          className="cOrders-filter-input" 
-          max={getTodayLocalDate()} 
-        />
-        <select 
-          value={filterStatus} 
-          onChange={(e) => setFilterStatus(e.target.value)} 
-          className="cOrders-filter-input"
-        >
-          <option value="">All Status</option>
-          {activeTab === 'store' 
-            ? (
-              <> 
-                <option value="COMPLETED">Completed</option> 
-                <option value="PROCESSING">Processing</option> 
-                <option value="CANCELLED">Cancelled</option> 
-                <option value="REFUNDED">Refunded</option> 
-              </> 
-            ) 
-            : (
-              <> 
-                <option value="PENDING">Pending</option> 
-                <option value="PREPARING">Preparing</option> 
-                <option value="WAITING FOR PICK UP">Waiting For Pick Up</option>
-                <option value="DELIVERING">Delivering</option>
-                <option value="COMPLETED">Completed</option> 
-                <option value="CANCELLED">Cancelled</option> 
-              </>
-            )}
-        </select>
-        <button className="cOrders-clear-btn" onClick={clearFilters}>
-          Clear Filters
-        </button>
-      </div>
+          <input 
+            type="text" 
+            placeholder="Search..." 
+            value={searchText} 
+            onChange={(e) => setSearchText(e.target.value)} 
+            className="cOrders-filter-input" 
+          />
+          <input 
+            type="date" 
+            value={filterDate || ''} 
+            onChange={(e) => setFilterDate(e.target.value)} 
+            className="cOrders-filter-input" 
+            max={getTodayLocalDate()} 
+          />
+          <select 
+            value={filterStatus} 
+            onChange={(e) => setFilterStatus(e.target.value)} 
+            className="cOrders-filter-input"
+          >
+            <option value="">All Status</option>
+            {activeTab === 'store' 
+              ? (
+                <> 
+                  <option value="COMPLETED">Completed</option> 
+                  <option value="PROCESSING">Processing</option> 
+                  <option value="CANCELLED">Cancelled</option> 
+                  <option value="REFUNDED">Refunded</option> 
+                </> 
+              ) 
+              : (
+                <> 
+                  <option value="PENDING">Pending</option> 
+                  <option value="PREPARING">Preparing</option> 
+                  <option value="WAITING FOR PICK UP">Waiting For Pick Up</option>
+                  <option value="DELIVERING">Delivering</option>
+                  <option value="COMPLETED">Completed</option> 
+                  <option value="CANCELLED">Cancelled</option> 
+                </>
+              )}
+          </select>
+          <button className="cOrders-clear-btn" onClick={clearFilters}>
+            Clear Filters
+          </button>
+        </div>
         
         <div className="orders-table-container">
           {loading && ordersData.length === 0 ? (
