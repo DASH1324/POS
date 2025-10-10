@@ -24,3 +24,6 @@ __pycache__/
 *.pdb
 bin/
 obj/
+
+#ignore database.py in all folders
+**/database.py
