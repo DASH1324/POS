@@ -27,3 +27,9 @@ obj/
 
 #ignore database.py in all folders
 **/database.py
+
+
+Backend/DiscountServices/database.py
+Backend/SalesServices/database.py
+Backend/SessionServices/database.py
+Backend/WasteServices/database.py
