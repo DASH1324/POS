@@ -65,7 +65,7 @@ async def get_top_products_today(
     request: TopProductsRequest,
     current_user: dict = Depends(get_current_active_user)
 ):
-    allowed_roles = ["admin", "manager", "cashier"]
+    allowed_roles = ["cashier"]
     if current_user.get("userRole") not in allowed_roles:
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Permission denied.")
 

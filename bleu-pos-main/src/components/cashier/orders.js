@@ -143,7 +143,8 @@ function Orders() {
             source: 'online',
             discount: order.discount || order.applied_discount || 0,
             addOns: totalAddOnsCost,
-            cashierName: order.cashier_name || 'Unknown'
+            cashierName: order.cashier_name || 'Unknown',
+            reference_number: order.reference_number || order.gcash_reference_number || null  // ✅ FIXED: Added reference number
           };
         });
       } else {
@@ -293,6 +294,7 @@ function Orders() {
             subtotal: orderToUpdate.total,
             total_amount: orderToUpdate.total,
             status: 'processing',
+            reference_number: orderToUpdate.reference_number || `ONLINE-${orderToUpdate.id}`,  // ✅ FIXED: Added reference number
             items: orderToUpdate.orderItems.map(item => ({ 
               name: item.name, 
               quantity: item.quantity, 
@@ -559,19 +561,9 @@ function Orders() {
   }, [filteredData, selectedOrder]);
 
   useEffect(() => { 
-    const getMostRecentOrderDate = (orders) => { 
-      if (!orders || orders.length === 0) return null; 
-      return orders[0].localDateString; 
-    }; 
-    
-    const currentOrders = activeTab === "store" ? storeOrders : onlineOrders; 
-    if (currentOrders.length > 0) { 
-      const mostRecentDate = getMostRecentOrderDate(currentOrders); 
-      setFilterDate(mostRecentDate); 
-    } else { 
-      setFilterDate(getTodayLocalDate()); 
-    } 
-  }, [activeTab, storeOrders, onlineOrders, getTodayLocalDate]);
+    // Always default to today's date when switching tabs
+    setFilterDate(getTodayLocalDate()); 
+  }, [activeTab, getTodayLocalDate]);
 
   return (
     <div className="orders-main-container">

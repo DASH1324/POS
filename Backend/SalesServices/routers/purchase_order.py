@@ -94,6 +94,7 @@ class OnlineOrderRequest(BaseModel):
     total_amount: float
     status: str
     items: List[OnlineSaleItem]
+    reference_number: Optional[str] = None
 
 class CancelDetails(BaseModel):
     managerUsername: str
@@ -116,8 +117,7 @@ async def get_processing_orders(
     cashierName: Optional[str] = None,
     current_user: dict = Depends(get_current_active_user)
 ):
-    # (Role validation is fine, no changes needed here)
-    allowed_roles = ["admin", "manager", "staff", "cashier"]
+    allowed_roles = ["admin", "manager", "cashier"]
     user_role = current_user.get("userRole")
     if user_role not in allowed_roles:
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="You do not have permission to view orders.")
@@ -128,8 +128,7 @@ async def get_processing_orders(
         async with conn.cursor() as cursor:
             logged_in_username = current_user.get("username")
             
-            # --- UPDATED SQL QUERY ---
-            # Joins with SaleItemAddons and Addons to get relational addon data
+           
             sql = """
                 SELECT
                     s.SaleID, s.OrderType, s.PaymentMethod, s.CreatedAt, s.CashierName,
@@ -229,7 +228,7 @@ async def save_online_order(
     current_user: dict = Depends(get_current_active_user)
 ):
     # Role validation
-    allowed_roles = ["admin", "staff", "cashier", "user"]
+    allowed_roles = ["cashier"]
     if current_user.get("userRole") not in allowed_roles:
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="You do not have permission to create orders.")
         
@@ -239,9 +238,34 @@ async def save_online_order(
         conn.autocommit = False 
 
         async with conn.cursor() as cursor:
-            # Calculate discount and determine initial status
-            discount_amount = Decimal(order_data.subtotal) - Decimal(order_data.total_amount)
+            discount_amount = Decimal('0.0')
             pos_order_status = 'processing'
+
+            # --- START: DATA CORRECTION AND HANDLING LOGIC ---
+            
+            # 1. Correct the Payment Method
+            # If the frontend sends 'Cash' for a delivery/pick-up order, override it to 'GCash'
+            corrected_payment_method = order_data.payment_method
+            if order_data.order_type.lower() in ["delivery", "pick-up"] and corrected_payment_method.lower() == 'cash':
+                logger.warning(f"Received 'Cash' payment method for online order {order_data.online_order_id}. Overriding to 'GCash'.")
+                corrected_payment_method = 'GCash'
+            
+            # 2. Handle the GCash Reference Number
+            # Prioritize the actual reference number passed from the frontend.
+            # If it's missing, create a fallback link for internal tracking.
+            final_reference_number = order_data.reference_number
+            if not final_reference_number:
+                final_reference_number = f"ONLINE-{order_data.online_order_id}"
+                logger.warning(
+                    f"No 'reference_number' provided for online order {order_data.online_order_id}. "
+                    f"Using fallback internal link: '{final_reference_number}'"
+                )
+            else:
+                logger.info(
+                    f"Received and using actual reference number for online order "
+                    f"{order_data.online_order_id}: '{final_reference_number}'"
+                )
+            # --- END: DATA CORRECTION AND HANDLING LOGIC ---
 
             # Insert the main sale record
             sql_insert_sale = """
@@ -256,12 +280,12 @@ async def save_online_order(
             await cursor.execute(
                 sql_insert_sale, 
                 order_data.order_type,
-                order_data.payment_method,
+                corrected_payment_method,
                 order_data.cashier_name,
                 order_data.customer_name,
                 discount_amount,
                 pos_order_status, 
-                f"ONLINE-{order_data.online_order_id}"
+                final_reference_number  # Use the prioritized reference number
             )
             
             sale_id_row = await cursor.fetchone()
@@ -294,50 +318,25 @@ async def save_online_order(
                 
                 # Insert addons for this item
                 for addon in item.addons:
-                    # Check if addon exists in POS Addons table
-                    await cursor.execute(
-                        "SELECT AddonID FROM Addons WHERE AddonName = ?", 
-                        addon.addon_name
-                    )
+                    await cursor.execute("SELECT AddonID FROM Addons WHERE AddonName = ?", addon.addon_name)
                     addon_id_row = await cursor.fetchone()
                     
                     if not addon_id_row:
-                        # AUTO-CREATE the addon if it doesn't exist
                         logger.info(f"Addon '{addon.addon_name}' not found in POS. Creating it now with price {addon.price}")
-                        
                         await cursor.execute(
-                            """
-                            INSERT INTO Addons (AddonName, Price)
-                            OUTPUT INSERTED.AddonID
-                            VALUES (?, ?)
-                            """,
-                            addon.addon_name,
-                            Decimal(str(addon.price))
+                            "INSERT INTO Addons (AddonName, Price) OUTPUT INSERTED.AddonID VALUES (?, ?)",
+                            addon.addon_name, Decimal(str(addon.price))
                         )
-                        
                         addon_creation_result = await cursor.fetchone()
                         if not addon_creation_result:
                             await conn.rollback()
                             raise Exception(f"Failed to create addon: {addon.addon_name}")
-                        
                         correct_pos_addon_id = addon_creation_result.AddonID
-                        logger.info(f"Successfully created addon '{addon.addon_name}' with ID {correct_pos_addon_id}")
                     else:
                         correct_pos_addon_id = addon_id_row.AddonID
-                        logger.info(f"Found existing addon '{addon.addon_name}' with ID {correct_pos_addon_id}")
 
-                    # Insert the addon link
-                    sql_insert_addon = """
-                        INSERT INTO SaleItemAddons (SaleItemID, AddonID, Quantity)
-                        VALUES (?, ?, ?)
-                    """
-                    await cursor.execute(
-                        sql_insert_addon,
-                        new_sale_item_id,
-                        correct_pos_addon_id,
-                        1  # Assuming addon quantity is 1 per instance
-                    )
-                    logger.info(f"Linked addon '{addon.addon_name}' (ID: {correct_pos_addon_id}) to item '{item.name}'")
+                    sql_insert_addon = "INSERT INTO SaleItemAddons (SaleItemID, AddonID, Quantity) VALUES (?, ?, ?)"
+                    await cursor.execute(sql_insert_addon, new_sale_item_id, correct_pos_addon_id, 1)
 
             await conn.commit()
             
@@ -350,7 +349,6 @@ async def save_online_order(
     except Exception as e:
         if conn: await conn.rollback()
         logger.error(f"Failed to save online order to POS: {e}", exc_info=True)
-        # Re-raise HTTP exceptions to show specific client errors
         if isinstance(e, HTTPException):
             raise e
         raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=f"An error occurred while saving the online order: {e}")
@@ -359,6 +357,7 @@ async def save_online_order(
         if conn:
             conn.autocommit = True 
             await conn.close()
+            
             
 # Get all orders endpoint
 @router_purchase_order.get(
@@ -462,7 +461,7 @@ async def update_order_status(
     request: UpdateOrderStatusRequest,
     current_user: dict = Depends(get_current_active_user)
 ):
-    allowed_roles = ["admin", "manager", "staff", "cashier"]
+    allowed_roles = ["cashier"]
     if current_user.get("userRole") not in allowed_roles:
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Permission denied.")
     
@@ -588,7 +587,7 @@ async def update_pos_status_for_online_order(
     request: UpdateOrderStatusRequest,
     current_user: dict = Depends(get_current_active_user)
 ):
-    allowed_roles = ["admin", "manager", "staff", "cashier", "user"]
+    allowed_roles = ["cashier"]
     if current_user.get("userRole") not in allowed_roles:
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Permission denied.")
 
@@ -596,11 +595,8 @@ async def update_pos_status_for_online_order(
     try:
         conn = await get_db_connection()
         async with conn.cursor() as cursor:
-            # The GCashReferenceNumber is where we stored the link, e.g., "ONLINE-123"
             g_cash_ref = f"ONLINE-{online_order_id}"
             
-            # We only allow updating to 'completed' or 'cancelled' via this route
-            # to prevent accidental status mismatches. 'processing' is the initial state.
             if request.newStatus not in ['completed', 'cancelled']:
                  raise HTTPException(
                     status_code=400,
@@ -646,7 +642,7 @@ async def refund_order(
     Refunds must be processed within 30 minutes of order completion.
     Requires manager authorization.
     """
-    allowed_roles = ["admin", "manager", "cashier"]
+    allowed_roles = ["cashier"]
     if current_user.get("userRole") not in allowed_roles:
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,

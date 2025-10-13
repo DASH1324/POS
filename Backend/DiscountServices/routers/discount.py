@@ -13,22 +13,17 @@ import sys, os
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 from database import get_db_connection
 
-# =============================================================================
-# CONFIGURATION
-# =============================================================================
+
 EXTERNAL_PRODUCTS_API_URL = "http://127.0.0.1:8001/is_products/products/details/" 
 AUTH_SERVICE_ME_URL = "http://localhost:4000/auth/users/me"
 
-# =============================================================================
-# ROUTER SETUP & OAUTH2 SCHEME
-# =============================================================================
+
 router = APIRouter() 
 discounts_router = APIRouter(prefix="/discounts", tags=["Discounts"])
 oauth2_scheme = OAuth2PasswordBearer(tokenUrl="http://localhost:4000/auth/token")
 
-# =============================================================================
+
 # AUTHORIZATION HELPER
-# =============================================================================
 async def validate_token_and_roles(token: str, allowed_roles: List[str]):
     headers = {"Authorization": f"Bearer {token}"}
     async with httpx.AsyncClient() as client:
@@ -48,9 +43,7 @@ async def validate_token_and_roles(token: str, allowed_roles: List[str]):
     
     return user_data
 
-# =============================================================================
 # PYDANTIC MODELS
-# =============================================================================
 class DiscountBase(BaseModel):
     discountName: str = Field(..., max_length=255)
     applicationType: Literal['all_products', 'specific_categories', 'specific_products']
@@ -66,7 +59,6 @@ class DiscountBase(BaseModel):
 class DiscountCreate(DiscountBase): pass
 class DiscountUpdate(DiscountBase): pass
 
-# --- MODIFIED: Added fields to send applicability rules to the frontend ---
 class DiscountListOut(BaseModel):
     id: int
     name: str
@@ -77,7 +69,6 @@ class DiscountListOut(BaseModel):
     validTo: str
     status: str
     type: str
-    # --- NEW FIELDS FOR FRONTEND LOGIC ---
     application_type: str
     applicable_products: List[str]
     applicable_categories: List[str]
@@ -85,9 +76,7 @@ class DiscountListOut(BaseModel):
 class DiscountDetailOut(DiscountBase):
     id: int
 
-# =============================================================================
-# HELPER FUNCTION FOR EXTERNAL DATA (Unchanged)
-# =============================================================================
+# HELPER FUNCTION FOR EXTERNAL DATA 
 async def get_external_choices(token: str):
     headers = {"Authorization": f"Bearer {token}"}
     try:
@@ -105,13 +94,11 @@ async def get_external_choices(token: str):
         detail = f"Products service returned an error: Status {e.response.status_code} - Response: {e.response.text}"
         raise HTTPException(status_code=status.HTTP_502_BAD_GATEWAY, detail=detail)
 
-# =============================================================================
 # DISCOUNT ENDPOINTS
-# =============================================================================
 
 @discounts_router.post("/", response_model=DiscountDetailOut, status_code=status.HTTP_201_CREATED)
 async def create_discount(discount_data: DiscountCreate, token: str = Depends(oauth2_scheme)):
-    await validate_token_and_roles(token, allowed_roles=["admin", "manager"])
+    await validate_token_and_roles(token, allowed_roles=["admin"])
     conn = await get_db_connection()
     try:
         conn.autocommit = False
@@ -140,10 +127,9 @@ async def create_discount(discount_data: DiscountCreate, token: str = Depends(oa
         conn.autocommit = True
         if conn: await conn.close()
 
-# --- MODIFIED: This is the key function that was updated ---
 @discounts_router.get("/", response_model=List[DiscountListOut])
 async def get_all_discounts(token: str = Depends(oauth2_scheme)):
-    await validate_token_and_roles(token, allowed_roles=["admin", "manager", "staff", "cashier"])
+    await validate_token_and_roles(token, allowed_roles=["admin", "manager", "cashier"])
     conn = await get_db_connection()
     try:
         async with conn.cursor() as cursor:
@@ -192,7 +178,7 @@ async def get_all_discounts(token: str = Depends(oauth2_scheme)):
 
 @discounts_router.get("/{discount_id}", response_model=DiscountDetailOut)
 async def get_discount(discount_id: int, token: str = Depends(oauth2_scheme)):
-    await validate_token_and_roles(token, allowed_roles=["admin", "manager", "staff", "cashier"])
+    await validate_token_and_roles(token, allowed_roles=["admin", "manager", "cashier"])
     conn = await get_db_connection()
     try:
         async with conn.cursor() as cursor:
@@ -218,7 +204,7 @@ async def get_discount(discount_id: int, token: str = Depends(oauth2_scheme)):
 
 @discounts_router.put("/{discount_id}", response_model=DiscountDetailOut)
 async def update_discount(discount_id: int, discount_data: DiscountUpdate, token: str = Depends(oauth2_scheme)):
-    await validate_token_and_roles(token, allowed_roles=["admin", "manager"])
+    await validate_token_and_roles(token, allowed_roles=["admin"])
     conn = await get_db_connection()
     try:
         conn.autocommit = False
@@ -252,7 +238,7 @@ async def update_discount(discount_id: int, discount_data: DiscountUpdate, token
 
 @discounts_router.delete("/{discount_id}", status_code=status.HTTP_200_OK)
 async def delete_discount(discount_id: int, token: str = Depends(oauth2_scheme)):
-    await validate_token_and_roles(token, allowed_roles=["admin", "manager"])
+    await validate_token_and_roles(token, allowed_roles=["admin"])
     conn = await get_db_connection()
     try:
         conn.autocommit = False
@@ -270,22 +256,17 @@ async def delete_discount(discount_id: int, token: str = Depends(oauth2_scheme))
         conn.autocommit = True
         if conn: await conn.close()
 
-# =============================================================================
-# EXTERNAL DATA ENDPOINTS
-# =============================================================================
+
 @router.get("/available-products", response_model=List[dict], tags=["External Data"])
 async def get_available_products_for_frontend(token: str = Depends(oauth2_scheme)):
-    await validate_token_and_roles(token, allowed_roles=["admin", "manager", "staff", "cashier"])
+    await validate_token_and_roles(token, allowed_roles=["admin", "manager", "cashier"])
     valid_products, _ = await get_external_choices(token=token)
     return [{"ProductName": name} for name in sorted(list(valid_products))]
 
 @router.get("/available-categories", response_model=List[dict], tags=["External Data"])
 async def get_available_categories_for_frontend(token: str = Depends(oauth2_scheme)):
-    await validate_token_and_roles(token, allowed_roles=["admin", "manager", "staff", "cashier"])
+    await validate_token_and_roles(token, allowed_roles=["admin", "manager", "cashier"])
     _, valid_categories = await get_external_choices(token=token)
     return [{"name": name} for name in sorted(list(valid_categories))]
 
-# =============================================================================
-# FINAL ROUTER SETUP
-# =============================================================================
 router.include_router(discounts_router)

@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo, useCallback } from 'react';
 import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
 import { faTrash, faMoneyBills, faQrcode } from '@fortawesome/free-solid-svg-icons';
 import { FiMinus, FiPlus } from "react-icons/fi";
@@ -23,6 +23,7 @@ const CartPanel = ({
   setOrderType,
   paymentMethod,
   setPaymentMethod,
+  getDynamicMaxQuantity
 }) => {
   // Component states
   const [showAddonsModal, setShowAddonsModal] = useState(false);
@@ -41,6 +42,30 @@ const CartPanel = ({
   const [isProcessing, setIsProcessing] = useState(false);
   const [error, setError] = useState(null);
   const [showConfirmation, setShowConfirmation] = useState(false);
+
+  // NEW: Recalculate max quantities whenever cart changes
+  useEffect(() => {
+    const updateMaxQuantities = async () => {
+      if (cartItems.length === 0) return;
+      
+      const updatedCart = await Promise.all(
+        cartItems.map(async (item) => {
+          if (item.type !== 'product') return item;
+          
+          const maxQtyInfo = await getDynamicMaxQuantity(item.name, item.category, item.id);
+          return {
+            ...item,
+            maxQuantity: maxQtyInfo ? maxQtyInfo.maxQuantity : 999,
+            limitedBy: maxQtyInfo?.limitedBy
+          };
+        })
+      );
+      
+      setCartItems(updatedCart);
+    };
+    
+    updateMaxQuantities();
+  }, [cartItems.length, cartItems.map(i => i.quantity).join(',')]);
 
   useEffect(() => {
     const fetchDiscounts = async () => {
@@ -209,25 +234,77 @@ const CartPanel = ({
   const getStagedDiscount = () => calculateDiscount(stagedDiscounts);
   const getTotal = () => Math.max(0, getSubtotal() - getDiscount());
 
-  const updateQuantity = (index, amount) => {
+  const checkQuantityConflicts = async (cartItemToIncrease, simulatedCart) => {
+    const token = localStorage.getItem('authToken');
+    if (!token) {
+      console.error('No auth token found');
+      return { canAdd: true, conflicts: [] };
+    }
+
+    try {
+      const response = await fetch(
+        `${PRODUCTS_API_URL}/is_products/products/check-quantity-increase`,
+        {
+          method: 'POST',
+          headers: {
+            'Authorization': `Bearer ${token}`,
+            'Content-Type': 'application/json'
+          },
+          body: JSON.stringify({
+            cart_items: simulatedCart
+          })
+        }
+      );
+
+      if (!response.ok) {
+        console.error('Failed to check conflicts');
+        return { canAdd: true, conflicts: [] };
+      }
+
+      return await response.json();
+    } catch (error) {
+      console.error('Error checking conflicts:', error);
+      return { canAdd: true, conflicts: [] };
+    }
+  };
+
+  const updateQuantity = async (index, amount) => {
+    const currentItem = cartItems[index];
+    const newQuantity = currentItem.quantity + amount;
+    
+    if (amount > 0 && currentItem.type === 'product') {
+      const simulatedCart = cartItems.map((item, i) => {
+        if (i === index) {
+          return { ...item, quantity: newQuantity };
+        }
+        return item;
+      });
+      
+      const conflictCheck = await checkQuantityConflicts(currentItem, simulatedCart);
+      
+      if (!conflictCheck.canAdd) {
+        const conflictMessages = conflictCheck.conflicts.map(c => 
+          `• ${c.type.toUpperCase()}: ${c.name}\n  Needs ${c.needed}, only ${c.available} available\n  Conflicts with: "${c.conflictsWith}"`
+        ).join('\n\n');
+        
+        alert(`❌ Cannot increase quantity for "${currentItem.name}".\n\nShared limited resources:\n\n${conflictMessages}`);
+        return;
+      }
+    }
+
     setCartItems(prev => {
       const updated = [...prev];
-      const currentItem = updated[index];
-      const newQuantity = currentItem.quantity + amount;
       
-      // Check if we're trying to increase beyond max quantity
       if (amount > 0 && currentItem.maxQuantity) {
         if (newQuantity > currentItem.maxQuantity) {
           alert(`Maximum quantity of ${currentItem.maxQuantity} reached for ${currentItem.name}. ${currentItem.limitedBy || ''}`);
-          return prev; // Don't update, return previous state
+          return prev;
         }
       }
       
       if (newQuantity <= 0) {
-        // Remove item if quantity becomes 0 or negative
         return updated.filter((_, i) => i !== index);
       } else {
-        // Update quantity
         const updatedItem = {
           ...currentItem,
           quantity: newQuantity
@@ -325,19 +402,16 @@ const CartPanel = ({
                             <div className="item-details">
                                 <div className="item-name">{item.name}</div>
                                 
-                                {/* Show max quantity warning if close to limit */}
                                 {item.maxQuantity && item.quantity >= item.maxQuantity * 0.8 && (
                                     <div className="max-qty-warning" style={{fontSize: '11px', color: '#ff9800', marginTop: '2px'}}>
                                         Max: {item.maxQuantity} {item.limitedBy ? `(${item.limitedBy})` : ''}
                                     </div>
                                 )}
                                 
-                                {/* Show add-ons link only if product supports add-ons */}
                                 {item.hasAddons && (
                                     <div className="addons-link" onClick={() => openAddonsModal(index)}>Add ons</div>
                                 )}
                                 
-                                {/* Display current add-ons for this specific item */}
                                 {item.addons && item.addons.length > 0 && (
                                     <div className="addons-summary">
                                         <span>{getAddonsSummary(item.addons, item.quantity)}</span>

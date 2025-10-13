@@ -318,9 +318,6 @@ function OrderPanel({ order, onClose, isOpen, isStore, onUpdateStatus }) {
                 <span className="orderpanel-label">Status:</span>
                 <span className={`orderpanel-status-badge orderpanel-${order.status.toLowerCase().replace(/ /g, '')}`}>{order.status}</span>
             </p>
-            {order.cashierName && (
-                <p className="orderpanel-info-item"><span className="orderpanel-label">Cashier:</span> {order.cashierName}</p>
-            )}
         </div>
 
         <div className="orderpanel-items-header">

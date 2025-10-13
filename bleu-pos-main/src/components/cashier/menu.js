@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import Navbar from '../navbar';
 import CartPanel from './cartPanel.js';
 import './menu.css';
@@ -32,6 +32,9 @@ function Menu() {
 
   // State for user info
   const [loggedInUser, setLoggedInUser] = useState(null);
+
+  // Cache for max quantities to avoid redundant API calls
+  const [maxQuantityCache, setMaxQuantityCache] = useState({});
 
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
@@ -85,6 +88,24 @@ function Menu() {
         const apiDetails = await detailsResponse.json();
         const apiProducts = await productsResponse.json(); 
 
+        // DEBUG: Check what status values are coming from API
+        console.log('=== CHECKING PRODUCT STATUSES FROM API ===');
+        console.log('Total products from API:', apiDetails.length);
+        console.log('Sample product from API:', apiDetails[0]);
+        
+        const unavailableProducts = apiDetails.filter(p => p.Status === 'Unavailable');
+        console.log('Unavailable products count:', unavailableProducts.length);
+        if (unavailableProducts.length > 0) {
+          console.log('Sample unavailable products:', unavailableProducts.slice(0, 3).map(p => ({
+            name: p.ProductName,
+            status: p.Status,
+            category: p.ProductCategory
+          })));
+        }
+        
+        const availableProducts = apiDetails.filter(p => p.Status === 'Available');
+        console.log('Available products count:', availableProducts.length);
+
         const imageMap = apiProducts.reduce((map, product) => {
           map[product.ProductName] = product.ProductImage;
           return map;
@@ -98,21 +119,31 @@ function Menu() {
           description: p.Description,
           price: p.Price,
           category: p.ProductCategory,
-          status: p.Status,
+          status: p.Status,  // This should be 'Available' or 'Unavailable'
           image: imageMap[p.ProductName] || placeholderImage, 
           sizes: p.Sizes,
           hasAddons: p.HasAddOns,
         }));
-        const productsWithAvailability = await Promise.all(
-          mappedProducts.map(async (product) => {
-            const maxQtyInfo = await getMaxQuantityForProduct(product.name, product.category, product.id);
-            if (maxQtyInfo && maxQtyInfo.maxQuantity === 0) {
-              return { ...product, status: 'Unavailable' };
-            }
-            return product;
-          })
-        );
-        setProducts(productsWithAvailability);
+
+        // DEBUG: Verify status is preserved after mapping
+        console.log('=== AFTER MAPPING ===');
+        console.log('Total mapped products:', mappedProducts.length);
+        console.log('Sample mapped product:', mappedProducts[0]);
+        
+        const unavailableMapped = mappedProducts.filter(p => p.status === 'Unavailable');
+        console.log('Unavailable products after mapping:', unavailableMapped.length);
+        if (unavailableMapped.length > 0) {
+          console.log('Sample mapped unavailable:', unavailableMapped.slice(0, 3).map(p => ({
+            name: p.name,
+            status: p.status,
+            category: p.category
+          })));
+        }
+        
+        const availableMapped = mappedProducts.filter(p => p.status === 'Available');
+        console.log('Available products after mapping:', availableMapped.length);
+        
+        setProducts(mappedProducts);
 
         const dynamicCategories = {};
         apiDetails.forEach(p => {
@@ -185,10 +216,10 @@ function Menu() {
 
   useEffect(() => {
     setIsCartOpen(cartItems.length > 0);
-  }, [cartItems]);
+  }, [cartItems.length]);
 
-  const filterProducts = () => {
-       let filtered = [];
+  const filterProducts = useCallback(() => {
+    let filtered = [];
     if (selectedFilter.type === 'all') {
       filtered = products;
     } else if (selectedFilter.type === 'group' && categories[selectedFilter.value]) {
@@ -197,7 +228,13 @@ function Menu() {
       filtered = products.filter(p => p.category === selectedFilter.value);
     }
     
-    // Sort: available items first, unavailable items last
+    // DEBUG: Check filtered products status
+    console.log('=== FILTERING PRODUCTS ===');
+    console.log('Filter type:', selectedFilter.type, 'Filter value:', selectedFilter.value);
+    console.log('Filtered count:', filtered.length);
+    const unavailableFiltered = filtered.filter(p => p.status === 'Unavailable');
+    console.log('Unavailable in filtered:', unavailableFiltered.length);
+    
     return filtered.sort((a, b) => {
       const aUnavailable = a.status === 'Unavailable';
       const bUnavailable = b.status === 'Unavailable';
@@ -205,11 +242,19 @@ function Menu() {
       if (!aUnavailable && bUnavailable) return -1;
       return 0;
     });
-  };
+  }, [selectedFilter, products, categories]);
 
-  const filteredProducts = filterProducts();
-  // Helper function to get max quantity for a product
-  const getMaxQuantityForProduct = async (productName, category, productId) => {
+  const filteredProducts = useMemo(() => filterProducts(), [filterProducts]);
+
+  // Optimized: Get dynamic max quantity with caching
+  const getDynamicMaxQuantity = useCallback(async (productName, category, productId) => {
+    const cacheKey = `${productId}-${cartItems.length}-${cartItems.map(i => `${i.id}:${i.quantity}`).join(',')}`;
+    
+    // Return cached result if available
+    if (maxQuantityCache[cacheKey]) {
+      return maxQuantityCache[cacheKey];
+    }
+
     const token = localStorage.getItem('authToken');
     if (!token) {
       console.error('No auth token found');
@@ -217,7 +262,6 @@ function Menu() {
     }
 
     try {
-      // If we don't have productId, look it up first
       let actualProductId = productId;
       
       if (!actualProductId) {
@@ -242,109 +286,182 @@ function Menu() {
         actualProductId = lookupData.productId;
       }
 
-      // Now get max quantity
       const maxQtyResponse = await fetch(
-        `${PRODUCTS_API_URL}/is_products/products/${actualProductId}/max-quantity`,
+        `${PRODUCTS_API_URL}/is_products/products/${actualProductId}/dynamic-max-quantity`,
         {
-          headers: { 'Authorization': `Bearer ${token}` }
+          method: 'POST',
+          headers: { 
+            'Authorization': `Bearer ${token}`,
+            'Content-Type': 'application/json'
+          },
+          body: JSON.stringify({
+            cart_items: cartItems
+          })
         }
       );
 
       if (!maxQtyResponse.ok) {
-        console.error('Failed to fetch max quantity');
+        console.error('Failed to fetch dynamic max quantity');
         return null;
       }
 
       const maxQtyData = await maxQtyResponse.json();
-      return {
+      const result = {
         maxQuantity: maxQtyData.maxQuantity,
         limitedBy: maxQtyData.limitedBy,
         productName: maxQtyData.productName
       };
 
+      // Cache the result
+      setMaxQuantityCache(prev => ({ ...prev, [cacheKey]: result }));
+      
+      return result;
+
     } catch (error) {
-      console.error('Error fetching max quantity:', error);
+      console.error('Error fetching dynamic max quantity:', error);
       return null;
     }
-  };
+  }, [cartItems, maxQuantityCache]);
 
-  const addToCart = async (item, type = 'product') => {
-    if (item.Status === 'Not Available' || item.status === 'Unavailable') return;
+  // Optimized: Check inventory conflicts with debouncing
+  const checkInventoryConflicts = useCallback(async (newProductId) => {
+    const token = localStorage.getItem('authToken');
+    if (!token) {
+      console.error('No auth token found');
+      return { canAdd: true, conflicts: [] };
+    }
+
+    try {
+      const response = await fetch(
+        `${PRODUCTS_API_URL}/is_products/products/check-cart-conflicts`,
+        {
+          method: 'POST',
+          headers: {
+            'Authorization': `Bearer ${token}`,
+            'Content-Type': 'application/json'
+          },
+          body: JSON.stringify({
+            cart_items: cartItems,
+            new_product_id: newProductId
+          })
+        }
+      );
+
+      if (!response.ok) {
+        console.error('Failed to check conflicts');
+        return { canAdd: true, conflicts: [] };
+      }
+
+      return await response.json();
+    } catch (error) {
+      console.error('Error checking conflicts:', error);
+      return { canAdd: true, conflicts: [] };
+    }
+  }, [cartItems]);
+
+  const addToCart = useCallback(async (item, type = 'product') => {
+    console.log('=== ADD TO CART CALLED ===');
+    console.log('Item:', item.name, 'Status:', item.status, 'Type:', type);
+    
+    if (item.Status === 'Not Available' || item.status === 'Unavailable') {
+      console.log('Product is unavailable, blocking add to cart');
+      return;
+    }
 
     if (type === 'product') {
-      // Fetch max quantity for this product
-      const maxQtyInfo = await getMaxQuantityForProduct(item.name, item.category, item.id);
+      // Check for inventory conflicts first
+      const conflictCheck = await checkInventoryConflicts(item.id);
       
-      // If max quantity is 0, show alert and don't add
+      if (!conflictCheck.canAdd) {
+        const conflictMessages = conflictCheck.conflicts.map(c => 
+          `• ${c.type.toUpperCase()}: ${c.name}\n  Needs ${c.needed}, only ${c.available} available\n  Conflicts with: "${c.conflictsWith}"`
+        ).join('\n\n');
+        
+        alert(`❌ Cannot add "${item.name}" to cart.\n\nShared limited resources:\n\n${conflictMessages}`);
+        return;
+      }
+
+      // Fetch dynamic max quantity
+      const maxQtyInfo = await getDynamicMaxQuantity(item.name, item.category, item.id);
+      
       if (maxQtyInfo && maxQtyInfo.maxQuantity === 0) {
         alert(`Cannot add ${item.name}. ${maxQtyInfo.limitedBy || 'Insufficient stock'}`);
         return;
       }
 
-      const existingIndex = cartItems.findIndex(cartItem => 
-        cartItem.id === item.id && 
-        cartItem.type === 'product' && 
-        (!cartItem.addons || cartItem.addons.length === 0)
-      );
+      // Add or update cart item
+      setCartItems(prev => {
+        const existingIndex = prev.findIndex(cartItem => 
+          cartItem.id === item.id && 
+          cartItem.type === 'product' && 
+          (!cartItem.addons || cartItem.addons.length === 0)
+        );
 
-      // Check if adding one more would exceed max quantity
-      if (existingIndex !== -1) {
-        const currentQty = cartItems[existingIndex].quantity;
-        const maxQty = maxQtyInfo ? maxQtyInfo.maxQuantity : 999;
-        
-        if (currentQty >= maxQty) {
-          alert(`Maximum quantity of ${maxQty} reached for ${item.name}. ${maxQtyInfo?.limitedBy || ''}`);
-          return;
+        if (existingIndex !== -1) {
+          const currentQty = prev[existingIndex].quantity;
+          const maxQty = maxQtyInfo ? maxQtyInfo.maxQuantity : 999;
+          
+          if (currentQty >= maxQty) {
+            alert(`Maximum quantity of ${maxQty} reached for ${item.name}. ${maxQtyInfo?.limitedBy || ''}`);
+            return prev;
+          }
+
+          const updatedCart = [...prev];
+          updatedCart[existingIndex] = {
+            ...updatedCart[existingIndex],
+            quantity: currentQty + 1,
+            maxQuantity: maxQty,
+            limitedBy: maxQtyInfo?.limitedBy
+          };
+          return updatedCart;
+        } else {
+          const maxQty = maxQtyInfo ? maxQtyInfo.maxQuantity : 999;
+          const newCartItem = { 
+            ...item, 
+            quantity: 1, 
+            type: 'product', 
+            addons: [],
+            maxQuantity: maxQty,
+            limitedBy: maxQtyInfo?.limitedBy,
+            cartId: Date.now() + Math.random()
+          };
+          return [...prev, newCartItem];
         }
-
-        const updatedCart = [...cartItems];
-        updatedCart[existingIndex].quantity += 1;
-        updatedCart[existingIndex].maxQuantity = maxQty;
-        updatedCart[existingIndex].limitedBy = maxQtyInfo?.limitedBy;
-        setCartItems(updatedCart);
-      } else {
-        const maxQty = maxQtyInfo ? maxQtyInfo.maxQuantity : 999;
-        const newCartItem = { 
-          ...item, 
-          quantity: 1, 
-          type: 'product', 
-          addons: [],
-          maxQuantity: maxQty,
-          limitedBy: maxQtyInfo?.limitedBy,
-          cartId: Date.now() + Math.random()
-        };
-        setCartItems(prev => [...prev, newCartItem]);
-      }
+      });
     } else if (type === 'merchandise') {
-      const existingIndex = cartItems.findIndex(cartItem => 
-        cartItem.id === item.MerchandiseID && cartItem.type === 'merchandise'
-      );
-    
-      if (existingIndex !== -1) {
-        const updatedCart = [...cartItems];
-        // Check merchandise quantity limit
-        if (updatedCart[existingIndex].quantity >= item.MerchandiseQuantity) {
-          alert(`Maximum stock of ${item.MerchandiseQuantity} reached for ${item.MerchandiseName}`);
-          return;
+      setCartItems(prev => {
+        const existingIndex = prev.findIndex(cartItem => 
+          cartItem.id === item.MerchandiseID && cartItem.type === 'merchandise'
+        );
+      
+        if (existingIndex !== -1) {
+          const updatedCart = [...prev];
+          if (updatedCart[existingIndex].quantity >= item.MerchandiseQuantity) {
+            alert(`Maximum stock of ${item.MerchandiseQuantity} reached for ${item.MerchandiseName}`);
+            return prev;
+          }
+          updatedCart[existingIndex] = {
+            ...updatedCart[existingIndex],
+            quantity: updatedCart[existingIndex].quantity + 1
+          };
+          return updatedCart;
+        } else {
+          return [...prev, { 
+            id: item.MerchandiseID, 
+            name: item.MerchandiseName, 
+            price: item.MerchandisePrice, 
+            quantity: 1, 
+            type: 'merchandise',
+            image: item.MerchandiseImage,
+            category: 'Merchandise',
+            addons: [],
+            maxQuantity: item.MerchandiseQuantity,
+            cartId: Date.now() + Math.random()
+          }];
         }
-        updatedCart[existingIndex].quantity += 1;
-        setCartItems(updatedCart);
-      } else {
-        setCartItems(prev => [...prev, { 
-          id: item.MerchandiseID, 
-          name: item.MerchandiseName, 
-          price: item.MerchandisePrice, 
-          quantity: 1, 
-          type: 'merchandise',
-          image: item.MerchandiseImage,
-          category: 'Merchandise',
-          addons: [],
-          maxQuantity: item.MerchandiseQuantity,
-          cartId: Date.now() + Math.random()
-        }]);
-      }
+      });
     }
-  };
+  }, [checkInventoryConflicts, getDynamicMaxQuantity]);
 
   const handleInitialCashSubmit = async (e) => {
     e.preventDefault();
@@ -385,41 +502,51 @@ function Menu() {
     }
   };
 
-  const ProductList = ({ products, addToCart }) => (
-    <div className="menu-product-grid">
-      {products.map(product => (
-        <div key={`${product.category}-${product.name}`} className="menu-product-item">
-          {product.status === 'Unavailable' && (
-            <div className="menu-product-unavailable-overlay">
-              <span>Unavailable</span>
-            </div>
-          )}
-          <div className="menu-product-main">
-            <div className="menu-product-img-container">
-              <img src={product.image} alt={product.name} /> 
-            </div>
-            <div className="menu-product-details">
-              <div className="menu-product-title">{product.name}</div>
-              <div className="menu-product-category">
-                {product.category}
-                {product.sizes && product.sizes.length > 0 ? ` - ${product.sizes.map(s => `${s} oz`).join(', ')}` : ''}
-              </div>
-              <div className="menu-product-price">₱{product.price.toFixed(2)}</div>
-            </div>
-          </div>
-          <button 
-            className="menu-add-button" 
-            onClick={() => addToCart(product)}
-            disabled={product.status === 'Unavailable'}
-          >
-            Add Product
-          </button>
-        </div>
-      ))}
-    </div>
-  );
+  const ProductList = React.memo(({ products, addToCart }) => {
+    console.log('=== RENDERING PRODUCT LIST ===');
+    console.log('Total products to render:', products.length);
+    const unavailableInRender = products.filter(p => p.status === 'Unavailable');
+    console.log('Unavailable products in render:', unavailableInRender.length);
+    if (unavailableInRender.length > 0) {
+      console.log('Unavailable products:', unavailableInRender.map(p => p.name));
+    }
 
-  const MerchandiseList = ({ merchandise, addToCart }) => {
+    return (
+      <div className="menu-product-grid">
+        {products.map(product => (
+          <div key={`${product.category}-${product.name}`} className="menu-product-item">
+            {product.status === 'Unavailable' && (
+              <div className="menu-product-unavailable-overlay">
+                <span>Unavailable</span>
+              </div>
+            )}
+            <div className="menu-product-main">
+              <div className="menu-product-img-container">
+                <img src={product.image} alt={product.name} /> 
+              </div>
+              <div className="menu-product-details">
+                <div className="menu-product-title">{product.name}</div>
+                <div className="menu-product-category">
+                  {product.category}
+                  {product.sizes && product.sizes.length > 0 ? ` - ${product.sizes.map(s => `${s} oz`).join(', ')}` : ''}
+                </div>
+                <div className="menu-product-price">₱{product.price.toFixed(2)}</div>
+              </div>
+            </div>
+            <button 
+              className="menu-add-button" 
+              onClick={() => addToCart(product)}
+              disabled={product.status === 'Unavailable'}
+            >
+              Add Product
+            </button>
+          </div>
+        ))}
+      </div>
+    );
+  });
+
+  const MerchandiseList = React.memo(({ merchandise, addToCart }) => {
     const placeholderImage = 'https://via.placeholder.com/150';
 
     return (
@@ -452,7 +579,7 @@ function Menu() {
         ))}
       </div>
     );
-  };
+  });
 
   const renderMainContent = () => {
     if (isLoading) return <div className="menu-status-container">Loading...</div>;
@@ -579,6 +706,7 @@ function Menu() {
         setOrderType={setOrderType}
         paymentMethod={paymentMethod}
         setPaymentMethod={setPaymentMethod}
+        getDynamicMaxQuantity={getDynamicMaxQuantity}
       />
     </div>
   );

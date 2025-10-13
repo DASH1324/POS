@@ -43,7 +43,7 @@ async def get_current_active_user(token: str = Depends(oauth2_scheme)):
 class SalesMetricsRequest(BaseModel):
     cashierName: str
     orderType: Optional[Literal['All', 'Store', 'Online']] = 'All'
-    productType: Optional[Literal['All', 'Products', 'Merchandise']] = 'All'  # NEW: Added product type filter
+    productType: Optional[Literal['All', 'Products', 'Merchandise']] = 'All' 
 
 class SalesMetricsResponse(BaseModel):
     totalSales: float
@@ -138,7 +138,7 @@ async def get_current_session_sales_metrics(
     request: SalesMetricsRequest,
     current_user: dict = Depends(get_current_active_user)
 ):
-    allowed_roles = ["admin", "manager", "cashier"]
+    allowed_roles = ["cashier"]
     if current_user.get("userRole") not in allowed_roles:
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Permission denied.")
 
@@ -236,7 +236,7 @@ async def get_todays_sales_metrics(
     request: SalesMetricsRequest,
     current_user: dict = Depends(get_current_active_user)
 ):
-    allowed_roles = ["admin", "manager", "cashier"]
+    allowed_roles = ["cashier"]
     if current_user.get("userRole") not in allowed_roles:
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,

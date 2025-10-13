@@ -43,7 +43,7 @@ class SaleItem(BaseModel):
     price: float
     category: str
     addons: List[AddonDetail]
-    type: Optional[str] = "product"  # Add type field to distinguish products from merchandise
+    type: Optional[str] = "product"  
 
 class Sale(BaseModel):
     cartItems: List[SaleItem]
@@ -153,7 +153,7 @@ async def create_sale(
     Processes a new sale, records it in the database with an initial 'processing' status,
     and triggers inventory deduction for ingredients, materials, and merchandise as needed.
     """
-    if current_user.get("userRole") not in ["admin", "manager", "staff", "cashier"]:
+    if current_user.get("userRole") not in ["cashier"]:
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="You do not have permission to create a sale.")
 
     conn = None
@@ -254,8 +254,6 @@ async def create_sale(
             await conn.close()
 
 
-# Add this new endpoint to your pos_router.py
-
 @router_sales.get("/status/{status}")
 async def get_orders_by_status(
     status: str,
@@ -265,7 +263,7 @@ async def get_orders_by_status(
     """
     Fetch orders by status with proper add-ons and discount calculations
     """
-    if current_user.get("userRole") not in ["admin", "manager", "staff", "cashier"]:
+    if current_user.get("userRole") not in ["admin", "manager", "cashier"]:
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Access denied.")
     
     conn = None
