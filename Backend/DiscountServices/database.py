@@ -3,8 +3,8 @@ import aioodbc
 # database config
 server = 'DESKTOP-TVGCI2U\\SQLEXPRESS'
 database = 'POS'
-username = 'RanjelPOS'
-password = 'Ranjel123'
+username = 'Ranjel'
+password = 'rnjl27'
 driver = 'ODBC Driver 17 for SQL Server'
 
 # async function to get db connection
