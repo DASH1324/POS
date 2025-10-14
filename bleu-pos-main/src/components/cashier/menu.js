@@ -4,6 +4,7 @@ import CartPanel from './cartPanel.js';
 import './menu.css';
 
 const API_BASE_URL = 'http://127.0.0.1:9001/api';
+const PROMOTION_BASE_URL = 'http://127.0.0.1:9002/api';
 const PRODUCTS_API_URL = 'http://127.0.0.1:8001';
 const MERCHANDISE_API_URL = 'http://127.0.0.1:8002/merchandise/';
 
@@ -25,6 +26,11 @@ function Menu() {
   const [categories, setCategories] = useState({});
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState(null);
+
+  // --- PROMOTIONS STATE ---
+  const [promotions, setPromotions] = useState([]);
+  const [showBogoModal, setShowBogoModal] = useState(false);
+  const [activeBogoPromo, setActiveBogoPromo] = useState(null);
 
   // State for order details
   const [orderType, setOrderType] = useState('Dine in');
@@ -58,6 +64,25 @@ function Menu() {
     if (activeUsername) {
       setLoggedInUser(activeUsername);
     }
+
+    // --- FETCH PROMOTIONS ---
+    const fetchPromotions = async (token) => {
+        try {
+            const response = await fetch(`${PROMOTION_BASE_URL}/promotions/`, {
+                headers: { 'Authorization': `Bearer ${token}` }
+            });
+            if (!response.ok) {
+                throw new Error('Failed to fetch promotions.');
+            }
+            const data = await response.json();
+            // Filter for active promotions only
+            const activePromotions = data.filter(p => p.status === 'active');
+            setPromotions(activePromotions);
+            console.log("Active promotions loaded:", activePromotions);
+        } catch (error) {
+            console.error(error.message);
+        }
+    };
 
     const initializeData = async (token, username) => {
       setIsLoading(true);
@@ -161,7 +186,10 @@ function Menu() {
       }
     };
 
-    initializeData(activeToken, activeUsername);
+    if (activeToken && activeUsername) {
+        initializeData(activeToken, activeUsername);
+        fetchPromotions(activeToken); // Fetch promotions on initial load
+    }
 
   }, []);
 
@@ -428,6 +456,22 @@ function Menu() {
           return [...prev, newCartItem];
         }
       });
+
+      // --- BOGO PROMOTION CHECK ---
+      const bogoPromo = promotions.find(p => {
+          // The `type` field from your API is formatted like "BOGO (1+1)"
+          if (!p.type.startsWith('BOGO')) return false;
+          // The `products` field is a comma-separated string
+          const applicableProducts = p.products.split(',').map(name => name.trim());
+          return applicableProducts.includes(item.name);
+      });
+
+      if (bogoPromo) {
+          console.log("BOGO Promotion found:", bogoPromo);
+          setActiveBogoPromo(bogoPromo);
+          setShowBogoModal(true); // Open the modal to inform the user
+      }
+
     } else if (type === 'merchandise') {
       setCartItems(prev => {
         const existingIndex = prev.findIndex(cartItem => 
@@ -461,7 +505,7 @@ function Menu() {
         }
       });
     }
-  }, [checkInventoryConflicts, getDynamicMaxQuantity]);
+  }, [checkInventoryConflicts, getDynamicMaxQuantity, promotions]);
 
   const handleInitialCashSubmit = async (e) => {
     e.preventDefault();
@@ -650,7 +694,36 @@ function Menu() {
         </div>
       )}
 
-      <div className={`menu-page-content ${showInitialCashModal ? 'blurred' : ''}`}>
+      {/* --- BOGO PROMOTION MODAL --- */}
+      {showBogoModal && activeBogoPromo && (
+        <div className="initialCash-modal-overlay">
+          <div className="initialCash-modal-container">
+            <div className="initialCash-modal-title">Promotional Offer!</div>
+            <div className="initialCash-modal-description" style={{textAlign: "left", alignSelf: 'stretch', padding: "0 20px"}}>
+              This product is part of the <strong>"{activeBogoPromo.name}"</strong> promotion ({activeBogoPromo.type}).
+              <br/><br/>
+              <strong>Discount:</strong> {activeBogoPromo.value}
+              <br/><br/>
+              Add the required products to the cart to receive the promotional discount.
+              <br/><br/>
+              <strong>Eligible Products:</strong> {activeBogoPromo.products}
+            </div>
+            <button
+              onClick={() => {
+                setShowBogoModal(false);
+                setActiveBogoPromo(null);
+              }}
+              className="initialCash-submit-btn"
+              style={{marginTop: "20px"}}
+            >
+              OK
+            </button>
+          </div>
+        </div>
+      )}
+
+
+      <div className={`menu-page-content ${showInitialCashModal || showBogoModal ? 'blurred' : ''}`}>
         <div className="menu-category-sidebar">
           <div className="menu-category-group">
             <div className={`menu-all-products-btn ${selectedFilter.type === 'all' ? 'active' : ''}`}
@@ -707,6 +780,7 @@ function Menu() {
         paymentMethod={paymentMethod}
         setPaymentMethod={setPaymentMethod}
         getDynamicMaxQuantity={getDynamicMaxQuantity}
+        promotions={promotions} // Pass promotions to the cart
       />
     </div>
   );

@@ -14,6 +14,20 @@ function OrderPanel({ order, onClose, isOpen, isStore, onUpdateStatus }) {
   const [isProcessing, setIsProcessing] = useState(false);
   const [isRefundAvailable, setIsRefundAvailable] = useState(true);
 
+  // Function to display add-ons for an item
+  const displayAddOns = (addons) => {
+    if (!addons || addons.length === 0) return null;
+    return (
+      <div className="orderpanel-item-addons">
+        {addons.map((addon, addonIdx) => (
+          <div key={addonIdx} className="orderpanel-addon">
+            + {addon.addon_name || addon.addonName || addon.name} (₱{(addon.price || 0).toFixed(2)})
+          </div>
+        ))}
+      </div>
+    );
+  };
+
   // Check if refund is still available (within 30 minutes)
   useEffect(() => {
     if (!order || !isStore || order.status.toUpperCase() !== 'COMPLETED') {
@@ -41,13 +55,11 @@ function OrderPanel({ order, onClose, isOpen, isStore, onUpdateStatus }) {
 
   if (!order) return null;
 
-  const subtotal = order.subtotal || order.orderItems.reduce((sum, item) => sum + (item.price * item.quantity), 0);
+  const subtotal = order.subtotal || 0;
   const addOnsCost = order.addOns || 0;
-  const actualDiscount = order.discount || 0;
-  
-  const displayAddOns = Math.abs(addOnsCost);
-  const displayDiscount = Math.abs(actualDiscount);
-
+  const promotionalDiscount = order.promotionalDiscount || 0;
+  const manualDiscount = order.manualDiscount || 0;
+  const appliedDiscountNames = order.appliedDiscounts || [];
   // Get auth token from memory or context
   const getAuthToken = () => {
     // Try multiple possible token locations
@@ -357,7 +369,7 @@ function OrderPanel({ order, onClose, isOpen, isStore, onUpdateStatus }) {
             <div className="orderpanel-promotions">
                 <span className="orderpanel-promotions-label">Discounts and Promotions used:</span>
                 <span className="orderpanel-promotions-value">
-                    {displayDiscount > 0 ? 'Discount Applied' : 'None'}
+                    {appliedDiscountNames.length > 0 ? appliedDiscountNames.join(', ') : 'None'}
                 </span>
             </div>
             <div className="orderpanel-calculation">
@@ -366,17 +378,30 @@ function OrderPanel({ order, onClose, isOpen, isStore, onUpdateStatus }) {
                     <span className="orderpanel-calc-value">₱{subtotal.toFixed(2)}</span>
                 </div>
                 
-                {displayAddOns > 0 && (
+                 {addOnsCost > 0 && (
                     <div className="orderpanel-calc-row">
                         <span className="orderpanel-calc-label">Add-ons:</span>
-                        <span className="orderpanel-calc-value">+ ₱{displayAddOns.toFixed(2)}</span>
+                        <span className="orderpanel-calc-value">+ ₱{addOnsCost.toFixed(2)}</span>
                     </div>
                 )}
+                
+                {promotionalDiscount > 0 && (
 
-                {displayDiscount > 0 && (
                     <div className="orderpanel-calc-row">
+
+                        <span className="orderpanel-calc-label">Promotional Discount:</span>
+
+                        <span className="orderpanel-calc-value">- ₱{promotionalDiscount.toFixed(2)}</span>
+                        </div>
+                )}
+                 {manualDiscount > 0 && (
+
+                    <div className="orderpanel-calc-row">
+
                         <span className="orderpanel-calc-label">Discount:</span>
-                        <span className="orderpanel-calc-value">- ₱{displayDiscount.toFixed(2)}</span>
+
+                        <span className="orderpanel-calc-value">- ₱{manualDiscount.toFixed(2)}</span>
+
                     </div>
                 )}
 
@@ -584,16 +609,38 @@ function OrderPanel({ order, onClose, isOpen, isStore, onUpdateStatus }) {
                       <span>SUBTOTAL:</span>
                       <span>₱{subtotal.toFixed(2)}</span>
                     </div>
-                    {displayAddOns > 0 && (
+                     {addOnsCost > 0 && (
+
                       <div className="orderpanel-receipt-line">
+
                         <span>ADD-ONS:</span>
-                        <span>₱{displayAddOns.toFixed(2)}</span>
+
+                        <span>₱{addOnsCost.toFixed(2)}</span>
+
                       </div>
+
                     )}
-                    {displayDiscount > 0 && (
+
+                    {promotionalDiscount > 0 && (
+
                       <div className="orderpanel-receipt-line">
+
+                        <span>PROMO DISCOUNT:</span>
+
+                        <span>-₱{promotionalDiscount.toFixed(2)}</span>
+
+                      </div>
+
+                    )}
+
+                    {manualDiscount > 0 && (
+
+                      <div className="orderpanel-receipt-line">
+
                         <span>DISCOUNT:</span>
-                        <span>-₱{displayDiscount.toFixed(2)}</span>
+
+                        <span>-₱{manualDiscount.toFixed(2)}</span>
+
                       </div>
                     )}
                     <div className="orderpanel-receipt-line orderpanel-receipt-total">

@@ -81,7 +81,7 @@ body, html {
 .cashier-date-input {
   padding: 8px 12px;
   border-radius: 8px;
-  border: none  ;
+  border: none;
   background-color: transparent;
   font-size: 14px;
   font-family: inherit;
@@ -139,19 +139,19 @@ body, html {
 }
 
 .cashier-sales-card:nth-child(1) .cashier-sales-icon {
-  background: linear-gradient(135deg, #16a34a, #22c55e); /* Total Sales - green */
+  background: linear-gradient(135deg, #16a34a, #22c55e);
 }
 
 .cashier-sales-card:nth-child(2) .cashier-sales-icon {
-  background: linear-gradient(135deg, #2563eb, #3b82f6); /* Cash Sales - blue */
+  background: linear-gradient(135deg, #2563eb, #3b82f6);
 }
 
 .cashier-sales-card:nth-child(3) .cashier-sales-icon {
-  background: linear-gradient(135deg, #0ea5e9, #0284c7); /* GCash Sales - cyan/blue */
+  background: linear-gradient(135deg, #0ea5e9, #0284c7);
 }
 
 .cashier-sales-card:nth-child(4) .cashier-sales-icon {
-  background: linear-gradient(135deg, #f59e0b, #d97706); /* Items Sold - amber */
+  background: linear-gradient(135deg, #f59e0b, #d97706);
 }
 
 .cashier-sales-info {
@@ -191,8 +191,8 @@ body, html {
   border: 1px solid rgba(75, 146, 157, 0.1);
   display: flex;
   flex-direction: column;
-  height: 100%; /* make sure it fills */
-  min-height: 625px; /* ensures space even if empty */
+  height: 100%;
+  min-height: 625px;
 }
 
 .cashier-section-header {
@@ -261,7 +261,6 @@ body, html {
   color: #fff;
 }
 
-/* Gold / Silver / Bronze for top 3 */
 .rank-1 {
   background: gold;
   color: #333;
@@ -310,7 +309,15 @@ body, html {
   transition: width 0.3s ease;
 }
 
+/* NEW: Bottom sections container */
+.cashier-bottom-sections {
+  display: flex;
+  gap: 24px;
+}
+
+/* UPDATED: Cancelled section - now half width */
 .cashier-cancelled-section {
+  flex: 1;
   background: #fff;
   border-radius: 16px;
   padding: 24px;
@@ -320,7 +327,20 @@ body, html {
   overflow-y: auto;
 }
 
-.cashier-cancelled-table-container {
+/* NEW: Spillage section - matching cancelled section */
+.cashier-spillage-section {
+  flex: 1;
+  background: #fff;
+  border-radius: 16px;
+  padding: 24px;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.08);
+  border: 1px solid rgba(75, 146, 157, 0.1);
+  height: 500px;
+  overflow-y: auto;
+}
+
+.cashier-cancelled-table-container,
+.cashier-spillage-table-container {
   margin-top: 12px;
 }
 
@@ -768,6 +788,10 @@ body, html {
   
   .cashier-sales-side {
     order: -1;
+  }
+  
+  .cashier-bottom-sections {
+    flex-direction: column;
   }
 }
 

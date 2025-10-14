@@ -1,4 +1,4 @@
-# FILE: cancelled_orders.py - UPDATED WITH PRODUCT/MERCHANDISE FILTER
+# FILE: cancelled_orders.py - FINAL UPDATE TO CORRECTLY FETCH REFUNDED ORDERS
 
 from fastapi import APIRouter, HTTPException, status, Depends
 from fastapi.security import OAuth2PasswordBearer
@@ -35,7 +35,7 @@ async def get_current_active_user(token: str = Depends(oauth2_scheme)):
             response = await client.get(USER_SERVICE_ME_URL, headers={"Authorization": f"Bearer {token}"})
             response.raise_for_status()
             user_data = response.json()
-            user_data['access_token'] = token 
+            user_data['access_token'] = token
             return user_data
         except httpx.HTTPStatusError as e:
             raise HTTPException(status_code=e.response.status_code, detail=f"Invalid token or user not found: {e.response.text}", headers={"WWW-Authenticate": "Bearer"})
@@ -64,8 +64,9 @@ class ProcessingOrder(BaseModel):
 
 class CancelledOrderRequest(BaseModel):
     cashierName: str
+    date: str
     orderType: Optional[str] = "All"
-    productType: Optional[str] = "All"  # NEW: Product type filter
+    productType: Optional[str] = "All"
 
 # --- Helper to generate WHERE clause for product types ---
 def get_product_type_condition(product_type: str) -> str:
@@ -73,15 +74,15 @@ def get_product_type_condition(product_type: str) -> str:
         return "AND si.Category != 'merchandise'"
     elif product_type == "Merchandise":
         return "AND si.Category = 'merchandise'"
-    return ""  # For 'All'
+    return ""
 
-# --- Endpoint to Get Today's Cancelled Orders for a Cashier ---
+# --- Endpoint to Get Cancelled and Refunded Orders by Date ---
 @router_cancelled_order.post(
-    "/today",
+    "/by_date",
     response_model=List[ProcessingOrder],
-    summary="Get Today's Cancelled Orders for a Specific Cashier, with optional order type and product type filters"
+    summary="Get Cancelled and Refunded Orders for a Specific Cashier and Date"
 )
-async def get_todays_cancelled_orders(
+async def get_cancelled_and_refunded_orders_by_date(
     request: CancelledOrderRequest,
     current_user: dict = Depends(get_current_active_user)
 ):
@@ -91,52 +92,53 @@ async def get_todays_cancelled_orders(
             status_code=status.HTTP_403_FORBIDDEN,
             detail="You do not have permission to view this data."
         )
-    
+
     conn = None
     try:
         conn = await get_db_connection()
         async with conn.cursor() as cursor:
-            
+
+            # UPDATED: Removed the JOIN to CancelledOrders and now using s.UpdatedAt for date filtering.
             base_sql = """
                 SELECT
                     s.SaleID, s.OrderType, s.PaymentMethod, s.CreatedAt, s.CashierName,
-                    s.TotalDiscountAmount, s.Status, s.GCashReferenceNumber,
+                    s.TotalDiscountAmount, s.Status, s.GCashReferenceNumber, s.UpdatedAt,
                     si.SaleItemID, si.ItemName, si.Quantity, si.UnitPrice, si.Category
                 FROM Sales AS s
-                JOIN CancelledOrders AS co ON s.SaleID = co.SaleID
                 LEFT JOIN SaleItems AS si ON s.SaleID = si.SaleID
-                WHERE s.Status = 'cancelled'
+                WHERE s.Status IN ('cancelled', 'refunded')
                 AND s.CashierName = ?
-                AND CAST(co.CancelledAt AS DATE) = CAST(GETDATE() AS DATE)
+                AND CAST(s.UpdatedAt AS DATE) = ?
             """
-            
-            params = [request.cashierName]
-            
-            # Add order type filter condition
+
+            params = [request.cashierName, request.date]
+
             if request.orderType == "Store":
                 base_sql += " AND s.OrderType IN ('Dine in', 'Take out')"
             elif request.orderType == "Online":
                 base_sql += " AND s.OrderType IN ('Pick up', 'Delivery')"
-            
-            # NEW: Add product type filter condition
+
             product_type_condition = get_product_type_condition(request.productType)
             base_sql += product_type_condition
-                
-            final_sql = base_sql + " ORDER BY co.CancelledAt DESC;"
-            
+
+            # UPDATED: Ordering by the update timestamp from the Sales table.
+            final_sql = base_sql + " ORDER BY s.UpdatedAt DESC;"
+
             await cursor.execute(final_sql, *params)
             rows = await cursor.fetchall()
-            
+
             orders_dict: Dict[int, dict] = {}
             item_subtotals: Dict[int, Decimal] = {}
-            
+
             for row in rows:
                 sale_id = row.SaleID
                 if sale_id not in orders_dict:
                     item_subtotals[sale_id] = Decimal('0.0')
+                    # Use UpdatedAt for the displayed time of the event (cancellation/refund)
+                    event_time = row.UpdatedAt or row.CreatedAt
                     orders_dict[sale_id] = {
                         "id": f"SO-{sale_id}",
-                        "date": row.CreatedAt.strftime("%B %d, %Y %I:%M %p"),
+                        "date": event_time.strftime("%B %d, %Y %I:%M %p"),
                         "status": row.Status,
                         "orderType": row.OrderType,
                         "paymentMethod": row.PaymentMethod,
@@ -146,16 +148,16 @@ async def get_todays_cancelled_orders(
                         "orderItems": [],
                         "_totalDiscount": row.TotalDiscountAmount,
                     }
-                
+
                 if row.SaleItemID:
                     item_quantity = row.Quantity or 0
                     item_price = row.UnitPrice or Decimal('0.0')
                     orders_dict[sale_id]["items"] += item_quantity
                     item_total = item_price * item_quantity
-                    
+
                     addons_data = {}
                     addons_total_price = Decimal('0.0')
-                    
+
                     addons_sql = """
                         SELECT a.AddonName, a.Price, sia.Quantity
                         FROM SaleItemAddons sia
@@ -164,7 +166,7 @@ async def get_todays_cancelled_orders(
                     """
                     await cursor.execute(addons_sql, row.SaleItemID)
                     addon_rows = await cursor.fetchall()
-                    
+
                     for addon_row in addon_rows:
                         addon_price = Decimal(str(addon_row.Price)) * addon_row.Quantity
                         addons_total_price += addon_price
@@ -172,9 +174,9 @@ async def get_todays_cancelled_orders(
                             "price": float(addon_row.Price),
                             "quantity": addon_row.Quantity
                         }
-                    
+
                     item_subtotals[sale_id] += item_total + addons_total_price
-                    
+
                     orders_dict[sale_id]["orderItems"].append(
                         ProcessingSaleItem(
                             name=row.ItemName,
@@ -192,13 +194,11 @@ async def get_todays_cancelled_orders(
                 final_total = subtotal - total_discount
                 order_data["total"] = float(final_total)
                 response_list.append(ProcessingOrder(**order_data))
-            
+
             return response_list
 
     except Exception as e:
-        logger.error(f"Error fetching today's cancelled orders for {request.cashierName}: {e}", exc_info=True)
-        raise HTTPException(status_code=500, detail="Failed to fetch today's cancelled orders.")
+        logger.error(f"Error fetching cancelled/refunded orders for {request.cashierName} on {request.date}: {e}", exc_info=True)
+        raise HTTPException(status_code=500, detail="Failed to fetch cancelled/refunded orders.")
     finally:
         if conn: await conn.close()
-
-

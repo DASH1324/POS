@@ -215,50 +215,34 @@ async def log_spillage(
 
 
 @router.get("/", response_model=List[SpillageOut])
-async def get_all_spillages(
-    token: str = Depends(oauth2_scheme),
-    start_date: Optional[date] = None,
-    end_date: Optional[date] = None,
-    cashier_name: Optional[str] = None
+async def get_spillage_for_cashier_by_date(
+    cashier_name: str,
+    date: date, 
+    token: str = Depends(oauth2_scheme)
 ):
     """
-    Get all spillage records with optional filters.
+    Get all spillage records for a specific cashier, filtered by a specific date.
     """
     await validate_token_and_roles(token, ["admin", "manager", "cashier"])
-    
-    conn = await get_db_connection()
+
+    conn = None
     try:
+        conn = await get_db_connection()
         async with conn.cursor() as cursor:
-            # Build dynamic query based on filters
             query = """
                 SELECT 
                     SpillageID, CashierName, SpillageDate, ProductName, 
                     Category, Quantity, Reason, LoggedAt
                 FROM ProductSpillage
-                WHERE 1=1
+                WHERE CashierName = ? AND CAST(SpillageDate AS DATE) = ?
+                ORDER BY LoggedAt DESC
             """
-            params = []
             
-            if start_date:
-                query += " AND SpillageDate >= ?"
-                params.append(start_date)
-            
-            if end_date:
-                query += " AND SpillageDate <= ?"
-                params.append(end_date)
-            
-            if cashier_name:
-                query += " AND CashierName = ?"
-                params.append(cashier_name)
-            
-            query += " ORDER BY LoggedAt DESC"
-            
-            await cursor.execute(query, params)
+            await cursor.execute(query, (cashier_name, date))
             rows = await cursor.fetchall()
             
-            result = []
-            for row in rows:
-                result.append(SpillageOut(
+            return [
+                SpillageOut(
                     spillage_id=row.SpillageID,
                     cashier_name=row.CashierName,
                     spillage_date=row.SpillageDate,
@@ -267,71 +251,18 @@ async def get_all_spillages(
                     quantity=row.Quantity,
                     reason=row.Reason,
                     logged_at=row.LoggedAt
-                ))
-            
-            return result
-            
+                ) for row in rows
+            ]
+
     except Exception as e:
-        logger.error(f"Error fetching spillages: {e}")
+        logger.error(f"Error fetching spillage list for cashier {cashier_name}: {e}", exc_info=True)
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Error fetching spillages: {str(e)}"
+            detail=f"Error fetching spillage records: {str(e)}"
         )
     finally:
-        await conn.close()
-
-
-@router.get("/{spillage_id}", response_model=SpillageOut)
-async def get_spillage_by_id(
-    spillage_id: int,
-    token: str = Depends(oauth2_scheme)
-):
-    """
-    Get a specific spillage record by ID.
-    """
-    await validate_token_and_roles(token, ["admin", "manager", "cashier"])
-    
-    conn = await get_db_connection()
-    try:
-        async with conn.cursor() as cursor:
-            query = """
-                SELECT 
-                    SpillageID, CashierName, SpillageDate, ProductName, 
-                    Category, Quantity, Reason, LoggedAt
-                FROM ProductSpillage
-                WHERE SpillageID = ?
-            """
-            
-            await cursor.execute(query, (spillage_id,))
-            row = await cursor.fetchone()
-            
-            if not row:
-                raise HTTPException(
-                    status_code=status.HTTP_404_NOT_FOUND,
-                    detail=f"Spillage record with ID {spillage_id} not found"
-                )
-            
-            return SpillageOut(
-                spillage_id=row.SpillageID,
-                cashier_name=row.CashierName,
-                spillage_date=row.SpillageDate,
-                product_name=row.ProductName,
-                category=row.Category,
-                quantity=row.Quantity,
-                reason=row.Reason,
-                logged_at=row.LoggedAt
-            )
-            
-    except HTTPException:
-        raise
-    except Exception as e:
-        logger.error(f"Error fetching spillage: {e}")
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Error fetching spillage: {str(e)}"
-        )
-    finally:
-        await conn.close()
+        if conn:
+            await conn.close()
 
 
 @router.delete("/{spillage_id}")

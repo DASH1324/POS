@@ -136,7 +136,6 @@ export const AddonsModal = ({
   );
 };
 
-// UPDATED: DiscountsModal with single discount lock
 export const DiscountsModal = ({
   showDiscountsModal,
   closeDiscountsModal,
@@ -216,7 +215,6 @@ export const DiscountsModal = ({
               const subtotal = getSubtotal();
               const isEligible = !discount.minAmount || subtotal >= discount.minAmount;
               
-              // NEW: Disable all other discounts when one is selected
               const isDisabled = !isEligible || (stagedDiscounts.length > 0 && !isStaged);
               
               return (
@@ -240,7 +238,6 @@ export const DiscountsModal = ({
                       {!isEligible && discount.minAmount && (
                         <span className="cDiscount-min-requirement"> (Min. ₱{discount.minAmount})</span>
                       )}
-                      {/* NEW: Show message when another discount is already selected */}
                       {stagedDiscounts.length > 0 && !isStaged && isEligible && (
                         <span className="cDiscount-min-requirement"> (Only one discount allowed)</span>
                       )}
@@ -275,6 +272,7 @@ export const DiscountsModal = ({
   );
 };
 
+// --- [UPDATE START] ---
 export const TransactionSummaryModal = ({
   showTransactionSummary,
   setShowTransactionSummary,
@@ -285,17 +283,28 @@ export const TransactionSummaryModal = ({
   availableDiscounts,
   getTotalAddonsPrice,
   getSubtotal,
-  getDiscount,
+  promotionalDiscountValue, // Changed from getDiscount
+  manualDiscountValue,      // Added
+  autoPromotion,            // Added
   getTotal,
   confirmTransaction,
   isProcessing
 }) => {
+// --- [UPDATE END] ---
   if (!showTransactionSummary) return null;
 
-  const getAppliedDiscountNames = () => appliedDiscounts.map(discountId => {
-    const discount = availableDiscounts.find(d => d.id === discountId);
-    return discount ? discount.name : '';
-  }).filter(name => name !== '');
+  // --- [UPDATE START] ---
+  const allAppliedDiscountNames = [];
+  if (autoPromotion) {
+      allAppliedDiscountNames.push(autoPromotion.name);
+  }
+  const manualDiscountNames = appliedDiscounts.map(discountId => {
+      const discount = availableDiscounts.find(d => d.id === discountId);
+      return discount ? discount.name : '';
+  }).filter(Boolean);
+
+  allAppliedDiscountNames.push(...manualDiscountNames);
+  // --- [UPDATE END] ---
 
   return (
     <div className="trnsSummary-modal-overlay" onClick={() => setShowTransactionSummary(false)}>
@@ -324,18 +333,18 @@ export const TransactionSummaryModal = ({
                   <div className="trnsSummary-item-header">
                     <span className="trnsSummary-item-name">{item.name}</span>
                     <span className="trnsSummary-item-total">
-                      ₱{((item.price + getTotalAddonsPrice(item.addons)) * item.quantity).toFixed(0)}
+                      ₱{((item.price + getTotalAddonsPrice(item.addons)) * item.quantity).toFixed(2)}
                     </span>
                   </div>
                   <div className="trnsSummary-item-details">
                     <span className="trnsSummary-quantity">Qty: {item.quantity}</span>
-                    <span className="trnsSummary-base-price">₱{item.price.toFixed(0)} each</span>
+                    <span className="trnsSummary-base-price">₱{item.price.toFixed(2)} each</span>
                   </div>
                   {item.addons && item.addons.length > 0 && (
                     <div className="trnsSummary-item-addons">
                       {item.addons.map(addon => (
                         <span key={addon.addonId}>
-                          • {addon.quantity} {addon.addonName} (+₱{(addon.price * addon.quantity).toFixed(0)})
+                          • {addon.quantity} {addon.addonName} (+₱{(addon.price * addon.quantity).toFixed(2)})
                         </span>
                       ))}
                     </div>
@@ -345,12 +354,13 @@ export const TransactionSummaryModal = ({
             </div>
           </div>
           
-          {appliedDiscounts.length > 0 && (
+          {/* --- [UPDATE START] --- */}
+          {allAppliedDiscountNames.length > 0 && (
             <div className="trnsSummary-applied-discounts">
               <div className="trnsSummary-applied-discounts-header">
                 <h4>Applied Discounts</h4>
                 <div className="trnsSummary-applied-discounts-list">
-                  {getAppliedDiscountNames().map((discountName, index) => (
+                  {allAppliedDiscountNames.map((discountName, index) => (
                     <div key={index} className="trnsSummary-discount-item-summary">
                       <FontAwesomeIcon icon={faPercent} />
                       <span>{discountName}</span>
@@ -364,19 +374,29 @@ export const TransactionSummaryModal = ({
           <div className="trnsSummary-price-breakdown">
             <div className="trnsSummary-breakdown-row">
               <span>Subtotal:</span>
-              <span>₱{getSubtotal().toFixed(0)}</span>
+              <span>₱{getSubtotal().toFixed(2)}</span>
             </div>
-            {getDiscount() > 0 && (
-              <div className="trnsSummary-breakdown-row trnsSummary-discount">
-                <span>Discount:</span>
-                <span>-₱{getDiscount().toFixed(0)}</span>
-              </div>
+
+            {promotionalDiscountValue > 0 && (
+                <div className="trnsSummary-breakdown-row trnsSummary-discount">
+                    <span>Promotional Discount:</span>
+                    <span>-₱{promotionalDiscountValue.toFixed(2)}</span>
+                </div>
             )}
+
+            {manualDiscountValue > 0 && (
+                <div className="trnsSummary-breakdown-row trnsSummary-discount">
+                    <span>Discount:</span>
+                    <span>-₱{manualDiscountValue.toFixed(2)}</span>
+                </div>
+            )}
+            
             <div className="trnsSummary-breakdown-row trnsSummary-total">
               <span>Total Amount:</span>
-              <span>₱{getTotal().toFixed(0)}</span>
+              <span>₱{getTotal().toFixed(2)}</span>
             </div>
           </div>
+          {/* --- [UPDATE END] --- */}
         </div>
         <div className="trnsSummary-confirmation-section">
           <div className="trnsSummary-modal-footer-transaction">

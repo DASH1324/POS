@@ -23,7 +23,8 @@ const CartPanel = ({
   setOrderType,
   paymentMethod,
   setPaymentMethod,
-  getDynamicMaxQuantity
+  getDynamicMaxQuantity,
+  promotions = [] // Accept promotions as a prop
 }) => {
   // Component states
   const [showAddonsModal, setShowAddonsModal] = useState(false);
@@ -43,7 +44,10 @@ const CartPanel = ({
   const [error, setError] = useState(null);
   const [showConfirmation, setShowConfirmation] = useState(false);
 
-  // NEW: Recalculate max quantities whenever cart changes
+  // --- STATE FOR AUTOMATIC PROMOTIONS ---
+  const [autoPromotion, setAutoPromotion] = useState(null);
+
+  // Recalculate max quantities whenever cart changes
   useEffect(() => {
     const updateMaxQuantities = async () => {
       if (cartItems.length === 0) return;
@@ -67,6 +71,7 @@ const CartPanel = ({
     updateMaxQuantities();
   }, [cartItems.length, cartItems.map(i => i.quantity).join(',')]);
 
+  // Fetch manual discounts from the discounts service
   useEffect(() => {
     const fetchDiscounts = async () => {
       if (!isCartOpen) return;
@@ -109,6 +114,114 @@ const CartPanel = ({
     fetchDiscounts();
   }, [isCartOpen]);
 
+  // --- AUTOMATIC PROMOTION CALCULATION (CORRECTED) ---
+  useEffect(() => {
+    const calculateBestPromotion = () => {
+        let bestPromo = null;
+        let maxDiscount = 0;
+
+        if (!cartItems.length || !promotions.length) {
+            setAutoPromotion(null);
+            return;
+        }
+
+        const parsedPromotions = promotions.map(p => {
+            const promo = { ...p, original: p };
+            if (p.type.startsWith('BOGO')) {
+                promo.promotionType = 'bogo';
+                const matches = p.type.match(/(\d+)\+(\d+)/);
+                if (matches) {
+                    promo.buyQuantity = parseInt(matches[1], 10);
+                    promo.getQuantity = parseInt(matches[2], 10);
+                }
+                const valueMatch = p.value.match(/(\d+\.?\d*)/);
+                if (valueMatch) {
+                    promo.discountValue = parseFloat(valueMatch[0]);
+                    promo.bogoDiscountType = p.value.includes('%') ? 'percentage' : 'fixed_amount';
+                }
+                promo.selectedProducts = p.products.split(',').map(name => name.trim());
+            } else if (p.type.toUpperCase() === 'PERCENTAGE') {
+                 promo.promotionType = 'percentage';
+                 promo.promotionValue = parseFloat(p.value.replace('%', ''));
+                 promo.selectedProducts = p.products.split(',').map(name => name.trim());
+            } else if (p.type.toUpperCase() === 'FIXED') {
+                 promo.promotionType = 'fixed';
+                 promo.promotionValue = parseFloat(p.value.replace('₱', ''));
+                 promo.selectedProducts = p.products.split(',').map(name => name.trim());
+            }
+            promo.applicationType = p.application_type || 'specific_products';
+            return promo;
+        });
+
+        for (const promo of parsedPromotions) {
+            let currentDiscount = 0;
+            const eligibleItems = cartItems.filter(item => {
+                if (item.type !== 'product') return false;
+                if (promo.applicationType === 'all_products') return true;
+                if (promo.applicationType === 'specific_categories' && promo.selectedProducts.includes(item.category)) return true;
+                if (promo.applicationType === 'specific_products' && promo.selectedProducts.includes(item.name)) return true;
+                return false;
+            });
+
+            if (!eligibleItems.length) continue;
+
+            if (promo.promotionType === 'percentage' || promo.promotionType === 'fixed') {
+                const itemToDiscount = eligibleItems.sort((a, b) => b.price - a.price)[0];
+                if (promo.promotionType === 'percentage') {
+                    currentDiscount = parseFloat(itemToDiscount.price) * (parseFloat(promo.promotionValue) / 100);
+                } else {
+                    currentDiscount = Math.min(parseFloat(itemToDiscount.price), parseFloat(promo.promotionValue));
+                }
+            } else if (promo.promotionType === 'bogo') {
+                const buyItemName = promo.selectedProducts[0];
+                const getItemName = promo.selectedProducts.length > 1 ? promo.selectedProducts[1] : buyItemName;
+
+                if (buyItemName === getItemName) {
+                    const itemInCart = cartItems.find(item => item.name === buyItemName);
+                    if (!itemInCart || !promo.buyQuantity || !promo.getQuantity) continue;
+                    const bundleSize = promo.buyQuantity + promo.getQuantity;
+                    const numBundles = Math.floor(itemInCart.quantity / bundleSize);
+                    const itemsToDiscountCount = numBundles * promo.getQuantity;
+                    if (itemsToDiscountCount > 0) {
+                       const itemPrice = itemInCart.price;
+                       if (promo.bogoDiscountType === 'percentage') {
+                           currentDiscount = itemsToDiscountCount * (itemPrice * (promo.discountValue / 100));
+                       } else {
+                           const discountPerItem = Math.min(itemPrice, promo.discountValue);
+                           currentDiscount = itemsToDiscountCount * discountPerItem;
+                       }
+                    }
+                } else {
+                    const buyItemsInCart = cartItems.find(item => item.name === buyItemName);
+                    const getItemsInCart = cartItems.find(item => item.name === getItemName);
+                    if (!buyItemsInCart || !getItemsInCart || !promo.buyQuantity) continue;
+                    const bogoSets = Math.floor(buyItemsInCart.quantity / promo.buyQuantity);
+                    const eligibleGetItems = bogoSets * promo.getQuantity;
+                    const itemsToDiscountCount = Math.min(getItemsInCart.quantity, eligibleGetItems);
+                    if (itemsToDiscountCount > 0) {
+                        const getItemPrice = getItemsInCart.price;
+                        if (promo.bogoDiscountType === 'percentage') {
+                            currentDiscount = itemsToDiscountCount * (getItemPrice * (promo.discountValue / 100));
+                        } else {
+                            const discountPerItem = Math.min(getItemPrice, promo.discountValue);
+                            currentDiscount = itemsToDiscountCount * discountPerItem;
+                        }
+                    }
+                }
+            }
+
+            if (currentDiscount > maxDiscount) {
+                maxDiscount = currentDiscount;
+                bestPromo = { ...promo.original, discountAmount: maxDiscount };
+            }
+        }
+        setAutoPromotion(bestPromo);
+    };
+
+    calculateBestPromotion();
+  }, [cartItems, promotions, isCartOpen]);
+
+
   const isDiscountApplicable = (discount) => {
     const subtotal = getSubtotal();
     if (subtotal < discount.minAmount) return false;
@@ -123,18 +236,15 @@ const CartPanel = ({
   const openAddonsModal = async (itemIndex) => {
     const item = cartItems[itemIndex];
     if (!item || !item.id) return;
-
     setSelectedItemIndex(itemIndex);
     setIsAddonsLoading(true);
     setShowAddonsModal(true);
-
     const token = localStorage.getItem('authToken');
     try {
         const response = await fetch(`${PRODUCTS_API_URL}/is_products/products/${item.id}/available_addons`, {
             headers: { 'Authorization': `Bearer ${token}` }
         });
         if (!response.ok) throw new Error('Could not fetch add-ons.');
-        
         const data = await response.json();
         setAvailableAddons(data);
         setAddons(item.addons || []);
@@ -169,16 +279,12 @@ const CartPanel = ({
     setStagedDiscounts([]);
   };
 
-  // UPDATED: Only allow ONE discount at a time
   const toggleStagedDiscount = (discountId) => {
     const discount = availableDiscounts.find(d => d.id === discountId);
     if (!discount || !isDiscountApplicable(discount)) return;
-    
-    // If this discount is already selected, remove it
     if (stagedDiscounts.includes(discountId)) {
       setStagedDiscounts([]);
     } else {
-      // Otherwise, replace all discounts with this one (only one at a time)
       setStagedDiscounts([discountId]);
     }
   };
@@ -213,7 +319,7 @@ const CartPanel = ({
       setCartItems([]);
       setAppliedDiscounts([]);
       setStagedDiscounts([]);
-      setAvailableDiscounts([]);
+      setAutoPromotion(null);
       setPaymentMethod('Cash');
       setOrderType('Dine in');
     }
@@ -223,86 +329,60 @@ const CartPanel = ({
     if (!Array.isArray(itemAddons)) return 0;
     return itemAddons.reduce((total, addon) => total + (addon.price * addon.quantity), 0);
   };
-  
-  const getSubtotal = () => cartItems.reduce((acc, item) => (acc + (item.price * item.quantity) + (getTotalAddonsPrice(item.addons) * item.quantity)), 0);
 
-  // UPDATED: Only applies to ONE item (highest price)
-  const calculateDiscount = (discountList) => {
+  const getTotalAddonsCost = () => cartItems.reduce((acc, item) => acc + (getTotalAddonsPrice(item.addons) * item.quantity), 0);
+
+  const getSubtotal = () => cartItems.reduce((acc, item) => acc + (item.price * item.quantity), 0);
+
+  const calculateManualDiscount = (discountList) => {
     const subtotal = getSubtotal();
-    
-    // Only allow one discount at a time
     if (discountList.length === 0) return 0;
-    const discountId = discountList[0]; // Take only the first discount
-    
+    const discountId = discountList[0];
     const discount = availableDiscounts.find(d => d.id === discountId);
     if (!discount || !isDiscountApplicable(discount)) return 0;
-    
     let eligibleItemPrice = 0;
-    
-    // Find the highest-priced eligible item
-    switch (discount.applicationType) {
-      case 'all_products':
-        // Find the single highest-priced item in cart
-        const highestItem = cartItems.reduce((highest, item) => {
-          const itemPrice = item.price + getTotalAddonsPrice(item.addons);
-          const highestPrice = highest ? highest.price + getTotalAddonsPrice(highest.addons) : 0;
-          return itemPrice > highestPrice ? item : highest;
-        }, null);
-        
-        if (highestItem) {
-          eligibleItemPrice = highestItem.price + getTotalAddonsPrice(highestItem.addons);
-        }
-        break;
-        
-      case 'specific_products':
-        // Find highest-priced item that matches the specific products
-        const matchingProduct = cartItems
-          .filter(item => discount.applicableProducts.includes(item.name))
-          .reduce((highest, item) => {
-            const itemPrice = item.price + getTotalAddonsPrice(item.addons);
-            const highestPrice = highest ? highest.price + getTotalAddonsPrice(highest.addons) : 0;
-            return itemPrice > highestPrice ? item : highest;
-          }, null);
-        
-        if (matchingProduct) {
-          eligibleItemPrice = matchingProduct.price + getTotalAddonsPrice(matchingProduct.addons);
-        }
-        break;
-        
-      case 'specific_categories':
-        // Find highest-priced item in matching categories
-        const matchingCategory = cartItems
-          .filter(item => discount.applicableCategories.includes(item.category))
-          .reduce((highest, item) => {
-            const itemPrice = item.price + getTotalAddonsPrice(item.addons);
-            const highestPrice = highest ? highest.price + getTotalAddonsPrice(highest.addons) : 0;
-            return itemPrice > highestPrice ? item : highest;
-          }, null);
-        
-        if (matchingCategory) {
-          eligibleItemPrice = matchingCategory.price + getTotalAddonsPrice(matchingCategory.addons);
-        }
-        break;
-        
-      default:
-        eligibleItemPrice = 0;
+    let highestPricedItem = null;
+    if (discount.applicationType === 'all_products') {
+        highestPricedItem = cartItems.reduce((highest, item) => (!highest || item.price > highest.price ? item : highest), null);
+    } else if (discount.applicationType === 'specific_products') {
+        highestPricedItem = cartItems.filter(item => discount.applicableProducts.includes(item.name)).reduce((highest, item) => (!highest || item.price > highest.price ? item : highest), null);
+    } else if (discount.applicationType === 'specific_categories') {
+        highestPricedItem = cartItems.filter(item => discount.applicableCategories.includes(item.category)).reduce((highest, item) => (!highest || item.price > highest.price ? item : highest), null);
     }
-    
-    // Calculate discount on the single eligible item
+    if (highestPricedItem) {
+        eligibleItemPrice = highestPricedItem.price + getTotalAddonsPrice(highestPricedItem.addons);
+    }
     let discountAmount = 0;
     if (discount.type === 'percentage') {
       discountAmount = (eligibleItemPrice * parseFloat(discount.value)) / 100;
     } else if (discount.type === 'fixed') {
       discountAmount = Math.min(parseFloat(discount.value), eligibleItemPrice);
     }
-    
-    // Don't exceed subtotal
     return Math.min(discountAmount, subtotal);
   };
 
-  const getDiscount = () => calculateDiscount(appliedDiscounts);
-  const getStagedDiscount = () => calculateDiscount(stagedDiscounts);
-  const getTotal = () => Math.max(0, getSubtotal() - getDiscount());
+  const manualDiscountValue = calculateManualDiscount(appliedDiscounts);
+  const isManualDiscountActive = appliedDiscounts.length > 0;
+  
+  const promotionalDiscountValue = autoPromotion?.discountAmount || 0;
+  
+  const getAppliedDiscountNames = () => appliedDiscounts.map(id => availableDiscounts.find(d => d.id === id)?.name).filter(Boolean);
+
+  const getActiveDiscountName = () => {
+    const names = [];
+    if (autoPromotion) {
+        names.push(autoPromotion.name);
+    }
+    if (isManualDiscountActive) {
+        names.push(...getAppliedDiscountNames());
+    }
+    return names.join(', ');
+  };
+  
+  const getTotal = () => {
+    const total = getSubtotal() + getTotalAddonsCost() - manualDiscountValue - promotionalDiscountValue;
+    return Math.max(0, parseFloat(total.toFixed(2)));
+  };
 
   const checkQuantityConflicts = async (cartItemToIncrease, simulatedCart) => {
     const token = localStorage.getItem('authToken');
@@ -310,27 +390,19 @@ const CartPanel = ({
       console.error('No auth token found');
       return { canAdd: true, conflicts: [] };
     }
-
     try {
       const response = await fetch(
         `${PRODUCTS_API_URL}/is_products/products/check-quantity-increase`,
         {
           method: 'POST',
-          headers: {
-            'Authorization': `Bearer ${token}`,
-            'Content-Type': 'application/json'
-          },
-          body: JSON.stringify({
-            cart_items: simulatedCart
-          })
+          headers: { 'Authorization': `Bearer ${token}`, 'Content-Type': 'application/json' },
+          body: JSON.stringify({ cart_items: simulatedCart })
         }
       );
-
       if (!response.ok) {
         console.error('Failed to check conflicts');
         return { canAdd: true, conflicts: [] };
       }
-
       return await response.json();
     } catch (error) {
       console.error('Error checking conflicts:', error);
@@ -341,46 +413,25 @@ const CartPanel = ({
   const updateQuantity = async (index, amount) => {
     const currentItem = cartItems[index];
     const newQuantity = currentItem.quantity + amount;
-    
     if (amount > 0 && currentItem.type === 'product') {
-      const simulatedCart = cartItems.map((item, i) => {
-        if (i === index) {
-          return { ...item, quantity: newQuantity };
-        }
-        return item;
-      });
-      
+      const simulatedCart = cartItems.map((item, i) => i === index ? { ...item, quantity: newQuantity } : item);
       const conflictCheck = await checkQuantityConflicts(currentItem, simulatedCart);
-      
       if (!conflictCheck.canAdd) {
-        const conflictMessages = conflictCheck.conflicts.map(c => 
-          `• ${c.type.toUpperCase()}: ${c.name}\n  Needs ${c.needed}, only ${c.available} available\n  Conflicts with: "${c.conflictsWith}"`
-        ).join('\n\n');
-        
+        const conflictMessages = conflictCheck.conflicts.map(c => `• ${c.type.toUpperCase()}: ${c.name}\n  Needs ${c.needed}, only ${c.available} available\n  Conflicts with: "${c.conflictsWith}"`).join('\n\n');
         alert(`❌ Cannot increase quantity for "${currentItem.name}".\n\nShared limited resources:\n\n${conflictMessages}`);
         return;
       }
     }
-
     setCartItems(prev => {
       const updated = [...prev];
-      
-      if (amount > 0 && currentItem.maxQuantity) {
-        if (newQuantity > currentItem.maxQuantity) {
-          alert(`Maximum quantity of ${currentItem.maxQuantity} reached for ${currentItem.name}. ${currentItem.limitedBy || ''}`);
-          return prev;
-        }
+      if (amount > 0 && currentItem.maxQuantity && newQuantity > currentItem.maxQuantity) {
+        alert(`Maximum quantity of ${currentItem.maxQuantity} reached for ${currentItem.name}. ${currentItem.limitedBy || ''}`);
+        return prev;
       }
-      
       if (newQuantity <= 0) {
         return updated.filter((_, i) => i !== index);
       } else {
-        const updatedItem = {
-          ...currentItem,
-          quantity: newQuantity
-        };
-        
-        updated[index] = updatedItem;
+        updated[index] = { ...currentItem, quantity: newQuantity };
         return updated;
       }
     });
@@ -410,6 +461,8 @@ const CartPanel = ({
     confirmTransaction(reference);
   };
 
+  // --- [UPDATE START] ---
+  // The `confirmTransaction` function is updated to send the correct data structure to the backend.
   const confirmTransaction = async (gcashRef = null) => {
     setIsProcessing(true);
     setError(null);
@@ -419,10 +472,17 @@ const CartPanel = ({
         setIsProcessing(false);
         return;
     }
-    const appliedDiscountNames = appliedDiscounts.map(id => availableDiscounts.find(d => d.id === id)?.name).filter(Boolean);
+    
+    // This is the data structure that matches the updated pos_router.py
     const saleData = {
         cartItems: cartItems.map(item => ({...item, addons: item.addons || [] })),
-        orderType, paymentMethod, appliedDiscounts: appliedDiscountNames, gcashReference: gcashRef
+        orderType, 
+        paymentMethod, 
+        // `appliedDiscounts` now only sends the names of manual discounts
+        appliedDiscounts: getAppliedDiscountNames(),
+        // `promotionalDiscountAmount` is a new field that sends the calculated promo value
+        promotionalDiscountAmount: promotionalDiscountValue,
+        gcashReference: gcashRef
     };
 
     try {
@@ -445,15 +505,11 @@ const CartPanel = ({
         setIsProcessing(false);
     }
   };
-
-  const getAppliedDiscountNames = () => appliedDiscounts.map(id => availableDiscounts.find(d => d.id === id)?.name).filter(Boolean);
+  // --- [UPDATE END] ---
 
   const getAddonsSummary = (itemAddons, quantity = 1) => {
     if (!Array.isArray(itemAddons) || itemAddons.length === 0) return null;
-    return itemAddons.map(addon => {
-      const totalAddonQuantity = addon.quantity * quantity;
-      return `+${totalAddonQuantity} ${addon.addonName}`;
-    }).join(', ');
+    return itemAddons.map(addon => `+${addon.quantity * quantity} ${addon.addonName}`).join(', ');
   };
 
   return (
@@ -471,43 +527,24 @@ const CartPanel = ({
                             <img src={item.image} alt={item.name} />
                             <div className="item-details">
                                 <div className="item-name">{item.name}</div>
-                                
                                 {item.maxQuantity && item.quantity >= item.maxQuantity * 0.8 && (
                                     <div className="max-qty-warning" style={{fontSize: '11px', color: '#ff9800', marginTop: '2px'}}>
                                         Max: {item.maxQuantity} {item.limitedBy ? `(${item.limitedBy})` : ''}
                                     </div>
                                 )}
-                                
-                                {item.hasAddons && (
-                                    <div className="addons-link" onClick={() => openAddonsModal(index)}>Add ons</div>
-                                )}
-                                
-                                {item.addons && item.addons.length > 0 && (
-                                    <div className="addons-summary">
-                                        <span>{getAddonsSummary(item.addons, item.quantity)}</span>
-                                    </div>
-                                )}
-
+                                {item.hasAddons && (<div className="addons-link" onClick={() => openAddonsModal(index)}>Add ons</div>)}
+                                {item.addons && item.addons.length > 0 && (<div className="addons-summary"><span>{getAddonsSummary(item.addons, item.quantity)}</span></div>)}
                                 <div className="flex-spacer" />
                                 <div className="qty-price">
                                     <button onClick={() => updateQuantity(index, -1)}><FiMinus /></button>
                                     <span>{item.quantity}</span>
-                                    <button 
-                                        onClick={() => updateQuantity(index, 1)}
-                                        disabled={item.maxQuantity && item.quantity >= item.maxQuantity}
-                                        style={{
-                                            opacity: item.maxQuantity && item.quantity >= item.maxQuantity ? 0.5 : 1,
-                                            cursor: item.maxQuantity && item.quantity >= item.maxQuantity ? 'not-allowed' : 'pointer'
-                                        }}
-                                    >
+                                    <button onClick={() => updateQuantity(index, 1)} disabled={item.maxQuantity && item.quantity >= item.maxQuantity} style={{ opacity: item.maxQuantity && item.quantity >= item.maxQuantity ? 0.5 : 1, cursor: item.maxQuantity && item.quantity >= item.maxQuantity ? 'not-allowed' : 'pointer' }}>
                                         <FiPlus />
                                     </button>
                                     <span className="item-price">₱{((item.price + getTotalAddonsPrice(item.addons)) * item.quantity).toFixed(0)}</span>
                                 </div>
                             </div>
-                            <button className="remove-item" onClick={() => removeFromCart(index)}>
-                                <FontAwesomeIcon icon={faTrash} />
-                            </button>
+                            <button className="remove-item" onClick={() => removeFromCart(index)}><FontAwesomeIcon icon={faTrash} /></button>
                         </div>
                     ))) : (
                         <div style={{ textAlign: 'center', padding: '80px 20px', color: '#999' }}>
@@ -515,26 +552,45 @@ const CartPanel = ({
                         </div>
                     )}
                 </div>
+                
                 <div className="discount-section">
                     <div className="discount-input-wrapper" onClick={openDiscountsModal}>
-                        <input type="text" placeholder="Discounts and Promotions" value={getAppliedDiscountNames().join(', ')} readOnly />
+                        <input type="text" placeholder="Discounts and Promotions" value={getActiveDiscountName()} readOnly />
                     </div>
                     <div className="summary">
                         <div className="line"><span>Subtotal:</span><span>₱{getSubtotal().toFixed(2)}</span></div>
-                        <div className="line"><span>Discount:</span><span>-₱{getDiscount().toFixed(2)}</span></div>
+
+                        {getTotalAddonsCost() > 0 && (
+                            <div className="line">
+                                <span>Add-ons:</span>
+                                <span>₱{getTotalAddonsCost().toFixed(2)}</span>
+                            </div>
+                        )}
+
+                        {promotionalDiscountValue > 0 && (
+                            <div className="line">
+                                <span>Promotional Discount:</span>
+                                <span>-₱{promotionalDiscountValue.toFixed(2)}</span>
+                            </div>
+                        )}
+
+                        {manualDiscountValue > 0 && (
+                            <div className="line">
+                                <span>Discount:</span>
+                                <span>-₱{manualDiscountValue.toFixed(2)}</span>
+                            </div>
+                        )}
+
                         <hr />
                         <div className="line total"><span>Total:</span><span>₱{getTotal().toFixed(2)}</span></div>
                     </div>
                 </div>
+
                 <div className="payment-section">
                     <h3>Payment Method</h3>
                     <div className="payment-options">
-                        <button className={`cash ${paymentMethod === 'Cash' ? 'active' : ''}`} onClick={() => setPaymentMethod('Cash')}>
-                            <FontAwesomeIcon icon={faMoneyBills} /><span>Cash</span>
-                        </button>
-                        <button className={`gcash ${paymentMethod === 'GCash' ? 'active' : ''}`} onClick={() => setPaymentMethod('GCash')}>
-                            <FontAwesomeIcon icon={faQrcode} /><span>GCash</span>
-                        </button>
+                        <button className={`cash ${paymentMethod === 'Cash' ? 'active' : ''}`} onClick={() => setPaymentMethod('Cash')}><FontAwesomeIcon icon={faMoneyBills} /><span>Cash</span></button>
+                        <button className={`gcash ${paymentMethod === 'GCash' ? 'active' : ''}`} onClick={() => setPaymentMethod('GCash')}><FontAwesomeIcon icon={faQrcode} /><span>GCash</span></button>
                     </div>
                 </div>
                 <button className="process-button" onClick={handleProcessTransaction} disabled={isProcessing}>
@@ -543,58 +599,29 @@ const CartPanel = ({
             </div>
         </div>
 
-        <AddonsModal
-          showAddonsModal={showAddonsModal}
-          closeAddonsModal={closeAddonsModal}
-          addons={addons}
-          availableAddons={availableAddons}
-          isLoading={isAddonsLoading}
-          updateAddons={updateAddons}
-          saveAddons={saveAddons}
-        />
-
-        <DiscountsModal
-          showDiscountsModal={showDiscountsModal}
-          closeDiscountsModal={closeDiscountsModal}
-          isLoading={isLoading}
-          error={error}
-          availableDiscounts={availableDiscounts}
-          stagedDiscounts={stagedDiscounts}
-          toggleStagedDiscount={toggleStagedDiscount}
-          applyDiscounts={applyDiscounts}
-          getStagedDiscount={getStagedDiscount}
-          getSubtotal={getSubtotal}
-          isDiscountApplicable={isDiscountApplicable}
-        />
-
+        <AddonsModal showAddonsModal={showAddonsModal} closeAddonsModal={closeAddonsModal} addons={addons} availableAddons={availableAddons} isLoading={isAddonsLoading} updateAddons={updateAddons} saveAddons={saveAddons} />
+        <DiscountsModal showDiscountsModal={showDiscountsModal} closeDiscountsModal={closeDiscountsModal} isLoading={isLoading} error={error} availableDiscounts={availableDiscounts} stagedDiscounts={stagedDiscounts} toggleStagedDiscount={toggleStagedDiscount} applyDiscounts={applyDiscounts} getStagedDiscount={() => calculateManualDiscount(stagedDiscounts)} getSubtotal={getSubtotal} isDiscountApplicable={isDiscountApplicable} />
+        
         <TransactionSummaryModal
           showTransactionSummary={showTransactionSummary}
           setShowTransactionSummary={setShowTransactionSummary}
           cartItems={cartItems}
           orderType={orderType}
           paymentMethod={paymentMethod}
-          getSubtotal={getSubtotal}
-          getDiscount={getDiscount}
-          getTotal={getTotal}
-          getTotalAddonsPrice={getTotalAddonsPrice}
           appliedDiscounts={appliedDiscounts}
           availableDiscounts={availableDiscounts}
+          getTotalAddonsPrice={getTotalAddonsPrice}
+          getSubtotal={getSubtotal}
+          promotionalDiscountValue={promotionalDiscountValue}
+          manualDiscountValue={manualDiscountValue}
+          autoPromotion={autoPromotion}
+          getTotal={getTotal}
           confirmTransaction={handleConfirmTransaction}
           isProcessing={isProcessing}
         />
-
-        <GCashReferenceModal
-          showGCashReference={showGCashReference}
-          setShowGCashReference={setShowGCashReference}
-          onSubmit={handleGCashSubmit}
-          isProcessing={isProcessing}
-        />
-
-        <OrderConfirmationModal 
-          showConfirmation={showConfirmation}
-          setShowConfirmation={setShowConfirmation}
-          onClose={() => setShowConfirmation(false)}
-        />
+        
+        <GCashReferenceModal showGCashReference={showGCashReference} setShowGCashReference={setShowGCashReference} onSubmit={handleGCashSubmit} isProcessing={isProcessing} />
+        <OrderConfirmationModal showConfirmation={showConfirmation} setShowConfirmation={setShowConfirmation} onClose={() => setShowConfirmation(false)} />
     </>
   );
 };

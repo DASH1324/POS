@@ -17,22 +17,21 @@ import {
   faFilter,
 } from '@fortawesome/free-solid-svg-icons';
 import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
-import jsPDF from 'jspdf';
-import autoTable from 'jspdf-autotable';
+
 
 // API Endpoints
 const SESSION_API_URL = 'http://127.0.0.1:9001/api';
+// UPDATED: Changed API endpoints to a more generic name for date-based fetching
 const CANCELLED_ORDERS_API_URL = 'http://127.0.0.1:9000/auth/cancelled_orders';
 const SALES_METRICS_API_URL = 'http://127.0.0.1:9000/auth/sales_metrics';
 const CASH_TALLY_API_URL = 'http://127.0.0.1:9001/api/auth/cash_tally';
 const TOP_PRODUCTS_API_URL = 'http://127.0.0.1:9000/auth/top_products';
-
+const SPILLAGE_API_URL = 'http://127.0.0.1:9003/wastelogs';
 
 function CashierSales({ shiftLabel = "Morning Shift", shiftTime = "6:00AM – 2:00PM", date }) {
   const [activeTab, setActiveTab] = useState('summary');
   const [modalType, setModalType] = useState(null);
   const [selectedDate, setSelectedDate] = useState(new Date().toISOString().split('T')[0]);
-  const [showExportModal, setShowExportModal] = useState(false);
   const [orderTypeFilter, setOrderTypeFilter] = useState('All');
   const [productTypeFilter, setProductTypeFilter] = useState('All');
   const [initialCash, setInitialCash] = useState(0);
@@ -58,24 +57,29 @@ function CashierSales({ shiftLabel = "Morning Shift", shiftTime = "6:00AM – 2:
     coins10: 0, coins5: 0, coins1: 0, cents25: 0, cents10: 0, cents05: 0
   });
 
+  // Spillage state
+  const [spillageEntries, setSpillageEntries] = useState([]);
+  const [isSpillageLoading, setIsSpillageLoading] = useState(true);
+  const [spillageError, setSpillageError] = useState(null);
+
   // Helper function to get dynamic section titles based on product type filter
   const getSectionTitles = () => {
     switch (productTypeFilter) {
       case 'Products':
         return {
           topSelling: 'Top Selling Products',
-          cancelled: 'Cancelled Products'
+          cancelled: 'Cancelled or Refunded Products'
         };
       case 'Merchandise':
         return {
           topSelling: 'Top Selling Merchandise',
-          cancelled: 'Cancelled Merchandise'
+          cancelled: 'Cancelled or Refunded Merchandise'
         };
       case 'All':
       default:
         return {
           topSelling: 'Top Selling Products and Merchandise',
-          cancelled: 'Cancelled Products and Merchandise'
+          cancelled: 'Cancelled or Refunded Products and Merchandise'
         };
     }
   };
@@ -85,16 +89,20 @@ function CashierSales({ shiftLabel = "Morning Shift", shiftTime = "6:00AM – 2:
     if (username) {
         setLoggedInUser(username);
     }
-    
-    const fetchDailySalesMetrics = async () => {
+
+    // UPDATED: Renamed function for clarity
+    const fetchSalesMetricsByDate = async () => {
       const token = localStorage.getItem('authToken');
       if (!token || !username) return;
       setIsSalesLoading(true); setSalesError(null);
       try {
-        const response = await fetch(`${SALES_METRICS_API_URL}/today`, {
+        // UPDATED: Endpoint changed from /today to /by_date
+        const response = await fetch(`${SALES_METRICS_API_URL}/by_date`, {
           method: 'POST', headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
-          body: JSON.stringify({ 
-            cashierName: username, 
+          // UPDATED: Added date to the request body
+          body: JSON.stringify({
+            cashierName: username,
+            date: selectedDate,
             orderType: orderTypeFilter,
             productType: productTypeFilter
           })
@@ -104,7 +112,7 @@ function CashierSales({ shiftLabel = "Morning Shift", shiftTime = "6:00AM – 2:
         setSalesData(data);
       } catch (err) { setSalesError(err.message); } finally { setIsSalesLoading(false); }
     };
-    
+
     const fetchSessionSalesMetrics = async () => {
         const token = localStorage.getItem('authToken');
         if (!token || !username) return;
@@ -112,8 +120,8 @@ function CashierSales({ shiftLabel = "Morning Shift", shiftTime = "6:00AM – 2:
         try {
           const response = await fetch(`${SALES_METRICS_API_URL}/current_session`, {
             method: 'POST', headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
-            body: JSON.stringify({ 
-              cashierName: username, 
+            body: JSON.stringify({
+              cashierName: username,
               orderType: orderTypeFilter,
               productType: productTypeFilter
             })
@@ -147,29 +155,42 @@ function CashierSales({ shiftLabel = "Morning Shift", shiftTime = "6:00AM – 2:
         if (!token || !username) return;
         setIsCancelledLoading(true); setCancelledError(null);
         try {
-            const response = await fetch(`${CANCELLED_ORDERS_API_URL}/today`, {
+            // UPDATED: Endpoint changed from /today to /by_date
+            const response = await fetch(`${CANCELLED_ORDERS_API_URL}/by_date`, {
                 method: 'POST', headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}`},
-                body: JSON.stringify({ 
-                  cashierName: username, 
+                // UPDATED: Added date to the request body
+                body: JSON.stringify({
+                  cashierName: username,
+                  date: selectedDate,
                   orderType: orderTypeFilter,
                   productType: productTypeFilter
                 })
             });
-            if (!response.ok) throw new Error("Failed to fetch cancelled orders.");
+            if (!response.ok) throw new Error("Failed to fetch cancelled/refunded orders.");
             const data = await response.json();
-            setCancelledOrders(data.flatMap(o => o.orderItems.map((item, i) => ({ id: `${o.id}-${i}`, time: new Date(o.date).toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', hour12: true }), product: item.name, qty: item.quantity, value: (item.price * item.quantity).toFixed(2) }))));
+            setCancelledOrders(data.flatMap(o => o.orderItems.map((item, i) => ({
+              id: `${o.id}-${i}`,
+              time: new Date(o.date).toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', hour12: true }),
+              product: item.name,
+              qty: item.quantity,
+              value: (item.price * item.quantity).toFixed(2),
+              status: o.status === 'refunded' ? 'Refund' : 'Cancelled'
+            }))));
         } catch (error) { setCancelledError(error.message); } finally { setIsCancelledLoading(false); }
     };
-    
+
     const fetchTopProducts = async () => {
         const token = localStorage.getItem('authToken');
         if (!token || !username) return;
         setIsTopProductsLoading(true); setTopProductsError(null);
         try {
-            const response = await fetch(`${TOP_PRODUCTS_API_URL}/today`, {
+            // UPDATED: Endpoint changed from /today to /by_date
+            const response = await fetch(`${TOP_PRODUCTS_API_URL}/by_date`, {
                 method: 'POST', headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
-                body: JSON.stringify({ 
-                  cashierName: username, 
+                // UPDATED: Added date to the request body
+                body: JSON.stringify({
+                  cashierName: username,
+                  date: selectedDate,
                   orderType: orderTypeFilter,
                   productType: productTypeFilter
                 })
@@ -184,16 +205,58 @@ function CashierSales({ shiftLabel = "Morning Shift", shiftTime = "6:00AM – 2:
         }
     };
 
+    const fetchSpillageData = async () => {
+      const token = localStorage.getItem('authToken');
+      if (!token || !username) return;
+
+      setIsSpillageLoading(true);
+      setSpillageError(null);
+
+      try {
+        // UPDATED: Added date as a query parameter
+        const url = `${SPILLAGE_API_URL}/?cashier_name=${encodeURIComponent(username)}&date=${selectedDate}`;
+        const response = await fetch(url, {
+          headers: { 'Authorization': `Bearer ${token}` }
+        });
+
+        if (!response.ok) throw new Error(`HTTP error! Status: ${response.status}`);
+
+        const data = await response.json();
+        const formattedData = data.map(entry => ({
+          id: entry.spillage_id,
+          timestamp: new Date(entry.logged_at).toLocaleString('en-US', {
+            month: 'short',
+            day: 'numeric',
+            hour: '2-digit',
+            minute: '2-digit',
+            hour12: true
+          }),
+          category: entry.category,
+          productName: entry.product_name,
+          quantity: entry.quantity,
+          reason: entry.reason
+        }));
+
+        setSpillageEntries(formattedData);
+      } catch (error) {
+        setSpillageError(error.message);
+      } finally {
+        setIsSpillageLoading(false);
+      }
+    };
+
     if (activeTab === 'summary') {
-      fetchDailySalesMetrics();
+      fetchSalesMetricsByDate();
       fetchCancelledOrders();
       fetchTopProducts();
+      fetchSpillageData();
     }
     if (activeTab === 'cash') {
       fetchSessionData();
       fetchSessionSalesMetrics();
     }
-  }, [activeTab, orderTypeFilter, productTypeFilter]);
+    // UPDATED: Added selectedDate to the dependency array to refetch data on date change
+  }, [activeTab, orderTypeFilter, productTypeFilter, selectedDate]);
 
   const today = new Date();
   const formattedDate = date || today.toLocaleDateString('en-US', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' });
@@ -216,16 +279,25 @@ function CashierSales({ shiftLabel = "Morning Shift", shiftTime = "6:00AM – 2:
   ];
 
   const cancelledProductsColumns = [
-    { name: "TIME", selector: (row) => row.time, sortable: true, width: "25%" },
-    { name: "PRODUCT", selector: (row) => row.product, sortable: true, width: "35%" },
-    { name: "QTY", selector: (row) => row.qty, center: "true", sortable: true, width: "15%" },
-    { name: "VALUE", selector: (row) => `₱${row.value}`, center: "true", sortable: true, width: "25%" }
+    { name: "TIME", selector: (row) => row.time, sortable: true, width: "18%" },
+    { name: "PRODUCT", selector: (row) => row.product, sortable: true, width: "32%" },
+    { name: "STATUS", selector: (row) => row.status, sortable: true, width: "18%", cell: (row) => <span style={{ fontWeight: "500" }}>{row.status}</span> },
+    { name: "QTY", selector: (row) => row.qty, center: "true", sortable: true, width: "8%" },
+    { name: "VALUE", selector: (row) => `₱${row.value}`, center: "true", sortable: true, width: "24%" }
   ];
 
   const topProductsColumns = [
     { name: "RANK", selector: (row, index) => `#${index + 1}`, width: "15%", center: "true" },
     { name: "PRODUCT NAME", selector: (row) => row.name, sortable: true, width: "60%" },
     { name: "QUANTITY SOLD", selector: (row) => row.sales, center: "true", sortable: true, width: "25%" }
+  ];
+
+  const spillageColumns = [
+    { name: "TIME", selector: (row) => row.timestamp, sortable: true, width: "22%" },
+    { name: "PRODUCT", selector: (row) => row.productName, sortable: true, width: "30%" },
+    { name: "CATEGORY", selector: (row) => row.category || '-', sortable: true, width: "18%" },
+    { name: "QTY", selector: (row) => row.quantity, center: "true", sortable: true, width: "12%" },
+    { name: "REASON", selector: (row) => row.reason, wrap: true, width: "18%" }
   ];
 
   const modalCancelledColumns = [...cancelledProductsColumns];
@@ -235,7 +307,7 @@ function CashierSales({ shiftLabel = "Morning Shift", shiftTime = "6:00AM – 2:
   };
 
   const limitedCancelledProducts = useMemo(() => cancelledOrders.slice(0, 5), [cancelledOrders]);
-  
+
   const actualCashCounted = useMemo(() => {
     return denominations.reduce((total, denom) => total + ((cashCounts[denom.key] || 0) * denom.value), 0);
   }, [cashCounts]);
@@ -248,9 +320,7 @@ function CashierSales({ shiftLabel = "Morning Shift", shiftTime = "6:00AM – 2:
   const handleCashCountChange = (denomination, value) => { const numValue = Math.max(0, parseInt(value) || 0); setCashCounts(prev => ({ ...prev, [denomination]: numValue })); };
   const openModal = (type) => setModalType(type);
   const closeModal = () => setModalType(null);
-  const openExportModal = () => setShowExportModal(true);
-  const closeExportModal = () => setShowExportModal(false);
-  
+
   const handleConfirmCount = async () => {
     if (!activeSessionId) { alert("Error: No active session found to close."); return; }
     if (!window.confirm("Are you sure you want to confirm this count and close your session?")) return;
@@ -283,7 +353,7 @@ function CashierSales({ shiftLabel = "Morning Shift", shiftTime = "6:00AM – 2:
     let data = [];
     let columns = [];
     const sectionTitles = getSectionTitles();
-    
+
     switch (modalType) {
       case 'topProducts':
         modalTitle = sectionTitles.topSelling;
@@ -294,6 +364,11 @@ function CashierSales({ shiftLabel = "Morning Shift", shiftTime = "6:00AM – 2:
         modalTitle = sectionTitles.cancelled;
         data = cancelledOrders;
         columns = modalCancelledColumns;
+        break;
+      case 'spillage':
+        modalTitle = 'Spillage Records';
+        data = spillageEntries;
+        columns = spillageColumns;
         break;
       default:
         return null;
@@ -333,10 +408,7 @@ function CashierSales({ shiftLabel = "Morning Shift", shiftTime = "6:00AM – 2:
     );
   };
 
-  const renderExportModal = () => { 
-    if (!showExportModal) return null;
-    return null;
-  };
+
 
   const renderCashTallyContent = () => {
     const handleReportDiscrepancy = () => alert(`Discrepancy of ₱${Math.abs(discrepancyInSession).toFixed(2)} has been reported.`);
@@ -368,9 +440,9 @@ function CashierSales({ shiftLabel = "Morning Shift", shiftTime = "6:00AM – 2:
   };
 
   const renderCancelledProductsContent = () => {
-    if (isCancelledLoading) return <div className="cashier-loading-container" style={{ minHeight: '150px' }}><FontAwesomeIcon icon={faSpinner} spin size="2x" /><p>Loading Cancelled Orders...</p></div>;
+    if (isCancelledLoading) return <div className="cashier-loading-container" style={{ minHeight: '150px' }}><FontAwesomeIcon icon={faSpinner} spin size="2x" /><p>Loading Cancelled/Refunded Orders...</p></div>;
     if (cancelledError) return <div className="cashier-error-container"><FontAwesomeIcon icon={faExclamationTriangle} /><p>Error: {cancelledError}</p></div>;
-    return <DataTable columns={cancelledProductsColumns} data={limitedCancelledProducts} striped highlightOnHover responsive noDataComponent={<div style={{ padding: "24px" }}>No cancelled products for this filter.</div>} customStyles={customTableStyles} pagination={false} />;
+    return <DataTable columns={cancelledProductsColumns} data={limitedCancelledProducts} striped highlightOnHover responsive noDataComponent={<div style={{ padding: "24px" }}>No cancelled or refunded products for this filter.</div>} customStyles={customTableStyles} pagination={false} />;
   };
 
   const renderTopProductsContent = () => {
@@ -423,6 +495,42 @@ function CashierSales({ shiftLabel = "Morning Shift", shiftTime = "6:00AM – 2:
     ));
   };
 
+  const renderSpillageContent = () => {
+    if (isSpillageLoading) {
+      return (
+        <div className="cashier-loading-container" style={{ minHeight: '150px' }}>
+          <FontAwesomeIcon icon={faSpinner} spin size="2x" />
+          <p>Loading Spillage Data...</p>
+        </div>
+      );
+    }
+    if (spillageError) {
+      return (
+        <div className="cashier-error-container">
+          <FontAwesomeIcon icon={faExclamationTriangle} />
+          <p>Error: {spillageError}</p>
+        </div>
+      );
+    }
+
+    const limitedSpillage = spillageEntries.slice(0, 5);
+
+    return (
+      <DataTable
+        columns={spillageColumns}
+        data={limitedSpillage}
+        striped
+        highlightOnHover
+        responsive
+        noDataComponent={
+          <div style={{ padding: "24px" }}>No spillage entries found.</div>
+        }
+        customStyles={customTableStyles}
+        pagination={false}
+      />
+    );
+  };
+
   // Get the current section titles based on filter
   const sectionTitles = getSectionTitles();
 
@@ -457,7 +565,7 @@ function CashierSales({ shiftLabel = "Morning Shift", shiftTime = "6:00AM – 2:
                 <span>Date:</span>
                 <input type="date" value={selectedDate} onChange={handleDateChange} max={todayString} className="cashier-date-input" />
               </div>
-              <button className="cashier-export-report-btn" onClick={openExportModal} title="Export Sales Report"><FontAwesomeIcon icon={faDownload} /> Export Report</button>
+
             </div>
           )}
         </div>
@@ -475,16 +583,31 @@ function CashierSales({ shiftLabel = "Morning Shift", shiftTime = "6:00AM – 2:
                   </div>
                 ))}
               </div>
-              <div className="cashier-cancelled-section">
-                <div className="cashier-section-header">
-                  <h3>{sectionTitles.cancelled}</h3>
-                  <button className="cashier-view-all-btn" onClick={() => openModal('cancelledOrders')}>View All</button>
+
+              {/* NEW: Bottom sections container with split layout */}
+              <div className="cashier-bottom-sections">
+                <div className="cashier-cancelled-section">
+                  <div className="cashier-section-header">
+                    <h3>{sectionTitles.cancelled}</h3>
+                    <button className="cashier-view-all-btn" onClick={() => openModal('cancelledOrders')}>View All</button>
+                  </div>
+                  <div className="cashier-cancelled-table-container">
+                    {renderCancelledProductsContent()}
+                  </div>
                 </div>
-                <div className="cashier-cancelled-table-container">
-                  {renderCancelledProductsContent()}
+
+                <div className="cashier-spillage-section">
+                  <div className="cashier-section-header">
+                    <h3>Spillage Records</h3>
+                    <button className="cashier-view-all-btn" onClick={() => openModal('spillage')}>View All</button>
+                  </div>
+                  <div className="cashier-spillage-table-container">
+                    {renderSpillageContent()}
+                  </div>
                 </div>
               </div>
             </div>
+
             <div className="cashier-sales-side">
               <div className="cashier-section-header">
                 <h3>{sectionTitles.topSelling}</h3>
@@ -503,7 +626,6 @@ function CashierSales({ shiftLabel = "Morning Shift", shiftTime = "6:00AM – 2:
         )}
       </div>
       {renderModal()}
-      {renderExportModal()}
     </div>
   );
 }

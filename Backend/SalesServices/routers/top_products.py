@@ -1,8 +1,9 @@
-# FILE: top_products.py - UPDATED WITH PRODUCT/MERCHANDISE FILTER
+# FILE: top_products.py - UPDATED WITH by_date ENDPOINT
 
 from fastapi import APIRouter, HTTPException, status, Depends
 from pydantic import BaseModel
 from typing import List, Optional
+from datetime import date
 import sys
 import os
 import httpx
@@ -41,7 +42,14 @@ async def get_current_active_user(token: str = Depends(oauth2_scheme)):
 class TopProductsRequest(BaseModel):
     cashierName: str
     orderType: Optional[str] = "All"
-    productType: Optional[str] = "All"  # NEW: Added product type filter
+    productType: Optional[str] = "All"
+
+# NEW: Pydantic model for date-based requests
+class TopProductsByDateRequest(BaseModel):
+    cashierName: str
+    date: date
+    orderType: Optional[str] = "All"
+    productType: Optional[str] = "All"
 
 class TopProductItem(BaseModel):
     name: str
@@ -59,12 +67,13 @@ def get_product_type_condition(product_type: str) -> str:
 @router_top_products.post(
     "/today",
     response_model=List[TopProductItem],
-    summary="Get today's top selling products for a specific cashier, with optional order type and product type filters"
+    summary="Get today's top selling products for a specific cashier"
 )
 async def get_top_products_today(
     request: TopProductsRequest,
     current_user: dict = Depends(get_current_active_user)
 ):
+    # This endpoint remains unchanged
     allowed_roles = ["cashier"]
     if current_user.get("userRole") not in allowed_roles:
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Permission denied.")
@@ -73,8 +82,48 @@ async def get_top_products_today(
     try:
         conn = await get_db_connection()
         async with conn.cursor() as cursor:
+            base_sql = """
+                SELECT TOP 10 si.ItemName, SUM(si.Quantity) AS TotalQuantitySold
+                FROM Sales AS s JOIN SaleItems AS si ON s.SaleID = si.SaleID
+                WHERE s.Status = 'completed' AND s.CashierName = ? AND CAST(s.CreatedAt AS DATE) = CAST(GETDATE() AS DATE)
+            """
+            params = [request.cashierName]
+            if request.orderType == "Store":
+                base_sql += " AND s.OrderType IN ('Dine in', 'Take out')"
+            elif request.orderType == "Online":
+                base_sql += " AND s.OrderType IN ('Pick up', 'Delivery')"
+            product_type_condition = get_product_type_condition(request.productType)
+            base_sql += product_type_condition
+            final_sql = base_sql + " GROUP BY si.ItemName ORDER BY TotalQuantitySold DESC;"
+            await cursor.execute(final_sql, *params)
+            rows = await cursor.fetchall()
+            return [TopProductItem(name=row.ItemName, sales=row.TotalQuantitySold) for row in rows]
+    except Exception as e:
+        logger.error(f"Error fetching top products for {request.cashierName}: {e}", exc_info=True)
+        raise HTTPException(status_code=500, detail="Failed to fetch top selling products.")
+    finally:
+        if conn: await conn.close()
+
+# --- [NEW ENDPOINT START] ---
+# This new endpoint handles requests for a specific date, fixing the 404 error.
+@router_top_products.post(
+    "/by_date",
+    response_model=List[TopProductItem],
+    summary="Get top selling products for a specific cashier by date"
+)
+async def get_top_products_by_date(
+    request: TopProductsByDateRequest,
+    current_user: dict = Depends(get_current_active_user)
+):
+    allowed_roles = ["cashier", "admin", "manager"]
+    if current_user.get("userRole") not in allowed_roles:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Permission denied.")
+
+    conn = None
+    try:
+        conn = await get_db_connection()
+        async with conn.cursor() as cursor:
             
-            # --- START: MODIFIED SQL LOGIC WITH FILTERING ---
             base_sql = """
                 SELECT
                     TOP 10
@@ -85,29 +134,26 @@ async def get_top_products_today(
                 WHERE 
                     s.Status = 'completed'
                     AND s.CashierName = ?
-                    AND CAST(s.CreatedAt AS DATE) = CAST(GETDATE() AS DATE)
+                    AND CAST(s.CreatedAt AS DATE) = ?
             """
             
-            params = [request.cashierName]
+            # Use the date from the request payload
+            params = [request.cashierName, request.date]
             
-            # Add the order type filter condition if it's not 'All'
             if request.orderType == "Store":
                 base_sql += " AND s.OrderType IN ('Dine in', 'Take out')"
             elif request.orderType == "Online":
                 base_sql += " AND s.OrderType IN ('Pick up', 'Delivery')"
             
-            # NEW: Add the product type filter condition
             product_type_condition = get_product_type_condition(request.productType)
             base_sql += product_type_condition
             
-            # Finalize the query
             final_sql = base_sql + """
                 GROUP BY
                     si.ItemName
                 ORDER BY
                     TotalQuantitySold DESC;
             """
-            # --- END: MODIFIED SQL LOGIC WITH FILTERING ---
             
             await cursor.execute(final_sql, *params)
             rows = await cursor.fetchall()
@@ -120,7 +166,7 @@ async def get_top_products_today(
             return top_products
 
     except Exception as e:
-        logger.error(f"Error fetching top products for {request.cashierName}: {e}", exc_info=True)
+        logger.error(f"Error fetching top products for {request.cashierName} on {request.date}: {e}", exc_info=True)
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail="Failed to fetch top selling products."

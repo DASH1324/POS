@@ -108,9 +108,9 @@ const Navbar = ({ isCartOpen, isOrderPanelOpen }) => {
           <Link to="/cashier/cashierSales" className={`nav-item ${location.pathname === '/cashier/cashierSales' ? 'active' : ''}`}>
             <HiOutlineChartBar className="icon" /> Sales
           </Link>
-          <Link to="/cashier/cashierSpillage" className={`nav-item ${location.pathname === '/cashier/cashierSpillage' ? 'active' : ''}`}>
+          {/* <Link to="/cashier/cashierSpillage" className={`nav-item ${location.pathname === '/cashier/cashierSpillage' ? 'active' : ''}`}>
             <HiOutlineTrash className="icon" /> Spillage
-          </Link>
+          </Link> */}
         </div>
       </div>
 

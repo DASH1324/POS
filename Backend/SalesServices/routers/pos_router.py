@@ -45,12 +45,17 @@ class SaleItem(BaseModel):
     addons: List[AddonDetail]
     type: Optional[str] = "product"  
 
+# --- [UPDATE START] ---
+# A new field is added to the Sale model to receive the promotional discount amount.
 class Sale(BaseModel):
     cartItems: List[SaleItem]
     orderType: str
     paymentMethod: str
     appliedDiscounts: List[str]
+    promotionalDiscountAmount: Optional[float] = 0.0 # This field is new
     gcashReference: Optional[str] = None
+# --- [UPDATE END] ---
+
 
 # --- Authorization Helper Function ---
 async def get_current_active_user(token: str = Depends(oauth2_scheme)):
@@ -94,12 +99,10 @@ async def trigger_inventory_deduction(url: str, cart_items: List[SaleItem], toke
 
 # --- New helper function to separate items by type ---
 def separate_cart_items_by_type(cart_items: List[SaleItem]):
-    """Separates cart items into products and merchandise"""
     products = []
     merchandise = []
     
     for item in cart_items:
-        # Check if item type is explicitly set to merchandise or if category indicates merchandise
         if hasattr(item, 'type') and item.type == 'merchandise' or item.category == 'Merchandise':
             merchandise.append(item)
         else:
@@ -149,108 +152,102 @@ async def create_sale(
     token: str = Depends(oauth2_scheme),
     current_user: dict = Depends(get_current_active_user)
 ):
-    """
-    Processes a new sale, records it in the database with an initial 'processing' status,
-    and triggers inventory deduction for ingredients, materials, and merchandise as needed.
-    """
     if current_user.get("userRole") not in ["cashier"]:
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="You do not have permission to create a sale.")
 
     conn = None
     try:
         conn = await get_db_connection()
-        conn.autocommit = False # Start manual transaction control
+        conn.autocommit = False 
         
         async with conn.cursor() as cursor:
-            subtotal, total_discount, discount_details = await calculate_totals_and_discounts(sale, cursor)
+            # --- [UPDATE START] ---
+            # Existing logic for manual discount is preserved.
+            subtotal, manual_discount, discount_details = await calculate_totals_and_discounts(sale, cursor)
+            
+            # Get the promotional discount amount from the new payload field.
+            promo_discount = Decimal(str(sale.promotionalDiscountAmount or 0.0))
+            # --- [UPDATE END] ---
+
             cashier_name = current_user.get("username", "SystemUser")
 
-            # Create sale record with processing status
+            # --- [UPDATE START] ---
+            # The SQL INSERT statement is updated to include the new column.
             sql_sale = """
-                INSERT INTO Sales (OrderType, PaymentMethod, CashierName, TotalDiscountAmount, GCashReferenceNumber, Status) 
+                INSERT INTO Sales (
+                    OrderType, PaymentMethod, CashierName, 
+                    TotalDiscountAmount, PromotionalDiscountAmount, 
+                    GCashReferenceNumber, Status
+                ) 
                 OUTPUT INSERTED.SaleID 
-                VALUES (?, ?, ?, ?, ?, 'processing') 
+                VALUES (?, ?, ?, ?, ?, ?, 'processing') 
             """
-            await cursor.execute(sql_sale, sale.orderType, sale.paymentMethod, cashier_name, total_discount, sale.gcashReference)
+            # The original `TotalDiscountAmount` will now store the MANUAL discount.
+            # The new `PromotionalDiscountAmount` stores the promotion value.
+            await cursor.execute(
+                sql_sale, 
+                sale.orderType, sale.paymentMethod, cashier_name, 
+                manual_discount, promo_discount, 
+                sale.gcashReference
+            )
+            # --- [UPDATE END] ---
+
             sale_id_row = await cursor.fetchone()
             if not sale_id_row or not sale_id_row[0]:
                 raise HTTPException(status_code=500, detail="Failed to create sale record, starting rollback.")
             sale_id = sale_id_row[0]
 
-            # Step 2: Loop through cart items and insert them and their addons
             for item in sale.cartItems:
-                # 2a: Insert into SaleItems
-                sql_item = """
-                    INSERT INTO SaleItems (SaleID, ItemName, Quantity, UnitPrice, Category) 
-                    OUTPUT INSERTED.SaleItemID
-                    VALUES (?, ?, ?, ?, ?)
-                """
+                sql_item = "INSERT INTO SaleItems (SaleID, ItemName, Quantity, UnitPrice, Category) OUTPUT INSERTED.SaleItemID VALUES (?, ?, ?, ?, ?)"
                 await cursor.execute(sql_item, sale_id, item.name, item.quantity, Decimal(str(item.price)), item.category)
                 sale_item_id_row = await cursor.fetchone()
                 if not sale_item_id_row or not sale_item_id_row[0]:
                     raise HTTPException(status_code=500, detail=f"Failed to insert sale item: {item.name}")
                 sale_item_id = sale_item_id_row[0]
                 
-                # 2b: Get or Create Addons, then link them to the SaleItem
                 if item.addons:
                     for addon in item.addons:
-                        sql_check_addon = "SELECT 1 FROM Addons WHERE AddonID = ?"
-                        await cursor.execute(sql_check_addon, addon.addonId)
-                        addon_exists = await cursor.fetchone()
-
-                        if not addon_exists:
-                            logger.info(f"New addon detected. ID: {addon.addonId}, Name: {addon.addonName}. Saving to POS database.")
+                        await cursor.execute("SELECT 1 FROM Addons WHERE AddonID = ?", addon.addonId)
+                        if not await cursor.fetchone():
                             await cursor.execute("SET IDENTITY_INSERT dbo.Addons ON;")
-                            sql_create_addon = "INSERT INTO Addons (AddonID, AddonName, Price) VALUES (?, ?, ?)"
-                            await cursor.execute(sql_create_addon, addon.addonId, addon.addonName, Decimal(str(addon.price)))
+                            await cursor.execute("INSERT INTO Addons (AddonID, AddonName, Price) VALUES (?, ?, ?)", addon.addonId, addon.addonName, Decimal(str(addon.price)))
                             await cursor.execute("SET IDENTITY_INSERT dbo.Addons OFF;")
                         
-                        sql_link_addon = "INSERT INTO SaleItemAddons (SaleItemID, AddonID, Quantity) VALUES (?, ?, ?)"
-                        await cursor.execute(sql_link_addon, sale_item_id, addon.addonId, addon.quantity)
+                        await cursor.execute("INSERT INTO SaleItemAddons (SaleItemID, AddonID, Quantity) VALUES (?, ?, ?)", sale_item_id, addon.addonId, addon.quantity)
 
-            # Step 3: Insert records for applied discounts
             for discount in discount_details:
                 sql_sale_discount = "INSERT INTO SaleDiscounts (SaleID, DiscountID, DiscountAppliedAmount) VALUES (?, ?, ?)"
                 await cursor.execute(sql_sale_discount, sale_id, discount['id'], discount['amount'])
 
-            # Step 4: If all DB operations are successful, commit the transaction
             await conn.commit()
             
-        # Step 5: Separate items by type and trigger appropriate deductions
         products, merchandise = separate_cart_items_by_type(sale.cartItems)
-        
-        # Trigger deductions for products (ingredients and materials)
         if products:
             await trigger_inventory_deduction(INGREDIENTS_DEDUCT_URL, cart_items=products, token=token, inventory_type="Ingredient")
             await trigger_inventory_deduction(MATERIALS_DEDUCT_URL, cart_items=products, token=token, inventory_type="Material")
-        
-        # Trigger deductions for merchandise
         if merchandise:
             await trigger_inventory_deduction(MERCHANDISE_DEDUCT_URL, cart_items=merchandise, token=token, inventory_type="Merchandise")
             
-        final_total = subtotal - total_discount
+        # --- [UPDATE START] ---
+        # The total discount is now the sum of both for the final calculation.
+        total_combined_discount = manual_discount + promo_discount
+        final_total = subtotal - total_combined_discount
         return {
             "saleId": sale_id,
             "subtotal": float(subtotal),
-            "discountAmount": float(total_discount),
+            "discountAmount": float(total_combined_discount),
             "finalTotal": float(final_total)
         }
+        # --- [UPDATE END] ---
 
     except Exception as e:
-        if conn:
-            logger.warning("An error occurred. Rolling back database transaction.")
-            await conn.rollback()
-        
+        if conn: await conn.rollback()
         logger.error(f"Error processing sale: {e}", exc_info=True)
-        
-        if isinstance(e, HTTPException):
-            raise e
-        else:
-            raise HTTPException(status_code=500, detail="An unexpected error occurred while processing the sale.")
+        raise e if isinstance(e, HTTPException) else HTTPException(status_code=500, detail="An unexpected error occurred.")
 
     finally:
         if conn:
-            conn.autocommit = True # Reset autocommit for the connection pool
+            conn.autocommit = True 
             await conn.close()
 
 
@@ -260,9 +257,6 @@ async def get_orders_by_status(
     token: str = Depends(oauth2_scheme),
     current_user: dict = Depends(get_current_active_user)
 ):
-    """
-    Fetch orders by status with proper add-ons and discount calculations
-    """
     if current_user.get("userRole") not in ["admin", "manager", "cashier"]:
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Access denied.")
     
@@ -270,31 +264,27 @@ async def get_orders_by_status(
     try:
         conn = await get_db_connection()
         async with conn.cursor() as cursor:
-            # Main query to get sales with basic info
+            # --- [UPDATE START] ---
+            # Updated SQL query to fetch the new PromotionalDiscountAmount column.
             sql_sales = """
                 SELECT s.SaleID, s.OrderType, s.PaymentMethod, s.CreatedAt, s.CashierName, 
-                       s.TotalDiscountAmount, s.Status, s.GCashReferenceNumber
+                       s.TotalDiscountAmount, s.PromotionalDiscountAmount, 
+                       s.Status, s.GCashReferenceNumber
                 FROM Sales s 
                 WHERE s.Status = ?
                 ORDER BY s.CreatedAt DESC
             """
+            # --- [UPDATE END] ---
             await cursor.execute(sql_sales, status)
             sales = await cursor.fetchall()
             
             orders = []
             for sale in sales:
                 sale_id = sale.SaleID
-                
-                # Get sale items
-                sql_items = """
-                    SELECT si.ItemName, si.Quantity, si.UnitPrice, si.Category, si.SaleItemID
-                    FROM SaleItems si
-                    WHERE si.SaleID = ?
-                """
+                sql_items = "SELECT si.ItemName, si.Quantity, si.UnitPrice, si.Category, si.SaleItemID FROM SaleItems si WHERE si.SaleID = ?"
                 await cursor.execute(sql_items, sale_id)
                 items = await cursor.fetchall()
                 
-                # Calculate subtotal from items (base prices only)
                 item_subtotal = Decimal('0.0')
                 order_items = []
                 total_addons_cost = Decimal('0.0')
@@ -303,43 +293,28 @@ async def get_orders_by_status(
                     item_total = Decimal(str(item.UnitPrice)) * item.Quantity
                     item_subtotal += item_total
                     
-                    # Get add-ons for this item
-                    sql_addons = """
-                        SELECT a.AddonName, a.Price, sia.Quantity
-                        FROM SaleItemAddons sia
-                        JOIN Addons a ON sia.AddonID = a.AddonID
-                        WHERE sia.SaleItemID = ?
-                    """
+                    sql_addons = "SELECT a.AddonName, a.Price, sia.Quantity FROM SaleItemAddons sia JOIN Addons a ON sia.AddonID = a.AddonID WHERE sia.SaleItemID = ?"
                     await cursor.execute(sql_addons, item.SaleItemID)
                     item_addons = await cursor.fetchall()
                     
-                    # Calculate add-ons cost for this item
-                    item_addons_cost = Decimal('0.0')
                     addons_list = []
                     for addon in item_addons:
                         addon_cost = Decimal(str(addon.Price)) * addon.Quantity
-                        item_addons_cost += addon_cost
                         total_addons_cost += addon_cost
-                        addons_list.append({
-                            'name': addon.AddonName,
-                            'price': float(addon.Price),
-                            'quantity': addon.Quantity
-                        })
+                        addons_list.append({'name': addon.AddonName, 'price': float(addon.Price), 'quantity': addon.Quantity})
                     
-                    order_items.append({
-                        'name': item.ItemName,
-                        'quantity': item.Quantity,
-                        'price': float(item.UnitPrice),
-                        'category': item.Category,
-                        'addons': addons_list
-                    })
+                    order_items.append({'name': item.ItemName, 'quantity': item.Quantity, 'price': float(item.UnitPrice), 'category': item.Category, 'addons': addons_list})
                 
-                # Get actual discount amount (already stored in Sales table)
-                total_discount = Decimal(str(sale.TotalDiscountAmount))
+                # --- [UPDATE START] ---
+                # Retrieve both discount types from the sale record.
+                manual_discount = Decimal(str(sale.TotalDiscountAmount or 0))
+                promo_discount = Decimal(str(sale.PromotionalDiscountAmount or 0))
+                total_combined_discount = manual_discount + promo_discount
+
+                full_subtotal = item_subtotal + total_addons_cost
+                final_total = full_subtotal - total_combined_discount
                 
-                # Calculate final total
-                final_total = item_subtotal + total_addons_cost - total_discount
-                
+                # The returned dictionary is updated to send separate fields to the frontend.
                 orders.append({
                     'id': sale_id,
                     'orderType': sale.OrderType,
@@ -349,11 +324,13 @@ async def get_orders_by_status(
                     'cashierName': sale.CashierName,
                     'gcashReference': sale.GCashReferenceNumber,
                     'orderItems': order_items,
-                    'subtotal': float(item_subtotal),
-                    'addOns': float(total_addons_cost),  # Actual add-ons cost
-                    'discount': float(total_discount),   # Actual discount amount
+                    'subtotal': float(full_subtotal),
+                    'addOns': float(total_addons_cost),
+                    'promotionalDiscount': float(promo_discount),
+                    'manualDiscount': float(manual_discount), # Renamed 'discount' to 'manualDiscount' for clarity
                     'total': float(final_total)
                 })
+                # --- [UPDATE END] ---
             
             return orders
             

@@ -89,7 +89,10 @@ function Orders() {
                 addons: item.addons || []
               })) : [],
               source: 'store',
-              discount: order.discount || order.appliedDiscount || 0,
+              subtotal: order.subtotal || 0,
+              promotionalDiscount: order.promotionalDiscount || 0,
+              manualDiscount: order.manualDiscount || 0,
+              appliedDiscounts: order.appliedDiscounts || [],
               addOns: order.addOns || order.appliedAddOns || order.addons || 0,
               cashierName: order.cashierName || 'Unknown',
               reference_number: order.GCashReferenceNumber || null
