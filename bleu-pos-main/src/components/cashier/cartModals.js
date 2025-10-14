@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react'; // Added useEffect
+import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
 import { HiOutlineCheck } from 'react-icons/hi';
@@ -14,7 +14,6 @@ export const ManagerPinModal = ({
 }) => {
   const [pin, setPin] = useState('');
 
-  // Reset PIN when modal is closed
   useEffect(() => {
     if (!show) {
       setPin('');
@@ -23,7 +22,6 @@ export const ManagerPinModal = ({
 
   const handlePinChange = (e) => {
     const value = e.target.value;
-    // Allow only numeric input up to 6 digits
     if (/^\d*$/.test(value) && value.length <= 6) {
       setPin(value);
     }
@@ -70,7 +68,6 @@ export const ManagerPinModal = ({
   );
 };
 
-// AddonsModal
 export const AddonsModal = ({
   showAddonsModal,
   closeAddonsModal,
@@ -139,7 +136,7 @@ export const AddonsModal = ({
   );
 };
 
-// Discounts Modal
+// UPDATED: DiscountsModal with single discount lock
 export const DiscountsModal = ({
   showDiscountsModal,
   closeDiscountsModal,
@@ -150,7 +147,8 @@ export const DiscountsModal = ({
   toggleStagedDiscount,
   getSubtotal,
   getStagedDiscount,
-  applyDiscounts
+  applyDiscounts,
+  isDiscountApplicable
 }) => {
   const [showPinModal, setShowPinModal] = useState(false);
   const [pinError, setPinError] = useState('');
@@ -218,18 +216,21 @@ export const DiscountsModal = ({
               const subtotal = getSubtotal();
               const isEligible = !discount.minAmount || subtotal >= discount.minAmount;
               
+              // NEW: Disable all other discounts when one is selected
+              const isDisabled = !isEligible || (stagedDiscounts.length > 0 && !isStaged);
+              
               return (
                 <div 
                   key={discount.id} 
-                  className={`cDiscount-item ${isStaged ? 'cDiscount-selected' : ''} ${!isEligible ? 'cDiscount-disabled' : ''}`} 
-                  onClick={() => isEligible && toggleStagedDiscount(discount.id)}
+                  className={`cDiscount-item ${isStaged ? 'cDiscount-selected' : ''} ${isDisabled ? 'cDiscount-disabled' : ''}`} 
+                  onClick={() => !isDisabled && toggleStagedDiscount(discount.id)}
                 >
                   <div className="cDiscount-checkbox">
                     <input 
                       type="checkbox" 
                       checked={isStaged} 
-                      onChange={() => isEligible && toggleStagedDiscount(discount.id)} 
-                      disabled={!isEligible} 
+                      onChange={() => !isDisabled && toggleStagedDiscount(discount.id)} 
+                      disabled={isDisabled} 
                     />
                   </div>
                   <div className="cDiscount-info">
@@ -238,6 +239,10 @@ export const DiscountsModal = ({
                       {discount.description}
                       {!isEligible && discount.minAmount && (
                         <span className="cDiscount-min-requirement"> (Min. ₱{discount.minAmount})</span>
+                      )}
+                      {/* NEW: Show message when another discount is already selected */}
+                      {stagedDiscounts.length > 0 && !isStaged && isEligible && (
+                        <span className="cDiscount-min-requirement"> (Only one discount allowed)</span>
                       )}
                     </div>
                   </div>
@@ -250,15 +255,13 @@ export const DiscountsModal = ({
           </div>
           <div className="cDiscount-modal-footer">
             <div className="cDiscount-summary">
-              <span>Total Discount: ₱{getStagedDiscount().toFixed(0)}</span>
+              <span>Total Discount: ₱{getStagedDiscount().toFixed(2)}</span>
             </div>
-            {/* MODIFIED: This button now triggers the PIN modal flow */}
             <button className="cDiscount-apply-btn" onClick={handleDiscountRequest}>Apply Discount</button>
           </div>
         </div>
       </div>
 
-      {/* Render the PIN modal when required */}
       <ManagerPinModal
         show={showPinModal}
         onClose={() => setShowPinModal(false)}
@@ -272,7 +275,6 @@ export const DiscountsModal = ({
   );
 };
 
-// TransactionSummaryModal
 export const TransactionSummaryModal = ({
   showTransactionSummary,
   setShowTransactionSummary,
@@ -329,7 +331,6 @@ export const TransactionSummaryModal = ({
                     <span className="trnsSummary-quantity">Qty: {item.quantity}</span>
                     <span className="trnsSummary-base-price">₱{item.price.toFixed(0)} each</span>
                   </div>
-                  {/* Updated addon rendering logic */}
                   {item.addons && item.addons.length > 0 && (
                     <div className="trnsSummary-item-addons">
                       {item.addons.map(addon => (
@@ -396,9 +397,6 @@ export const TransactionSummaryModal = ({
   );
 };
 
-
-// GCash Reference Modal
-
 export const GCashReferenceModal = ({
   showGCashReference,
   setShowGCashReference,
@@ -408,7 +406,6 @@ export const GCashReferenceModal = ({
 }) => {
   const [referenceNumber, setReferenceNumber] = useState("");
 
-  // Reset input when modal closes
   useEffect(() => {
     if (!showGCashReference) {
       setReferenceNumber("");
@@ -434,7 +431,6 @@ export const GCashReferenceModal = ({
         className="discPin-modal"
         onClick={(e) => e.stopPropagation()}
       >
-        {/* Header */}
         <div className="discPin-modal-header">
           <h3>GCash Payment</h3>
           <button
@@ -445,7 +441,6 @@ export const GCashReferenceModal = ({
           </button>
         </div>
 
-        {/* Content */}
         <div className="discPin-modal-content">
           <p>Please enter GCash reference number:</p>
           <input
@@ -460,7 +455,6 @@ export const GCashReferenceModal = ({
           {error && <p className="discPin-error-message">{error}</p>}
         </div>
 
-        {/* Footer */}
         <div className="discPin-modal-footer">
           <button
             onClick={() => setShowGCashReference(false)}
@@ -485,7 +479,7 @@ export const GCashReferenceModal = ({
 export const OrderConfirmationModal = ({
   showConfirmation,
   setShowConfirmation,
-  onClose, // <-- add this
+  onClose,
 }) => {
   const navigate = useNavigate();
 

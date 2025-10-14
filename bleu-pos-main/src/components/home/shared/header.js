@@ -47,15 +47,6 @@ const Header = ({ pageTitle }) => {
     if (usernameFromUrl && tokenFromUrl) {
       localStorage.setItem('username', usernameFromUrl);
       localStorage.setItem('authToken', tokenFromUrl);
-
-      // --- FIX: This block was removed to prevent it from stripping URL parameters ---
-      /*
-      if (window.history.replaceState) {
-        const cleanUrl = `${window.location.protocol}//${window.location.host}${window.location.pathname}`;
-        window.history.replaceState({ path: cleanUrl }, '', cleanUrl);
-      }
-      */
-      // --------------------------------------------------------------------------
     }
 
     const storedUsername = localStorage.getItem('username');

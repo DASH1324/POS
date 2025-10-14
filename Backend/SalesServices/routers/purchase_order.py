@@ -100,7 +100,17 @@ class CancelDetails(BaseModel):
     managerUsername: str
 
 class UpdateOrderStatusRequest(BaseModel):
-    newStatus: Literal["completed", "cancelled", "processing", "refunded"]
+    newStatus: Literal[
+        "completed", 
+        "cancelled", 
+        "processing", 
+        "refunded", 
+        "ready for pick up", 
+        "delivering",
+        "picked up",
+        "preparing",
+        "waiting for pick up"
+    ]
     cancelDetails: Optional[CancelDetails] = None
 
 class RefundOrderRequest(BaseModel):
@@ -461,7 +471,7 @@ async def update_order_status(
     request: UpdateOrderStatusRequest,
     current_user: dict = Depends(get_current_active_user)
 ):
-    allowed_roles = ["cashier"]
+    allowed_roles = ["cashier", "rider"]
     if current_user.get("userRole") not in allowed_roles:
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Permission denied.")
     
@@ -578,53 +588,116 @@ async def update_order_status(
 
 
 @router_purchase_order.patch(
-    "/online/{online_order_id}/status",
+    "/online/{reference_number}/status",
     status_code=status.HTTP_200_OK,
     summary="Update the status of a POS sale linked to an online order"
 )
 async def update_pos_status_for_online_order(
-    online_order_id: int,
+    reference_number: str,
     request: UpdateOrderStatusRequest,
     current_user: dict = Depends(get_current_active_user)
 ):
-    allowed_roles = ["cashier"]
+    """
+    Updates the status of a POS order that was created from an online order.
+    Uses the GCash reference number to find and update the correct POS record.
+    
+    This endpoint is called AFTER the online order service updates its own database.
+    It ensures the POS database stays in sync with the online order status.
+    """
+    allowed_roles = ["cashier", "rider"]
     if current_user.get("userRole") not in allowed_roles:
-        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Permission denied.")
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN, 
+            detail="Permission denied."
+        )
+
+    # Validate that only certain statuses can be synced
+    valid_statuses = [
+        'completed', 
+        'cancelled', 
+        'ready for pick up', 
+        'delivering', 
+        'picked up',
+        'waiting for pick up'
+    ]
+    
+    if request.newStatus not in valid_statuses:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Invalid status update. Allowed statuses: {', '.join(valid_statuses)}"
+        )
 
     conn = None
     try:
         conn = await get_db_connection()
         async with conn.cursor() as cursor:
-            g_cash_ref = f"ONLINE-{online_order_id}"
+            # Log the incoming request
+            logger.info(f"=== POS STATUS UPDATE REQUEST ===")
+            logger.info(f"Reference Number: {reference_number}")
+            logger.info(f"New Status: {request.newStatus}")
             
-            if request.newStatus not in ['completed', 'cancelled']:
-                 raise HTTPException(
-                    status_code=400,
-                    detail="Invalid status update for a linked online order. Only 'completed' or 'cancelled' is allowed."
+            # First, check if the order exists
+            check_sql = "SELECT SaleID, Status FROM Sales WHERE GCashReferenceNumber = ?"
+            await cursor.execute(check_sql, reference_number)
+            existing_order = await cursor.fetchone()
+            
+            if not existing_order:
+                logger.warning(
+                    f"No POS sale found with reference number '{reference_number}'. "
+                    f"This could mean the online order was never accepted."
                 )
-
-            sql = "UPDATE Sales SET Status = ?, UpdatedAt = GETDATE() WHERE GCashReferenceNumber = ?"
+                raise HTTPException(
+                    status_code=404, 
+                    detail=f"No POS sale found with reference number '{reference_number}'."
+                )
             
-            await cursor.execute(sql, request.newStatus, g_cash_ref)
+            logger.info(f"Found POS Sale - ID: {existing_order.SaleID}, Current Status: {existing_order.Status}")
+            
+            # Update the status
+            update_sql = "UPDATE Sales SET Status = ?, UpdatedAt = GETDATE() WHERE GCashReferenceNumber = ?"
+            await cursor.execute(update_sql, request.newStatus, reference_number)
             
             if cursor.rowcount == 0:
-                # This could happen if the online order was never accepted into the POS
-                logger.warning(f"Attempted to update status for online order ID {online_order_id}, but no matching POS sale was found.")
-                raise HTTPException(status_code=404, detail=f"No POS sale found linked to online order ID '{online_order_id}'.")
+                # This shouldn't happen since we just checked, but just in case
+                logger.error(f"Update affected 0 rows for reference '{reference_number}'")
+                raise HTTPException(
+                    status_code=500,
+                    detail="Failed to update the order status."
+                )
             
             await conn.commit()
             
-            logger.info(f"POS status for online order {online_order_id} updated to '{request.newStatus}'.")
-            return {"message": f"POS status for online order successfully updated to '{request.newStatus}'."}
+            logger.info(
+                f"✅ Successfully updated POS status for reference '{reference_number}' "
+                f"from '{existing_order.Status}' to '{request.newStatus}'"
+            )
+            
+            return {
+                "message": f"POS status successfully updated to '{request.newStatus}'.",
+                "reference_number": reference_number,
+                "sale_id": existing_order.SaleID,
+                "previous_status": existing_order.Status,
+                "new_status": request.newStatus
+            }
 
+    except HTTPException:
+        # Re-raise HTTP exceptions as-is
+        raise
     except Exception as e:
-        if conn: await conn.rollback()
-        logger.error(f"Error updating POS status for online order {online_order_id}: {e}", exc_info=True)
-        raise HTTPException(status_code=500, detail="Failed to update the order status in the POS.")
+        if conn: 
+            await conn.rollback()
+        logger.error(
+            f"❌ Error updating POS status for reference '{reference_number}': {e}", 
+            exc_info=True
+        )
+        raise HTTPException(
+            status_code=500, 
+            detail=f"Failed to update the order status in the POS: {str(e)}"
+        )
     finally:
         if conn:
             await conn.close()
-
+            
 # --- New Endpoint to Process Refunds ---
 @router_purchase_order.post(
     "/{order_id}/refund",

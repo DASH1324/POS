@@ -5,7 +5,7 @@ from fastapi.security import OAuth2PasswordBearer
 from pydantic import BaseModel, Field
 from typing import List, Optional, Literal
 from decimal import Decimal
-from datetime import date
+from datetime import date, datetime
 import httpx 
 
 # --- Database Connection Import ---
@@ -42,6 +42,23 @@ async def validate_token_and_roles(token: str, allowed_roles: List[str]):
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=f"Access denied. Role '{user_role}' is not authorized.")
     
     return user_data
+
+# HELPER FUNCTION TO AUTO-EXPIRE DISCOUNTS
+async def auto_expire_discounts(conn):
+    """Automatically updates discount status to 'expired' if validTo date has passed"""
+    try:
+        async with conn.cursor() as cursor:
+            today = date.today()
+            sql_expire = """
+                UPDATE discounts 
+                SET status = 'expired', updated_at = GETDATE()
+                WHERE valid_to < ? AND status != 'expired'
+            """
+            await cursor.execute(sql_expire, today)
+            await conn.commit()
+    except Exception as e:
+        # Log error but don't raise to avoid breaking the main flow
+        print(f"Error auto-expiring discounts: {e}")
 
 # PYDANTIC MODELS
 class DiscountBase(BaseModel):
@@ -132,6 +149,9 @@ async def get_all_discounts(token: str = Depends(oauth2_scheme)):
     await validate_token_and_roles(token, allowed_roles=["admin", "manager", "cashier"])
     conn = await get_db_connection()
     try:
+        # Auto-expire discounts before fetching
+        await auto_expire_discounts(conn)
+        
         async with conn.cursor() as cursor:
             await cursor.execute("SELECT id, name, status, application_type, discount_type, discount_value, minimum_spend, valid_from, valid_to FROM discounts ORDER BY id DESC")
             discounts_raw = await cursor.fetchall()
@@ -154,7 +174,6 @@ async def get_all_discounts(token: str = Depends(oauth2_scheme)):
                 disc_str = f"₱{d['discount_value']:.2f}"
                 if d['discount_type'] == 'percentage': disc_str = f"{d['discount_value']:.1f}%"
                 
-                # --- MODIFIED: Populate the new fields in the response model ---
                 results.append(DiscountListOut(
                     id=d['id'], 
                     name=d['name'], 
@@ -165,7 +184,6 @@ async def get_all_discounts(token: str = Depends(oauth2_scheme)):
                     validTo=d['valid_to'].strftime('%Y-%m-%d'), 
                     status=d['status'], 
                     type=d['discount_type'],
-                    # --- ADDED THESE LINES ---
                     application_type=d['application_type'],
                     applicable_products=prods,
                     applicable_categories=cats
@@ -181,6 +199,9 @@ async def get_discount(discount_id: int, token: str = Depends(oauth2_scheme)):
     await validate_token_and_roles(token, allowed_roles=["admin", "manager", "cashier"])
     conn = await get_db_connection()
     try:
+        # Auto-expire discounts before fetching
+        await auto_expire_discounts(conn)
+        
         async with conn.cursor() as cursor:
             await cursor.execute("SELECT * FROM discounts WHERE id=?", discount_id)
             d = await cursor.fetchone()

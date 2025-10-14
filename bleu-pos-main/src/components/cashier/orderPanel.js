@@ -58,7 +58,8 @@ function OrderPanel({ order, onClose, isOpen, isStore, onUpdateStatus }) {
     return token || '';
   };
 
-  const handleStoreCancel = () => {
+  // Unified cancel handler for both store and online orders
+  const handleCancelOrder = () => {
     setEnteredPin("");
     setPinError("");
     setShowPinModal(true);
@@ -237,12 +238,13 @@ function OrderPanel({ order, onClose, isOpen, isStore, onUpdateStatus }) {
         }
     }
 
+    // Cancel button logic - NOW BOTH REQUIRE PIN
     if (isStore) {
         if (status === 'PROCESSING') {
             cancelAction = (
                 <button 
                     className="orderpanel-btn orderpanel-btn-refund" 
-                    onClick={handleStoreCancel}
+                    onClick={handleCancelOrder}
                     disabled={isProcessing}
                 >
                     Cancel Order
@@ -250,11 +252,12 @@ function OrderPanel({ order, onClose, isOpen, isStore, onUpdateStatus }) {
             );
         }
     } else {
+        // Online orders - NOW REQUIRES PIN
         if (status === 'PENDING') {
             cancelAction = (
                 <button 
                     className="orderpanel-btn orderpanel-btn-refund" 
-                    onClick={() => onUpdateStatus(order, "CANCELLED")}
+                    onClick={handleCancelOrder}
                     disabled={isProcessing}
                 >
                     Cancel Order
@@ -388,7 +391,7 @@ function OrderPanel({ order, onClose, isOpen, isStore, onUpdateStatus }) {
             {renderActionButtons()}
         </div>
 
-        {/* PIN Modal for Cancellation */} 
+        {/* PIN Modal for Cancellation - NOW USED FOR BOTH STORE AND ONLINE */} 
         {showPinModal && (
           <div className="orderpanel-modal-overlay" onClick={() => setShowPinModal(false)}>
             <div className="orderpanel-modal-content" onClick={(e) => e.stopPropagation()}>

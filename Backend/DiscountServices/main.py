@@ -3,12 +3,14 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 import os
 
-# --- Import the corrected router name ---
-# We are importing 'router' which is the main combined router from the discount file
-from routers.discount import router
+# --- Import Routers ---
+# Import the router from the discount file
+from routers.discount import router as discount_router
+# Import the router from the promotion file
+from routers.promotion import router as promotion_router
 
 app = FastAPI(
-    title="Discount Service API",
+    title="Discount and Promotion Service API",
     description="API for managing all discount and promotion operations.",
     version="1.0.0"
 )
@@ -33,9 +35,10 @@ app.add_middleware(
 )
 
 # --- Include Routers ---
-# This single line now includes all endpoints from your discount.py file
-# (e.g., /discounts/, /available-products, etc.)
-app.include_router(router, prefix="/api")
+# This includes all endpoints from your discount.py file (e.g., /discounts/, /available-products)
+app.include_router(discount_router, prefix="/api")
+# This includes all endpoints from your promotion.py file (e.g., /promotions/)
+app.include_router(promotion_router, prefix="/api")
 
 
 # --- Static Files (Optional) ---
@@ -47,7 +50,7 @@ app.mount(f"/{UPLOAD_DIR_NAME}", StaticFiles(directory=UPLOAD_DIR_NAME), name=UP
 # --- Root Endpoint ---
 @app.get("/", tags=["Root"])
 async def read_root():
-    return {"message": "Welcome to the Discount Service API. Visit /docs for documentation."}
+    return {"message": "Welcome to the Discount & Promotion Service API. Visit /docs for documentation."}
 
 
 # --- Uvicorn Runner ---

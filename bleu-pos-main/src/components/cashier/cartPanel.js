@@ -169,10 +169,18 @@ const CartPanel = ({
     setStagedDiscounts([]);
   };
 
+  // UPDATED: Only allow ONE discount at a time
   const toggleStagedDiscount = (discountId) => {
     const discount = availableDiscounts.find(d => d.id === discountId);
-    if (!discount || !isDiscountApplicable(discount)) return; 
-    setStagedDiscounts(prev => prev.includes(discountId) ? prev.filter(id => id !== discountId) : [...prev, discountId]);
+    if (!discount || !isDiscountApplicable(discount)) return;
+    
+    // If this discount is already selected, remove it
+    if (stagedDiscounts.includes(discountId)) {
+      setStagedDiscounts([]);
+    } else {
+      // Otherwise, replace all discounts with this one (only one at a time)
+      setStagedDiscounts([discountId]);
+    }
   };
 
   const updateAddons = (addonId, addonName, price, quantity) => {
@@ -218,16 +226,78 @@ const CartPanel = ({
   
   const getSubtotal = () => cartItems.reduce((acc, item) => (acc + (item.price * item.quantity) + (getTotalAddonsPrice(item.addons) * item.quantity)), 0);
 
+  // UPDATED: Only applies to ONE item (highest price)
   const calculateDiscount = (discountList) => {
     const subtotal = getSubtotal();
-    return Math.min(subtotal, discountList.reduce((acc, discountId) => {
-        const discount = availableDiscounts.find(d => d.id === discountId);
-        if (discount && isDiscountApplicable(discount)) {
-            if (discount.type === 'percentage') return acc + (subtotal * parseFloat(discount.value)) / 100;
-            if (discount.type === 'fixed') return acc + parseFloat(discount.value);
+    
+    // Only allow one discount at a time
+    if (discountList.length === 0) return 0;
+    const discountId = discountList[0]; // Take only the first discount
+    
+    const discount = availableDiscounts.find(d => d.id === discountId);
+    if (!discount || !isDiscountApplicable(discount)) return 0;
+    
+    let eligibleItemPrice = 0;
+    
+    // Find the highest-priced eligible item
+    switch (discount.applicationType) {
+      case 'all_products':
+        // Find the single highest-priced item in cart
+        const highestItem = cartItems.reduce((highest, item) => {
+          const itemPrice = item.price + getTotalAddonsPrice(item.addons);
+          const highestPrice = highest ? highest.price + getTotalAddonsPrice(highest.addons) : 0;
+          return itemPrice > highestPrice ? item : highest;
+        }, null);
+        
+        if (highestItem) {
+          eligibleItemPrice = highestItem.price + getTotalAddonsPrice(highestItem.addons);
         }
-        return acc;
-    }, 0));
+        break;
+        
+      case 'specific_products':
+        // Find highest-priced item that matches the specific products
+        const matchingProduct = cartItems
+          .filter(item => discount.applicableProducts.includes(item.name))
+          .reduce((highest, item) => {
+            const itemPrice = item.price + getTotalAddonsPrice(item.addons);
+            const highestPrice = highest ? highest.price + getTotalAddonsPrice(highest.addons) : 0;
+            return itemPrice > highestPrice ? item : highest;
+          }, null);
+        
+        if (matchingProduct) {
+          eligibleItemPrice = matchingProduct.price + getTotalAddonsPrice(matchingProduct.addons);
+        }
+        break;
+        
+      case 'specific_categories':
+        // Find highest-priced item in matching categories
+        const matchingCategory = cartItems
+          .filter(item => discount.applicableCategories.includes(item.category))
+          .reduce((highest, item) => {
+            const itemPrice = item.price + getTotalAddonsPrice(item.addons);
+            const highestPrice = highest ? highest.price + getTotalAddonsPrice(highest.addons) : 0;
+            return itemPrice > highestPrice ? item : highest;
+          }, null);
+        
+        if (matchingCategory) {
+          eligibleItemPrice = matchingCategory.price + getTotalAddonsPrice(matchingCategory.addons);
+        }
+        break;
+        
+      default:
+        eligibleItemPrice = 0;
+    }
+    
+    // Calculate discount on the single eligible item
+    let discountAmount = 0;
+    if (discount.type === 'percentage') {
+      discountAmount = (eligibleItemPrice * parseFloat(discount.value)) / 100;
+    } else if (discount.type === 'fixed') {
+      discountAmount = Math.min(parseFloat(discount.value), eligibleItemPrice);
+    }
+    
+    // Don't exceed subtotal
+    return Math.min(discountAmount, subtotal);
   };
 
   const getDiscount = () => calculateDiscount(appliedDiscounts);
@@ -494,6 +564,7 @@ const CartPanel = ({
           applyDiscounts={applyDiscounts}
           getStagedDiscount={getStagedDiscount}
           getSubtotal={getSubtotal}
+          isDiscountApplicable={isDiscountApplicable}
         />
 
         <TransactionSummaryModal
