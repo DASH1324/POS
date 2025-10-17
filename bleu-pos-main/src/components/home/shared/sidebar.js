@@ -19,12 +19,23 @@ function SidebarComponent() {
 
   // This effect re-runs every time the user navigates to a new page.
   useEffect(() => {
-    const role = localStorage.getItem('userRole');
-    console.log('Sidebar reading userRole from localStorage:', role); // For debugging
-    if (role) {
-      setUserRole(role);
+  // Priority 1: Check URL params first
+  const params = new URLSearchParams(window.location.search);
+  const roleFromUrl = params.get('userRole');
+  
+  if (roleFromUrl) {
+    console.log('Sidebar: Setting role from URL:', roleFromUrl);
+    localStorage.setItem('userRole', roleFromUrl);
+    setUserRole(roleFromUrl);
+  } else {
+    // Priority 2: Fall back to localStorage
+    const roleFromStorage = localStorage.getItem('userRole');
+    console.log('Sidebar: Reading role from localStorage:', roleFromStorage);
+    if (roleFromStorage) {
+      setUserRole(roleFromStorage);
     }
-  }, [location]); // The dependency on location is the key fix.
+  }
+}, [location]);
 
   return (
     <div className="sidebar-wrapper">
@@ -108,4 +119,4 @@ function SidebarComponent() {
   );
 }
 
-export default SidebarComponent;  
+export default SidebarComponent;
