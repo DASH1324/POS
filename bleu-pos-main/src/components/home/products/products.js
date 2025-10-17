@@ -167,6 +167,12 @@ function Products() {
     setSearchTerm("");
   }, [activeTab]);
 
+  const handleClearFilters = () => {
+    setSearchTerm("");
+    setCategoryFilter("");
+    setSizeFilter("");
+  };
+
   const DEFAULT_PRODUCT_IMAGE = "/images/default-product.png";
 
   const columns = useMemo(() => {
@@ -179,7 +185,7 @@ function Products() {
             <img
               src={row.MerchandiseImage || DEFAULT_PRODUCT_IMAGE}
               alt={row.MerchandiseName}
-              className="food-photo"
+              className="productList-itemPhoto"
               onError={(e) => {
                 e.target.onerror = null;
                 e.target.src = DEFAULT_PRODUCT_IMAGE;
@@ -208,18 +214,18 @@ function Products() {
         name: "PRODUCT",
         selector: (row) => row.ProductName,
         cell: (row) => (
-          <div className="food-info">
+          <div className="productList-itemInfo">
             <img
               src={row.ProductImage || DEFAULT_PRODUCT_IMAGE}
               alt={row.ProductName}
-              className="food-photo"
+              className="productList-itemPhoto"
               onError={(e) => {
                 e.target.onerror = null;
                 e.target.src = DEFAULT_PRODUCT_IMAGE;
               }}
             />
             <div>
-              <div className="food-name">{row.ProductName}</div>
+              <div className="productList-itemName">{row.ProductName}</div>
             </div>
           </div>
         ),
@@ -258,10 +264,10 @@ function Products() {
   return (
     <div className="productList">
       <Sidebar />
-      <div className="products">
+      <div className="productList-container">
         <Header pageTitle="Products" />
 
-        <div className="products-content">
+        <div className="productList-content">
           {error ? (
             <div
               style={{
@@ -276,29 +282,22 @@ function Products() {
             </div>
           ) : (
             <>
-              <div className="tabs">
+              <div className="productList-tabs">
                 {productTypes.map((type) => (
                   <button
                     key={type.productTypeID}
-                    className={`tab ${
-                      activeTab === type.productTypeID ? "active-tab" : ""
+                    className={`productList-tab ${
+                      activeTab === type.productTypeID ? "productList-tab--active" : ""
                     }`}
                     onClick={() => setActiveTab(type.productTypeID)}
                   >
                     {type.productTypeName}
                   </button>
                 ))}
-
-                <button
-                  className={`tab ${activeTab === "merch" ? "active-tab" : ""}`}
-                  onClick={() => setActiveTab("merch")}
-                >
-                  Merchandise
-                </button>
               </div>
 
               <div className="tab-content">
-                <div className="filter-bar">
+                <div className="productList-filterBar">
                   <input
                     type="text"
                     placeholder={activeTab === "merch" ? "Search Merchandise..." : "Search Products..."}
@@ -312,7 +311,7 @@ function Products() {
                         value={categoryFilter}
                         onChange={(e) => setCategoryFilter(e.target.value)}
                       >
-                        <option value="">Category: All</option>
+                        <option value="">All Categories</option>
                         {uniqueCategories.map((cat) => (
                           <option key={cat} value={cat}>
                             {cat}
@@ -324,7 +323,7 @@ function Products() {
                         value={sizeFilter}
                         onChange={(e) => setSizeFilter(e.target.value)}
                       >
-                        <option value="">Size: All</option>
+                        <option value="">All Sizes</option>
                         {uniqueSizes.map((size) => (
                           <option key={size} value={size}>
                             {size}
@@ -333,9 +332,16 @@ function Products() {
                       </select>
                     </>
                   )}
+
+                  <button 
+                    className="productList-clearBtn" 
+                    onClick={handleClearFilters}
+                  >
+                    Clear Filters
+                  </button>
                 </div>
 
-                <div className="products-table-container">
+                <div className="productList-tableContainer">
                   <DataTable
                     columns={columns}
                     data={filteredProductsForActiveTab}
@@ -343,6 +349,8 @@ function Products() {
                     highlightOnHover
                     responsive
                     pagination
+                    paginationPerPage={5} 
+                    paginationRowsPerPageOptions={[5, 10, 15, 20]}
                     fixedHeader
                     fixedHeaderScrollHeight="60vh"
                     onRowClicked={(row) => setSelectedProduct(row)}

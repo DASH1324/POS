@@ -1,11 +1,12 @@
 import React, { useState, useEffect, useCallback } from "react";
 import { useNavigate } from 'react-router-dom';
 import { FaChevronDown, FaBell } from "react-icons/fa";
+import { HiOutlineExclamation } from 'react-icons/hi';
 import { jwtDecode } from 'jwt-decode';
 import { confirmAlert } from 'react-confirm-alert';
 import 'react-confirm-alert/src/react-confirm-alert.css';
 import "./header.css";
-import '../../confirmAlertCustom.css';
+import '../../confirmAlertCustom.css'; 
 
 const Header = ({ pageTitle }) => {
   const [isDropdownOpen, setDropdownOpen] = useState(false);
@@ -16,28 +17,32 @@ const Header = ({ pageTitle }) => {
 
   const toggleDropdown = () => setDropdownOpen(!isDropdownOpen);
 
-  const confirmLogout = () => {
-    confirmAlert({
-      title: 'Confirm Logout',
-      message: 'Are you sure you want to log out?',
-      buttons: [
-        {
-          label: 'Yes',
-          onClick: () => handleLogout()
-        },
-        {
-          label: 'No',
-          onClick: () => {}
-        }
-      ]
-    });
-  };
-
   const handleLogout = useCallback(() => {
     localStorage.removeItem('authToken');
     localStorage.removeItem('username');
     navigate('/');
   }, [navigate]);
+
+  const confirmLogout = () => {
+    confirmAlert({
+      customUI: ({ onClose }) => {
+        return (
+          <>
+            <div className="react-confirm-alert-close" onClick={onClose}>&times;</div>
+            <div className="react-confirm-alert-icon alert-danger">
+              <HiOutlineExclamation />
+            </div>
+            <h1>Confirm Logout</h1>
+            <p>Are you sure you want to log out?</p>
+            <div className="react-confirm-alert-button-group">
+              <button onClick={() => { handleLogout(); onClose(); }}>Yes</button>
+              <button onClick={onClose}>No</button>
+            </div>
+          </>
+        );
+      }
+    });
+  };
 
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
@@ -47,6 +52,11 @@ const Header = ({ pageTitle }) => {
     if (usernameFromUrl && tokenFromUrl) {
       localStorage.setItem('username', usernameFromUrl);
       localStorage.setItem('authToken', tokenFromUrl);
+
+      if (window.history.replaceState) {
+        const cleanUrl = `${window.location.protocol}//${window.location.host}${window.location.pathname}`;
+        window.history.replaceState({ path: cleanUrl }, '', cleanUrl);
+      }
     }
 
     const storedUsername = localStorage.getItem('username');

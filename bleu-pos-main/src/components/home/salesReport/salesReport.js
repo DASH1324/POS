@@ -3,7 +3,7 @@ import "./salesReport.css";
 import Sidebar from "../shared/sidebar";
 import Header from "../shared/header";
 import DataTable from "react-data-table-component";
-import { FaFileExport } from "react-icons/fa";
+import { FaFileExport, FaShoppingCart, FaStore, FaGlobe, FaDollarSign, FaReceipt } from "react-icons/fa"; 
 import CustomDateModal from "../shared/customDateModal";
 import handleSalesReportExport from "./salesReportExport";
 
@@ -186,15 +186,59 @@ function SalesReport() {
   }, [activeTab, reportData]);
 
   const renderTotals = () => (
-    <>
+    <div className="aSalesRep-cards-container">
+      <div className="aSalesRep-stat-card">
+        <div className="aSalesRep-card-icon aSalesRep-icon-green">
+          <FaDollarSign />
+        </div>
+        <div className="aSalesRep-card-content">
+          <div className="aSalesRep-card-label">TOTAL SALES</div>
+          <div className="aSalesRep-card-value">₱{reportTotals.totalSale.toFixed(2)}</div>
+        </div>
+      </div>
+
       {activeTab !== "daily" && (
-        <span className="total-cell">TOTAL TRANSACTIONS: {reportTotals.transactions}</span>
+        <div className="aSalesRep-stat-card">
+          <div className="aSalesRep-card-icon aSalesRep-icon-blue">
+            <FaReceipt />
+          </div>
+          <div className="aSalesRep-card-content">
+            <div className="aSalesRep-card-label">TRANSACTIONS</div>
+            <div className="aSalesRep-card-value">{reportTotals.transactions}</div>
+          </div>
+        </div>
       )}
-      <span className="total-cell">ITEMS SOLD: {reportTotals.itemsSold}</span>
-      <span className="total-cell">STORE SALE: ₱{reportTotals.storeSale.toFixed(2)}</span>
-      <span className="total-cell">ONLINE SALE: ₱{reportTotals.onlineSale.toFixed(2)}</span>
-      <span className="total-cell">TOTAL SALE: ₱{reportTotals.totalSale.toFixed(2)}</span>
-    </>
+
+      <div className="aSalesRep-stat-card">
+        <div className="aSalesRep-card-icon aSalesRep-icon-orange">
+          <FaShoppingCart />
+        </div>
+        <div className="aSalesRep-card-content">
+          <div className="aSalesRep-card-label">ITEMS SOLD</div>
+          <div className="aSalesRep-card-value">{reportTotals.itemsSold}</div>
+        </div>
+      </div>
+
+      <div className="aSalesRep-stat-card">
+        <div className="aSalesRep-card-icon aSalesRep-icon-teal">
+          <FaStore />
+        </div>
+        <div className="aSalesRep-card-content">
+          <div className="aSalesRep-card-label">STORE SALES</div>
+          <div className="aSalesRep-card-value">₱{reportTotals.storeSale.toFixed(2)}</div>
+        </div>
+      </div>
+
+      <div className="aSalesRep-stat-card">
+        <div className="aSalesRep-card-icon aSalesRep-icon-cyan">
+          <FaGlobe />
+        </div>
+        <div className="aSalesRep-card-content">
+          <div className="aSalesRep-card-label">ONLINE SALES</div>
+          <div className="aSalesRep-card-value">₱{reportTotals.onlineSale.toFixed(2)}</div>
+        </div>
+      </div>
+    </div>
   );
 
   const handleCustomApply = (startDate, endDate) => {
@@ -209,47 +253,52 @@ function SalesReport() {
   }
 
   return (
-    <div className="sales-report-page">
+    <div className="aSalesRep-page">
       <Sidebar />
-      <div className="report">
+      <div className="aSalesRep-report">
         <Header pageTitle="Sales Report" />
-        <div className="sales-tabs-wrapper">
-          <div className="sales-tabs">
-            <select
-              className="tab-dropdown"
-              value={activeTab}
-              onChange={(e) => {
-                const value = e.target.value;
-                if (value === "custom") {
-                  setIsCustomModalOpen(true);
-                } else {
-                  setActiveTab(value);
-                }
-              }}
-            >
-              <option value="daily">Today</option>
-              <option value="weekly">This Week</option>
-              <option value="monthly">This Month</option>
-              <option value="yearly">This Year</option>
-              <option value="custom">Custom</option>
-            </select>
+        <div className="aSalesRep-tabs-wrapper">
+          <div className="aSalesRep-tabs">
+            <div className="aSalesRep-filter-item">
+                <span className="aSalesRep-period-text">{currentPeriodText}</span>
+              </div>
+            <div className="aSalesRep-filter-item">
+              <span>Period:</span>
+              <select
+                className="aSalesRep-tab-dropdown"
+                value={activeTab}
+                onChange={(e) => {
+                  const value = e.target.value;
+                  if (value === "custom") {
+                    setIsCustomModalOpen(true);
+                  } else {
+                    setActiveTab(value);
+                  }
+                }}
+              >
+                <option value="daily">Today</option>
+                <option value="weekly">This Week</option>
+                <option value="monthly">This Month</option>
+                <option value="yearly">This Year</option>
+                <option value="custom">Custom</option>
+              </select>
+            </div>
 
-            <button className="export-btn" onClick={() => handleSalesReportExport(reportData, reportTotals, activeTab, currentPeriodText)}>
+            <button className="aSalesRep-export-btn" onClick={() => handleSalesReportExport(reportData, reportTotals, activeTab, currentPeriodText)}>
               <FaFileExport /> Export
             </button>
           </div>
         </div>
 
-        {/* 👉 Totals moved here */}
-        <div className="sales-total-row">
-          <span className="period-text">{currentPeriodText}</span>
-          <div className="totals-right">
-            {!isLoading && data.length > 0 && renderTotals()}
+        {/* Totals Cards - Only show when there's data */}
+        {!isLoading && data.length > 0 && (
+          <div className="aSalesRep-total-row">
+            {renderTotals()}
           </div>
-        </div>
+        )}
 
         {/* Table */}
-        <div className="salesRep-table-container">
+        <div className="aSalesRep-table-container">
           <DataTable
             columns={columns}
             data={data}

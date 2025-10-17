@@ -10,7 +10,7 @@ body {
     min-height: 100vh;
 }
 
-.products {
+.productList-container {
     flex: 1;
     box-sizing: border-box;
     width: 85%;
@@ -21,163 +21,140 @@ body {
     margin-bottom: 30px;
 }
 
-.tabs {
-  display: flex;
-  margin-bottom: 15px;
-  gap: 10px;
+.productList-content {
+    margin-top: 25px;
 }
 
-.tab {
-  padding: 8px 16px;
-  background-color: #ffffff;
-  color: #666;
-  border: none;
-  border-radius: 6px;
-  cursor: pointer;
-  font-weight: 500;
-  transition: background-color 0.3s;
-  width: 150px;
+.productList-tabs {
+    display: flex;
+    margin-bottom: 15px;
+    gap: 10px;
 }
 
-.tab:hover {
-  background-color: #f1f1f1;
+.productList-tab {
+    padding: 8px 16px;
+    background-color: #ffffff;
+    color: #666;
+    border: none;
+    border-radius: 6px;
+    cursor: pointer;
+    font-weight: 500;
+    transition: background-color 0.3s;
+    width: 150px;
 }
 
-.active-tab {
-  background-color: #4B929D;
-  color: white;
+.productList-tab:hover {
+    background-color: #f1f1f1;
 }
 
-.active-tab:hover {
-  background-color: #4B929D;
-  color: white;
+.productList-tab--active {
+    background-color: #4B929D;
+    color: white;
 }
 
-.filter-bar {
-display: flex;
-gap: 10px;
-margin-bottom: 15px;
-align-items: center;
+.productList-tab--active:hover {
+    background-color: #4B929D;
+    color: white;
 }
 
-.filter-bar input,
-.filter-bar select {
-font-size: 14px; 
-padding: 11px;
-border: 0.5px solid #EBEBEB;
-border-radius: 6px;
-width: 80%;
-border-color:black;
-color: #888;
+.productList-filterBar {
+    display: flex;
+    gap: 8px;
+    margin-bottom: 10px;
+    align-items: center;
+    flex-wrap: nowrap;
+    width: 100%;
 }
 
-.add-btn {
-background-color: #007bff;
-color: white;
-padding: 9px 9px;
-gap: 8px;
-border: none;
-border-radius: 4px;
-cursor: pointer;
-width: 25%;
-display: flex;
-align-items: center;
-justify-content: center;
+.productList-filterBar input {
+    font-size: 13px;
+    padding: 9px 8px;
+    border: 0.5px solid #EBEBEB;
+    border-radius: 6px;
+    flex: 3;
+    color: #888;
 }
 
-.add-btn:hover {
-background-color: #0069d9;
+.productList-filterBar input:focus {
+    border: none;
+    outline: none;
 }
 
-.add-btn svg {
-font-size: 12px;
+.productList-filterBar select {
+    flex: 1;
+    min-width: 150px;
+    max-width: 300px;
+    font-size: 13px;
+    padding: 9px 8px;
+    border: 0.5px solid #EBEBEB;
+    border-radius: 6px;
+    color: #555; 
 }
 
-.drink-info {
+.productList-filterBar select:focus {
+    border: none;
+    outline: none;
+}
+
+.productList-clearBtn {
+    padding: 8px 14px;
+    background-color: #d9534f;
+    color: white;
+    border: none;
+    border-radius: 6px;
+    cursor: pointer;
+    font-weight: 500;
+    font-size: 13px;
+    transition: background-color 0.3s;
+    white-space: nowrap;
+    flex-shrink: 0;
+    width: 110px;
+}
+
+.productList-clearBtn:hover {
+    background-color: #c9302c;
+}
+
+.productList-addBtn {
+    background-color: #007bff;
+    color: white;
+    padding: 9px 9px;
+    gap: 8px;
+    border: none;
+    border-radius: 4px;
+    cursor: pointer;
+    width: 25%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.productList-addBtn:hover {
+    background-color: #0069d9;
+}
+
+.productList-addBtn svg {
+    font-size: 12px;
+}
+
+.productList-itemInfo {
     display: flex;
     align-items: center;
     gap: 10px;
 }
 
-.drink-photo {
+.productList-itemPhoto {
     width: 90px;
     height: 90px;
     border-radius: 10%;
     object-fit: cover;
 }
 
-.drink-name {
-  font-weight: 600;
+.productList-itemName {
+    font-weight: 600;
 }
 
-.food-info {
-    display: flex;
-    align-items: center;
-    gap: 10px;
-}
-
-.food-photo {
-    width: 90px;
-    height: 90px;
-    border-radius: 10%;
-    object-fit: cover;
-}
-
-.food-name {
-  font-weight: 600;
-}
-
-.merch-info {
-    display: flex;
-    align-items: center;
-    gap: 10px;
-}
-
-.merch-photo {
-    width: 90px;
-    height: 90px;
-    border-radius: 10%;
-    object-fit: cover;
-}
-
-.merch-name {
-  font-weight: 600;
-}
-
-.filter-bar-merch {
-  display: flex;
-  gap: 10px;
-  margin-bottom: 15px;
-  align-items: center;
-}
-
-.filter-bar-merch input {
-  padding: 8px;
-  border: 0.5px solid #EBEBEB;
-  border-radius: 6px;
-  width: 100%;
-  color: #888;
-}
-
-.product-info {
-    display: flex;
-    align-items: center;
-    gap: 10px;
-    text-align: left; 
-    padding: 5px 0;
-}
-
-.product-photo {
-    width: 90px;
-    height: 90px;
-    border-radius: 10%;
-    object-fit: cover;
-}
-
-.product-name {
-  font-weight: 600;
-}
-
-.products-table-container {
-  overflow: auto;
+.productList-tableContainer {
+    overflow: auto;
+    background-color: #4B929D;
 }

@@ -414,3 +414,188 @@ async def get_sales_report(
         raise HTTPException(status_code=500, detail="Failed to generate sales report.")
     finally:
         if conn: await conn.close()
+
+
+# Add these new Pydantic models
+class SalesMonitoringRequest(BaseModel):
+    dateRange: Literal['today', 'week', 'month']
+    selectedProduct: Optional[str] = 'all'
+    selectedCategory: Optional[str] = 'all'
+
+class ProductSalesDetail(BaseModel):
+    id: int
+    product: str
+    category: str
+    revenue: float
+    profit: float
+    quantity: int
+    date: str
+    orderType: str
+
+class SalesMonitoringResponse(BaseModel):
+    salesData: List[ProductSalesDetail]
+    totalRevenue: float
+    totalProfit: float
+    totalQuantity: int
+    profitMargin: float
+    transactionCount: int
+
+# Add this new endpoint to your router
+@router_sales_metrics.post(
+    "/monitoring",
+    response_model=SalesMonitoringResponse,
+    summary="Get Sales Monitoring Data with Filters"
+)
+async def get_sales_monitoring_data(
+    request: SalesMonitoringRequest,
+    current_user: dict = Depends(get_current_active_user)
+):
+    """
+    Get detailed sales monitoring data with product and category filtering.
+    Calculates revenue, profit, and quantity sold for each product.
+    """
+    if current_user.get("userRole") not in ["admin", "manager", "cashier"]:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Permission denied.")
+    
+    conn = None
+    try:
+        conn = await get_db_connection()
+        async with conn.cursor() as cursor:
+            # Determine date filter based on dateRange
+            date_condition = ""
+            if request.dateRange == 'today':
+                date_condition = "AND CAST(s.CreatedAt AS DATE) = CAST(GETDATE() AS DATE)"
+            elif request.dateRange == 'week':
+                date_condition = "AND s.CreatedAt >= DATEADD(day, -7, GETDATE())"
+            elif request.dateRange == 'month':
+                date_condition = "AND s.CreatedAt >= DATEADD(month, -1, GETDATE())"
+            
+            # Build product and category filters
+            product_condition = ""
+            category_condition = ""
+            params = []
+            
+            if request.selectedProduct and request.selectedProduct != 'all':
+                product_condition = "AND si.ItemName = ?"
+                params.append(request.selectedProduct)
+            
+            if request.selectedCategory and request.selectedCategory != 'all':
+                category_condition = "AND si.Category = ?"
+                params.append(request.selectedCategory)
+            
+            # Main query to get sales data
+            sql = f"""
+                WITH SaleCalculations AS (
+                    SELECT 
+                        s.SaleID,
+                        si.SaleItemID,
+                        si.ItemName,
+                        si.Category,
+                        si.Quantity,
+                        si.UnitPrice,
+                        s.OrderType,
+                        s.CreatedAt,
+                        -- Calculate item total with addons
+                        (si.UnitPrice * si.Quantity + ISNULL((
+                            SELECT SUM(a.Price * sia.Quantity)
+                            FROM SaleItemAddons sia
+                            JOIN Addons a ON sia.AddonID = a.AddonID
+                            WHERE sia.SaleItemID = si.SaleItemID
+                        ), 0)) AS ItemTotalWithAddons,
+                        -- Get total discounts
+                        (ISNULL(s.TotalDiscountAmount, 0) + ISNULL(s.PromotionalDiscountAmount, 0)) AS TotalDiscount
+                    FROM Sales s
+                    JOIN SaleItems si ON s.SaleID = si.SaleID
+                    WHERE s.Status = 'completed'
+                    {date_condition}
+                    {product_condition}
+                    {category_condition}
+                ),
+                SaleTotals AS (
+                    SELECT 
+                        SaleID,
+                        SUM(ItemTotalWithAddons) AS SaleTotal
+                    FROM SaleCalculations
+                    GROUP BY SaleID
+                ),
+                FinalCalculations AS (
+                    SELECT 
+                        sc.SaleItemID,
+                        sc.SaleID,
+                        sc.ItemName,
+                        sc.Category,
+                        sc.Quantity,
+                        sc.OrderType,
+                        sc.CreatedAt,
+                        sc.ItemTotalWithAddons,
+                        -- Calculate proportional discount for this item
+                        CASE 
+                            WHEN st.SaleTotal > 0 THEN (sc.ItemTotalWithAddons / st.SaleTotal) * sc.TotalDiscount
+                            ELSE 0
+                        END AS ProportionalDiscount
+                    FROM SaleCalculations sc
+                    JOIN SaleTotals st ON sc.SaleID = st.SaleID
+                )
+                SELECT 
+                    ROW_NUMBER() OVER (ORDER BY SUM(ItemTotalWithAddons - ProportionalDiscount) DESC) as id,
+                    ItemName as product,
+                    Category as category,
+                    SUM(ItemTotalWithAddons - ProportionalDiscount) as revenue,
+                    -- Assuming 60% profit margin (you can adjust this based on your cost data)
+                    SUM((ItemTotalWithAddons - ProportionalDiscount) * 0.60) as profit,
+                    SUM(Quantity) as quantity,
+                    MAX(CAST(CreatedAt AS DATE)) as date,
+                    OrderType as orderType
+                FROM FinalCalculations
+                GROUP BY ItemName, Category, OrderType
+                ORDER BY revenue DESC
+            """
+            
+            await cursor.execute(sql, tuple(params))
+            rows = await cursor.fetchall()
+            
+            sales_data = []
+            total_revenue = 0.0
+            total_profit = 0.0
+            total_quantity = 0
+            transaction_count = len(rows)
+            
+            for row in rows:
+                revenue = float(row.revenue) if row.revenue else 0.0
+                profit = float(row.profit) if row.profit else 0.0
+                quantity = int(row.quantity) if row.quantity else 0
+                
+                sales_data.append(ProductSalesDetail(
+                    id=row.id,
+                    product=row.product,
+                    category=row.category,
+                    revenue=revenue,
+                    profit=profit,
+                    quantity=quantity,
+                    date=row.date.isoformat() if row.date else date.today().isoformat(),
+                    orderType=row.orderType
+                ))
+                
+                total_revenue += revenue
+                total_profit += profit
+                total_quantity += quantity
+            
+            profit_margin = (total_profit / total_revenue * 100) if total_revenue > 0 else 0.0
+            
+            return SalesMonitoringResponse(
+                salesData=sales_data,
+                totalRevenue=total_revenue,
+                totalProfit=total_profit,
+                totalQuantity=total_quantity,
+                profitMargin=round(profit_margin, 2),
+                transactionCount=transaction_count
+            )
+    
+    except Exception as e:
+        logger.error(f"Error fetching sales monitoring data: {e}", exc_info=True)
+        logger.error(f"SQL Query: {sql if 'sql' in locals() else 'SQL not generated'}")
+        logger.error(f"Parameters: {params if 'params' in locals() else 'No params'}")
+        raise HTTPException(status_code=500, detail=f"Failed to fetch sales monitoring data: {str(e)}")
+    finally:
+        if conn:
+            await conn.close()

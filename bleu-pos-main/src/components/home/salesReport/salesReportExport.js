@@ -1,36 +1,84 @@
+import React from "react";
+import ReactDOM from "react-dom/client";
 import logo from "../../../assets/logo.png";
 import "./salesReportExport.css";
 
-const handleSalesReportExport = (reportData, reportTotals, activeTab, currentPeriodText, exportedBy = "System") => {
-  const modal = document.createElement("div");
-  modal.className = "export-modal";
-
-  modal.innerHTML = `
-    <div class="export-modal-content">
-      <h2>Choose Export Format</h2>
-      <p>Choose which type of file to export.</p>
-      <button id="exportPDF" class="sales-export-btn pdf">Export as PDF</button>
-      <button id="exportCSV" class="sales-export-btn csv">Export as CSV</button>
-      <button id="cancelExport" class="sales-export-btn cancel">Cancel</button>
-    </div>
-  `;
-
-  document.body.appendChild(modal);
-  document.getElementById("cancelExport").onclick = () => modal.remove();
-  document.getElementById("exportPDF").onclick = () => {
-    modal.remove();
-    if (!reportData.length) {
-      const noDataModal = document.createElement("div");
-      noDataModal.className = "no-data-modal";
-      noDataModal.innerHTML = `
-        <div class="no-data-content">
-          <h2>No Sales Data</h2>
-          <p>There is no sales data available to export.</p>
-          <button id="closeNoData">Okay</button>
+// Export Format Modal Component
+const ExportModal = ({ onClose, onExportPDF, onExportCSV }) => {
+  return (
+    <div className="salesRep-export-overlay" onClick={onClose}>
+      <div className="salesRep-export-modal" onClick={(e) => e.stopPropagation()}>
+        <div className="salesRep-export-close" onClick={onClose}>
+          &times;
         </div>
-      `;
-      document.body.appendChild(noDataModal);
-      document.getElementById("closeNoData").onclick = () => noDataModal.remove();
+        <div className="salesRep-export-icon">
+          <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+          </svg>
+        </div>
+        <h1>Choose Export Format</h1>
+        <p>Select the file type you'd like to export.</p>
+
+        <div className="salesRep-export-button-group">
+          <button onClick={onExportPDF} className="salesRep-export-modal-btn salesRep-export-pdf">
+            <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M7 21h10a2 2 0 002-2V9.414a1 1 0 00-.293-.707l-5.414-5.414A1 1 0 0012.586 3H7a2 2 0 00-2 2v14a2 2 0 002 2z" />
+            </svg>
+            PDF
+          </button>
+
+          <button onClick={onExportCSV} className="salesRep-export-modal-btn salesRep-export-csv">
+            <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M3 10h18M3 14h18m-9-4v8m-7 0h14a2 2 0 002-2V8a2 2 0 00-2-2H5a2 2 0 00-2 2v8a2 2 0 002 2z" />
+            </svg>
+            CSV
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+};
+
+// No Data Modal Component
+const NoDataModal = ({ onClose }) => {
+  return (
+    <div className="salesRep-export-overlay" onClick={onClose}>
+      <div className="salesRep-export-modal salesRep-export-nodata" onClick={(e) => e.stopPropagation()}>
+        <div className="salesRep-export-close" onClick={onClose}>
+          &times;
+        </div>
+        <div className="salesRep-export-icon salesRep-export-warning">
+          <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
+          </svg>
+        </div>
+        <h1>No Sales Data</h1>
+        <p>There is no sales data available to export.</p>
+        <button onClick={onClose} className="salesRep-export-btn-single">
+          Okay
+        </button>
+      </div>
+    </div>
+  );
+};
+
+// Main export handler
+const handleSalesReportExport = (reportData, reportTotals, activeTab, currentPeriodText, exportedBy = "System") => {
+  // Create container for modal
+  const modalContainer = document.createElement("div");
+  document.body.appendChild(modalContainer);
+  const root = ReactDOM.createRoot(modalContainer);
+
+  const cleanup = () => {
+    root.unmount();
+    document.body.removeChild(modalContainer);
+  };
+
+  const handleExportPDF = () => {
+    cleanup();
+
+    if (!reportData.length) {
+      showNoDataModal();
       return;
     }
 
@@ -43,15 +91,19 @@ const handleSalesReportExport = (reportData, reportTotals, activeTab, currentPer
             body { font-family: Arial, sans-serif; padding: 20px; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
             h1 { margin: 0; font-size: 18px; }
             .export-header { display: flex; align-items: flex-start; margin-bottom: 15px; }
-            .export-header img { height: 110px; }
+            .export-header img { height: 140px; }
             .header-details { text-align: left; font-size: 13px; margin-left: 15px; }
+
             table { width: 100%; border-collapse: collapse; margin-top: 20px; }
             th, td { border: 1px solid #000; padding: 8px; font-size: 11px; text-align: center; }
             th { background-color: #4B929D !important; color: #fff !important; font-weight: bold; }
-            .summary { margin-top: 30px; font-size: 12px; text-align: center; }
+
+            .summary { margin-top: 40px; font-size: 12px; text-align: center; }
+            .summary h3 { margin-bottom: 10px; }
             .summary-table { border-collapse: collapse; width: 60%; margin: 0 auto; }
-            .summary-table th, .summary-table td { border: 1px solid #000; padding: 8px; font-size: 12px; text-align: left; }
-            .summary-table th { background: #f2f2f2; width: 50%; }
+            .summary-table th, .summary-table td { border: 1px solid #000; padding: 8px 12px; font-size: 12px; text-align: left; }
+            .summary-table th { background: #f2f2f2; text-align: left; width: 50%; }
+
             .approved { margin-top: 40px; text-align: right; }
             .signature { margin-top: 40px; }
           </style>
@@ -105,12 +157,11 @@ const handleSalesReportExport = (reportData, reportTotals, activeTab, currentPer
     newWindow.document.close();
   };
 
-  // CSV Export
-  document.getElementById("exportCSV").onclick = () => {
-    modal.remove();
+  const handleExportCSV = () => {
+    cleanup();
 
     if (!reportData.length) {
-      alert("No sales data to export");
+      showNoDataModal();
       return;
     }
 
@@ -128,6 +179,27 @@ const handleSalesReportExport = (reportData, reportTotals, activeTab, currentPer
     link.click();
     document.body.removeChild(link);
   };
+
+  const showNoDataModal = () => {
+    const noDataContainer = document.createElement("div");
+    document.body.appendChild(noDataContainer);
+    const noDataRoot = ReactDOM.createRoot(noDataContainer);
+
+    const cleanupNoData = () => {
+      noDataRoot.unmount();
+      document.body.removeChild(noDataContainer);
+    };
+
+    noDataRoot.render(<NoDataModal onClose={cleanupNoData} />);
+  };
+
+  root.render(
+    <ExportModal
+      onClose={cleanup}
+      onExportPDF={handleExportPDF}
+      onExportCSV={handleExportCSV}
+    />
+  );
 };
 
 export default handleSalesReportExport;

@@ -1,106 +1,181 @@
+/* ==================== CUSTOM DATE RANGE MODAL ==================== */
+
+/* Teal accent stripe */
+.customDateModal-modal::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 3px;
+  background: #4197a2;
+  z-index: 1;
+}
+
 .customDateModal-overlay {
   position: fixed;
   top: 0;
   left: 0;
   width: 100%;
   height: 100%;
-  background: rgba(0, 0, 0, 0.5);
+  background-color: rgba(0, 0, 0, 0.4);
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  z-index: 1100;
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto', sans-serif;
+}
+
+.customDateModal-modal {
+  background: white;
+  border-radius: 10px;
+  width: 90%;
+  max-width: 440px;
+  overflow: hidden;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.12);
+  animation: modalSlideIn 0.2s ease-out;
+  position: relative;
+  display: flex;
+  flex-direction: column;
+}
+
+.customDateModal-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 20px 24px;
+  border-bottom: 1px solid #f0f0f0;
+}
+
+.customDateModal-header h3 {
+  margin: 0;
+  font-size: 18px;
+  font-weight: 600;
+  color: #1a1a1a;
+  letter-spacing: -0.01em;
+}
+
+.customDateModal-close-modal {
+  background: none;
+  border: none;
+  font-size: 24px;
+  cursor: pointer;
+  color: #aaa;
+  padding: 0;
+  width: 32px;
+  height: 32px;
   display: flex;
   align-items: center;
   justify-content: center;
-  z-index: 999;
+  transition: color 0.2s ease;
+  line-height: 1;
 }
 
-.customDateModal-container {
-  background-color: #fff;
-  padding: 25px;
-  border-radius: 10px;
-  width: 450px;
-  max-height: 80vh;
-  overflow-y: auto;
-  position: relative;
-  box-shadow: 0 8px 16px rgba(0, 0, 0, 0.2);
-  text-align: left;
-  animation: fadeInScale 0.25s ease-out;
+.customDateModal-close-modal:hover {
+  color: #333;
 }
 
-.customDateModal-container h2 {
-  margin-bottom: 15px;
-  font-size: 1.6rem;
-  font-weight: 700;
-  text-align: center !important;
-  color: #4B929D;
-  border-bottom: 2px solid #eee;
-  padding-bottom: 10px;
+.customDateModal-content {
+  padding: 24px;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
 }
 
-.customDateModal-error {
-  background-color: #ffe0e0; 
-  color: #c0392b; 
-  border: 1px solid #f99;
-  padding: 10px;
+.customDateModal-error-message {
+  color: #e74c3c;
+  font-size: 13px;
+  background-color: #ffe0e0;
+  padding: 10px 12px;
   border-radius: 6px;
-  margin-bottom: 15px;
-  text-align: center;
-  font-weight: 600;
+  border: 1px solid #f99;
+  margin: 0;
   animation: slideDownFadeIn 0.3s ease-out;
 }
 
+.customDateModal-date-row {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 16px;
+}
 
-.customDateModal-inputs {
+.customDateModal-input-group {
   display: flex;
   flex-direction: column;
-  gap: 10px;
+  gap: 8px;
 }
 
-.customDateModal-inputs label {
-  font-weight: bold;
-  margin-bottom: 5px;
-  display: block;
-  color: #444;
+.customDateModal-input-group label {
+  font-size: 14px;
+  font-weight: 500;
+  color: #1a1a1a;
 }
 
-.customDateModal-inputs input {
+.customDateModal-date-input {
   width: 100%;
-  padding: 8px;
-  border-radius: 6px;
-  border: 1px solid #ccc;
+  padding: 10px 12px;
+  font-size: 15px;
+  border: 1px solid #e0e0e0;
+  border-radius: 8px;
+  transition: border-color 0.15s ease;
+  box-sizing: border-box;
 }
 
+.customDateModal-date-input:focus {
+  border-color: #4197a2;
+  outline: none;
+}
 
-
-.customDateModal-actions {
+.customDateModal-footer {
+  padding: 16px 24px;
+  background-color: #fafafa;
+  border-top: 1px solid #f0f0f0;
   display: flex;
   justify-content: flex-end;
   gap: 10px;
-  margin-top: 15px;
 }
 
-.customDateModal-btn {
-  padding: 8px 14px;
+.customDateModal-footer button {
+  flex: 1;
+  padding: 12px 24px;
+  border-radius: 8px;
   border: none;
-  border-radius: 6px;
+  font-size: 15px;
+  font-weight: 500;
   cursor: pointer;
-  font-size: 14px;
+  height: 44px;
+  transition: all 0.15s ease;
 }
 
-.customDateModal-btn.cancel {
-  background: #ccc;
+.customDateModal-btn-cancel {
+  background-color: #f1f1f1;
+  color: #333333;
+  border: 1px solid #dcdcdc;
 }
 
-.customDateModal-btn.apply {
-  background: #4b929d;
-  color: white;
+.customDateModal-btn-cancel:hover {
+  background-color: #f2f2f2;
+  border-color: #c2c2c2;
 }
 
-@keyframes fadeInScale {
+.customDateModal-btn-confirm {
+  background-color: #4197a2;
+  color: #ffffff;
+}
+
+.customDateModal-btn-confirm:hover {
+  background-color: #357b88;
+}
+
+/* ==================== ANIMATIONS ==================== */
+@keyframes modalSlideIn {
   from {
     opacity: 0;
-    transform: scale(0.9);
+    transform: translateY(-10px);
   }
   to {
     opacity: 1;
-    transform: scale(1);
+    transform: translateY(0);
   }
 }
 

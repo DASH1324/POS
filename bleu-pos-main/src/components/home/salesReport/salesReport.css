@@ -1,16 +1,16 @@
 body {
   background: #eaf6f8;
   margin: 0;
-  font-family: 'Segoe UI', sans-serif;
+  font-family: 'Poppins', 'Segoe UI', sans-serif;
 }
 
-.sales-report-page {
+.aSalesRep-page {
   display: flex;
   flex-direction: row;
   min-height: 100vh;
 }
 
-.report {
+.aSalesRep-report {
   flex: 1;
   box-sizing: border-box;
   width: 85%;
@@ -21,107 +21,264 @@ body {
   gap: 15px;
 }
 
-.sales-tabs-wrapper {
+.aSalesRep-tabs-wrapper {
   display: flex;
   justify-content: flex-end;
   margin-top: 10px;
 }
 
-.sales-tabs {
+.aSalesRep-tabs {
   display: flex;
-  gap: 8px;
+  flex-wrap: wrap;
+  gap: 20px;
+  background-color: #f8fcfd;
+  padding: 12px 20px;
+  border-radius: 12px;
+  font-size: 14px;
+  color: #5a6c75;
+  border-left: 4px solid #4B929D;
   align-items: center;
-  flex-wrap: nowrap;
-  margin-left: auto;
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.04);
+  width: fit-content;
 }
 
-.tab-dropdown {
-  flex: 1;
-  min-width: 250px;
-  max-width: 300px;
-  font-size: 13px;
-  padding: 11px 11px;
-  border: 0.5px solid #EBEBEB;
-  border-radius: 6px;
-  border-color: black;
-  color: #555;
-  margin-top: 20px;
-}
-
-.tab-dropdown:focus {
+.aSalesRep-tab-dropdown {
+  padding: 8px 12px;
+  border-radius: 8px;
+  border: none;
+  background-color: #f8fcfd;
+  font-size: 14px;
+  font-family: inherit;
+  cursor: pointer;
+  min-width: 120px;
   outline: none;
-  box-shadow: 0 0 0 2px #0b0b0b55;
+  font-weight: 500;
+  color: #333;
+  transition: all 0.2s ease;
 }
 
-.export-btn {
-  padding: 11px 11px;
-  background-color: #4B929D;
+/* Updated Export Button */
+.aSalesRep-export-btn {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 16px;
+  background-color: #007BFF;
   color: white;
   border: none;
-  border-radius: 6px;
+  border-radius: 8px;
   cursor: pointer;
-  font-weight: 500;
-  font-size: 13px;
-  transition: background-color 0.3s;
-  width: 130px;
+  font-weight: 600;
+  font-size: 14px;
+  transition: all 0.2s ease;
+  white-space: nowrap;
 }
 
-.export-btn:hover {
-  background: #3a7a85;
+.aSalesRep-export-btn:hover {
+  background: #0069d9;
+  transform: translateY(-1px);
+  box-shadow: 0 4px 8px rgba(0, 123, 255, 0.3);
 }
 
-.salesRep-table-container {
-  flex: 1;
-}
-
-.sales-total-row {
-  margin-top: 1px;
-  padding: 16px 20px;
-  background: #4B929D;
-  border-radius: 15px 15px 0 0;
-  box-shadow: 0 4px 6px rgba(0, 0, 0, 0.08);
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  flex-wrap: wrap;
+.aSalesRep-export-btn svg {
   font-size: 14px;
 }
 
-.period-text {
-  background: #4b929d;
-  color: #fff;
-  font-weight: 700;
-  padding: 11px 40px;
-  border-radius: 6px;
+.aSalesRep-table-container {
+  flex: 1;
+}
+
+.aSalesRep-period-text {
+  background: rgba(255, 255, 255, 0.15);
+  color: #333;
+  font-weight: 500;
+  padding: 10px 20px;
+  border-radius: 8px;
   font-size: 13px;
-  letter-spacing: 0.5px;
-  border: 1px solid #e1e5e8;
+  letter-spacing: 0.3px;
+  border: 1px solid rgba(255, 255, 255, 0.2);
   transition: all 0.2s ease;
+  backdrop-filter: blur(10px);
 }
 
-.period-text:hover {
-  background: #3a7a85;
-  transform: translateY(-2px);
+.aSalesRep-period-text:hover {
+  background: rgba(255, 255, 255, 0.25);
+  transform: translateY(-1px);
 }
 
-.totals-right {
+/* Updated Total Row - Container for Cards */
+.aSalesRep-total-row {
+  margin-top: 1px;
+  padding: 0;
+  background: transparent;
   display: flex;
-  gap: 10px;
-  justify-content: flex-end;
+  justify-content: center;
+  align-items: center;
+}
+
+/* Cards Container */
+.aSalesRep-cards-container {
+  display: flex;
+  gap: 16px;
   flex-wrap: wrap;
+  justify-content: center;
+  width: 100%;
 }
 
-.total-cell {
+/* Individual Stat Card */
+.aSalesRep-stat-card {
+  background: white;
+  border-radius: 12px;
+  padding: 20px;
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.08);
+  width: 280px;
+  flex: 1;
+}
+
+/* Card Icon */
+.aSalesRep-card-icon {
+  width: 56px;
+  height: 56px;
+  border-radius: 10px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 24px;
+  color: white;
+  flex-shrink: 0;
+}
+
+.aSalesRep-icon-green {
+  background: linear-gradient(135deg, #22c55e 0%, #16a34a 100%);
+}
+
+.aSalesRep-icon-blue {
+  background: linear-gradient(135deg, #3b82f6 0%, #2563eb 100%);
+}
+
+.aSalesRep-icon-orange {
+  background: linear-gradient(135deg, #f59e0b 0%, #d97706 100%);
+}
+
+.aSalesRep-icon-teal {
+  background: linear-gradient(135deg, #14b8a6 0%, #0d9488 100%);
+}
+
+.aSalesRep-icon-cyan {
+  background: linear-gradient(135deg, #06b6d4 0%, #0891b2 100%);
+}
+
+/* Card Content */
+.aSalesRep-card-content {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  flex: 1;
+}
+
+.aSalesRep-card-label {
+  font-size: 11px;
+  font-weight: 600;
+  color: #6b7280;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+.aSalesRep-card-value {
+  font-size: 20px;
   font-weight: 700;
-  color: #f7f7f7;
-  background: #4b929d;
-  padding: 9px 9px;
-  border-radius: 6px;
-  border: 1px solid #e1e5e8;
-  transition: all 0.2s ease;
+  color: #1f2937;
+  line-height: 1;
 }
 
-.total-cell:hover {
-  background: #3a7a85;
-  transform: translateY(-2px);
+/* Responsive Design */
+@media (max-width: 1024px) {
+  .aSalesRep-tabs {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .aSalesRep-tab-dropdown {
+    width: 100%;
+    min-width: unset;
+  }
+
+  .aSalesRep-export-btn {
+    width: 100%;
+    justify-content: center;
+  }
+
+  .aSalesRep-period-text {
+    text-align: center;
+  }
+
+  .aSalesRep-cards-container {
+    gap: 12px;
+  }
+
+  .aSalesRep-stat-card {
+    min-width: 180px;
+  }
+}
+
+@media (max-width: 768px) {
+  .aSalesRep-report {
+    width: 95%;
+    margin: 20px 10px;
+  }
+
+  .aSalesRep-tabs {
+    padding: 12px 16px;
+    gap: 12px;
+  }
+
+  .aSalesRep-tab-dropdown {
+    font-size: 13px;
+    padding: 8px 10px;
+  }
+
+  .aSalesRep-export-btn {
+    font-size: 13px;
+    padding: 8px 14px;
+  }
+
+  .aSalesRep-period-text {
+    font-size: 12px;
+    padding: 8px 16px;
+  }
+
+  .aSalesRep-stat-card {
+    padding: 16px;
+    min-width: 160px;
+  }
+
+  .aSalesRep-card-icon {
+    width: 48px;
+    height: 48px;
+    font-size: 20px;
+  }
+
+  .aSalesRep-card-label {
+    font-size: 10px;
+  }
+
+  .aSalesRep-card-value {
+    font-size: 18px;
+  }
+}
+
+@media (max-width: 480px) {
+  .aSalesRep-cards-container {
+    flex-direction: column;
+    gap: 10px;
+  }
+
+  .aSalesRep-stat-card {
+    width: 100%;
+    max-width: 100%;
+    min-width: unset;
+  }
 }

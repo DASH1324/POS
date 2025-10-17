@@ -1,210 +1,348 @@
-.transhis-modal-backdrop {
-  position: fixed;
+.transHis-modal::before {
+  content: '';
+  position: absolute;
   top: 0;
   left: 0;
   right: 0;
-  bottom: 0;
-  background: rgba(0, 0, 0, 0.55);
+  height: 3px;
+  background: #4197a2;
+  z-index: 1;
+}
+
+/* Modal Overlay */
+.transHis-modal-overlay {
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  background-color: rgba(0, 0, 0, 0.4);
+  z-index: 1100;
   display: flex;
   justify-content: center;
   align-items: center;
-  z-index: 1100;
-  overflow: hidden;
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto', sans-serif;
 }
 
-.transhis-modal-container {
+/* Modal Container */
+.transHis-modal {
   background: #fff;
-  border-radius: 12px;
-  width: 600px;
-  max-width: 90%;
-  max-height: 85vh;
+  width: 90%;
+  max-width: 700px;
+  max-height: 90%;
+  border-radius: 10px;
+  position: relative;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.12);
   display: flex;
   flex-direction: column;
-  position: relative;
-  box-shadow: 0 6px 24px rgba(0, 0, 0, 0.25);
-  animation: fadeIn 0.25s ease;
   overflow: hidden;
-  padding: 10px; 
+  animation: transHisModalSlideIn 0.2s ease-out;
 }
 
-.transhis-modal-close-x {
-  position: absolute;
-  top: 12px;
-  right: 16px;
-  font-size: 22px;
-  font-weight: bold;
-  color: #666;
+/* Modal Header */
+.transHis-modal-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 20px 24px;
+  border-bottom: 1px solid #f0f0f0;
+}
+
+.transHis-modal-header h3 {
+  margin: 0;
+  font-size: 18px;
+  font-weight: 600;
+  color: #1a1a1a;
+  letter-spacing: -0.01em;
+}
+
+/* Close Button */
+.transHis-modal-close {
   background: none;
   border: none;
+  font-size: 24px;
   cursor: pointer;
-  transition: color 0.2s;
+  color: #aaa;
+  padding: 0;
+  width: 32px;
+  height: 32px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: color 0.2s ease;
+  line-height: 1;
 }
 
-.transhis-modal-close-x:hover {
-  color: #4B929D;
+.transHis-modal-close:hover {
+  color: #333;
 }
 
-.transhis-modal-title {
-  font-size: 1.6rem;
-  font-weight: 700;
-  text-align: center;
-  margin: 10px 0 20px;
-  color: #4B929D;
-  border-bottom: 2px solid #eee;
-  padding-bottom: 10px;
-}
-
-.modal-body {
+/* Modal Content */
+.transHis-modal-content {
+  font-size: 14px;
+  color: #1a1a1a;
   flex: 1;
+  display: flex;
+  flex-direction: column;
   overflow-y: auto;
-  padding: 20px;
-  background-color: #f9f9f9;
-  font-size: 14px;
-  border-radius: 8px;
+  padding: 24px;
+  gap: 20px;
 }
 
-/* Sections */
-.modal-section {
-  margin-bottom: 20px;
-  padding: 12px; /* 🔹 section padding */
-  background: #fff;
-  border-radius: 8px;
-  border: 1px solid #eee;
+/* Info Grid */
+.transHis-modal-info-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 16px;
 }
 
-.modal-section h5 {
-  font-size: 16px;
-  font-weight: 600;
-  margin: 0 0 12px;
-  letter-spacing: 0.5px;
-  color: #333;
-}
-
-.detail-row {
+.transHis-modal-info-item {
   display: flex;
-  justify-content: space-between;
-  padding: 10px 0;
-  font-size: 15px;
-  border-bottom: 1px solid #eee;
+  flex-direction: column;
+  gap: 4px;
 }
 
-.detail-row:last-child {
-  border-bottom: none;
-}
-
-.detail-row label {
-  font-weight: 600;
-  color: #333;
-}
-
-.items-list {
-  margin-top: 12px;
-  border-radius: 6px;
-  background: #fdfdfd;
-  padding: 16px;
-}
-
-.item-row {
-  display: flex;
-  justify-content: space-between;
-  padding: 10px 0;
-  border-bottom: 1px solid #eee;
-}
-
-.item-row:last-child {
-  border-bottom: none;
-}
-
-.item-info {
-  max-width: 70%;
-}
-
-.item-name {
-  font-weight: 600;
-  font-size: 15px;
-}
-
-.item-qty,
-.item-details {
-  font-size: 14px;
+.transHis-modal-label {
+  font-weight: 500;
+  font-size: 13px;
   color: #666;
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
 }
 
-.item-price {
-  font-weight: 600;
+.transHis-modal-value {
+  color: #1a1a1a;
   font-size: 15px;
-  color: #333;
+  font-weight: 500;
 }
 
-.discount-badge {
-  background-color: #e3f2fd;
-  color: #0d6efd;
-  padding: 4px 10px;
+/* Status Badge */
+.transHis-modal-status {
+  display: inline-block;
+  width: fit-content; /* makes background only as wide as text */
+  padding: 4px 8px; /* smaller padding for tighter fit */
   border-radius: 6px;
   font-size: 13px;
   font-weight: 600;
+  text-transform: capitalize;
+  white-space: nowrap; /* prevents wrapping for long statuses */
 }
 
-.discount-badge.none {
-  background-color: #f1f1f1;
-  color: #777;
+/* STATUS COLORS */
+.transHis-modal-status.completed {
+  background-color: #d4edda;
+  color: #28a745;
+  border: 1px solid #c3e6cb;
 }
 
-.bill-summary {
-  background: #fdfdfd;
-  border: 1px solid #eee;
+.transHis-modal-status.cancelled {
+  background-color: #e2e3e5;
+  color: #6c757d;
+  border: 1px solid #d6d8db;
+}
+
+.transHis-modal-status.processing {
+  background-color: #fff3cd;
+  color: #856404;
+  border: 1px solid #ffeaa7;
+}
+
+.transHis-modal-status.refund,
+.transHis-modal-status.refunded {
+  background-color: #f8d7da;
+  color: #721c24;
+  border: 1px solid #f5c6cb;
+}
+
+.transHis-modal-status.forpickup {
+  background-color: #d1ecf1;
+  color: #0c5460;
+  border: 1px solid #bee5eb;
+}
+
+.transHis-modal-status.request {
+  background-color: #e3f2fd;
+  color: #0d6efd;
+  border: 1px solid #90caf9;
+}
+
+/* Applied Discounts */
+.transHis-modal-applied-discounts h4 {
+  margin-bottom: 10px;
+  font-size: 15px;
+  font-weight: 600;
+  color: #1a1a1a;
+}
+
+.transHis-modal-discount-item {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  color: #4197a2;
+  font-size: 13px;
+  background-color: #f0f9fa;
+  padding: 6px 12px;
   border-radius: 6px;
-  padding: 16px;
-  margin-top: 12px;
+  font-weight: 500;
+  display: inline-flex;
 }
 
-.bill-row {
+/* Order Items */
+.transHis-modal-order-items h4 {
+  margin-bottom: 12px;
+  font-size: 15px;
+  font-weight: 600;
+  color: #1a1a1a;
+}
+
+.transHis-modal-items-scrollable {
+  max-height: 300px;
+  overflow-y: auto;
+  padding-right: 8px;
+}
+
+.transHis-modal-item {
+  margin-bottom: 16px;
+  padding-bottom: 16px;
+  border-bottom: 1px solid #f0f0f0;
+}
+
+.transHis-modal-item:last-child {
+  border-bottom: none;
+}
+
+.transHis-modal-item-header {
   display: flex;
   justify-content: space-between;
-  padding: 10px 0;
+  font-weight: 500;
   font-size: 15px;
+  margin-bottom: 6px;
+  color: #1a1a1a;
 }
 
-.bill-row.discount-row {
-  color: #d9534f;
+.transHis-modal-item-name {
+  flex: 1;
 }
 
-.bill-row.total-row {
-  font-weight: 700;
-  font-size: 17px;
-  border-top: 1px solid #ddd;
-  margin-top: 12px;
-  padding-top: 12px;
+.transHis-modal-item-price {
+  font-weight: 600;
 }
 
-.issue-box {
-  background: #fff;
-  border: 1px solid #eee;
-  border-radius: 6px;
+.transHis-modal-item-details {
+  display: flex;
+  justify-content: space-between;
+  font-size: 13px;
+  color: #666;
+  margin-bottom: 6px;
+}
+
+.transHis-modal-quantity {
+  color: #666;
+}
+
+.transHis-modal-item-addons {
+  font-size: 13px;
+  color: #666;
+  padding-left: 12px;
+  line-height: 1.6;
+}
+
+.transHis-modal-item-addons span {
+  display: block;
+}
+
+/* Price Breakdown */
+.transHis-modal-price-breakdown {
+  background-color: #fafafa;
+  border-radius: 8px;
   padding: 16px;
-  font-size: 14px;
-  color: #444;
+  border: 1px solid #f0f0f0;
 }
 
-.issue-box label {
+.transHis-modal-breakdown-row {
+  display: flex;
+  justify-content: space-between;
+  margin-bottom: 8px;
+  font-size: 14px;
+  color: #666;
+}
+
+.transHis-modal-breakdown-row.transHis-modal-discount {
+  color: #e74c3c;
+}
+
+.transHis-modal-breakdown-row.transHis-modal-total {
+  font-weight: 600;
+  font-size: 17px;
+  margin-top: 8px;
+  padding-top: 12px;
+  border-top: 1px solid #e0e0e0;
+  color: #1a1a1a;
+}
+
+/* Issue Section */
+.transHis-modal-issue-section h4 {
+  margin-bottom: 10px;
+  font-size: 15px;
+  font-weight: 600;
+  color: #1a1a1a;
+}
+
+.transHis-modal-issue-box {
+  background-color: #fff3cd;
+  border: 1px solid #ffeaa7;
+  border-radius: 8px;
+  padding: 16px;
+}
+
+.transHis-modal-issue-label {
   display: block;
   font-weight: 600;
-  margin-bottom: 6px;
-  color: #333;
+  font-size: 13px;
+  color: #856404;
+  margin-bottom: 8px;
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
 }
 
-.issue-box p {
+.transHis-modal-issue-box p {
   margin: 0;
-  line-height: 1.4;
+  font-size: 14px;
+  color: #856404;
+  line-height: 1.5;
 }
 
-@keyframes fadeIn {
+/* Animation */
+@keyframes transHisModalSlideIn {
   from {
     opacity: 0;
-    transform: scale(0.95);
+    transform: translateY(-10px);
   }
   to {
     opacity: 1;
-    transform: scale(1);
+    transform: translateY(0);
   }
+}
+
+/* Scrollbar Styling */
+.transHis-modal-items-scrollable::-webkit-scrollbar,
+.transHis-modal-content::-webkit-scrollbar {
+  width: 6px;
+}
+
+.transHis-modal-items-scrollable::-webkit-scrollbar-track,
+.transHis-modal-content::-webkit-scrollbar-track {
+  background: #f0f0f0;
+  border-radius: 3px;
+}
+
+.transHis-modal-items-scrollable::-webkit-scrollbar-thumb,
+.transHis-modal-content::-webkit-scrollbar-thumb {
+  background: #ccc;
+  border-radius: 3px;
+}
+
+.transHis-modal-items-scrollable::-webkit-scrollbar-thumb:hover,
+.transHis-modal-content::-webkit-scrollbar-thumb:hover {
+  background: #aaa;
 }

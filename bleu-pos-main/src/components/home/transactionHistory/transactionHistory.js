@@ -178,10 +178,16 @@ function TransactionHistory() {
     const [start, end] = getDateRange();
     return transactions.filter((transaction) => {
       const matchesTab = transaction.type === activeTab;
-      const matchesSearch = (transaction.id || "")
-        .toString()
-        .toLowerCase()
-        .includes(searchTerm.toLowerCase());
+      
+      // Enhanced search - search across multiple fields
+      const searchLower = searchTerm.toLowerCase();
+      const matchesSearch = searchTerm === "" || 
+        (transaction.id || "").toString().toLowerCase().includes(searchLower) ||
+        new Date(transaction.date).toLocaleDateString().toLowerCase().includes(searchLower) ||
+        (transaction.cashierName || "").toLowerCase().includes(searchLower) ||
+        (transaction.orderType || "").toLowerCase().includes(searchLower) ||
+        (transaction.paymentMethod || "").toLowerCase().includes(searchLower);
+      
       const matchesStatus =
         statusFilter === "" || transaction.status === statusFilter;
       const tDate = new Date(transaction.date);
@@ -244,37 +250,77 @@ function TransactionHistory() {
   };
 
   const columns = [
-    { name: "TRANSACTION COUNT", 
-      selector: (row, index) => index + 1, 
-      cell: (row, index) => `${index + 1}.`,
-      sortable: false, 
-      width: "15%" 
-    }, 
-    { name: "DATE", selector: (row) => new Date(row.date).toLocaleDateString(), sortable: true, width: "8%" },
-    { name: "CASHIER", selector: (row) => row.cashierName || "—", width: "12%" },
-    { name: "ORDER TYPE", selector: (row) => row.orderType || "—", width: "10%" },
-    { name: "ITEM(S)", selector: (row) => row.items?.length || 0, center: true, sortable: true, width: "9%" },
-    { name: "DISCOUNTS", selector: (row) => row.discountsAndPromotions || "—", width: "11%" },
-    { name: "TOTAL", selector: (row) => `₱${parseFloat(row.total).toFixed(2)}`, center: true, sortable: true, width: "12%" },
-    { name: "PAYMENT METHOD", selector: (row) => row.paymentMethod || "N/A", center: true, width: "13%" },
+    {
+      name: "NUMBER",
+      selector: (row, index) => index + 1,
+      cell: (row, index) => `${index + 1}`,
+      sortable: false,
+      width: "10%",
+      center: true,
+    },
+    {
+      name: "DATE",
+      selector: (row) => new Date(row.date).toLocaleDateString(),
+      sortable: true,
+      width: "10%",
+      center: true,
+    },
+    {
+      name: "CASHIER",
+      selector: (row) => row.cashierName || "—",
+      width: "15%",
+      center: true,
+    },
+    {
+      name: "ORDER TYPE",
+      selector: (row) => row.orderType || "—",
+      width: "10%",
+      center: true,
+    },
+    {
+      name: "ITEM",
+      selector: (row) => row.items?.length || 0,
+      sortable: true,
+      width: "10%",
+      center: true,
+    },
+    {
+      name: "DISCOUNTS OR PROMO",
+      selector: (row) => row.discountsAndPromotions || "—",
+      width: "15%",
+      center: true,
+    },
+    {
+      name: "TOTAL",
+      selector: (row) => `₱${parseFloat(row.total).toFixed(2)}`,
+      sortable: true,
+      width: "10%",
+      center: true,
+    },
+    {
+      name: "PAYMENT",
+      selector: (row) => row.paymentMethod || "N/A",
+      width: "10%",
+      center: true,
+    },
     {
       name: "STATUS",
       selector: (row) => row.status,
       cell: (row) => (
-        <span className={`status-badge ${row.status.toLowerCase()}`}>
+        <span className={`transHis-status-badge ${row.status.toLowerCase()}`}>
           {row.status}
         </span>
       ),
-      center: true,
       sortable: true,
-      width: "11%",
+      width: "10%",
+      center: true,
     },
   ];
 
   // Auth error state
   if (authError) {
     return (
-      <div className="transaction-history">
+      <div className="transHis-page">
         <Sidebar />
         <div className="transHis">
           <Header pageTitle="Transaction History" />
@@ -293,7 +339,7 @@ function TransactionHistory() {
   // Error state
   if (error) {
     return (
-      <div className="transaction-history">
+      <div className="transHis-page">
         <Sidebar />
         <div className="transHis">
           <Header pageTitle="Transaction History" />
@@ -314,20 +360,20 @@ function TransactionHistory() {
   }
 
   return (
-    <div className="transaction-history">
+    <div className="transHis-page">
       <Sidebar />
       <div className="transHis">
         <Header pageTitle="Transaction History" />
         <div className="transHis-content">
-          <div className="tabs">
+          <div className="transHis-tabs">
             <button
-              className={`tab ${activeTab === "Store" ? "active-tab" : ""}`}
+              className={`transHis-tab ${activeTab === "Store" ? "transHis-tab-active" : ""}`}
               onClick={() => setActiveTab("Store")}
             >
               Store
             </button>
             <button
-              className={`tab ${activeTab === "Online" ? "active-tab" : ""}`}
+              className={`transHis-tab ${activeTab === "Online" ? "transHis-tab-active" : ""}`}
               onClick={() => setActiveTab("Online")}
             >
               Online
@@ -337,7 +383,7 @@ function TransactionHistory() {
           <div className="transHis-filter-bar">
             <input
               type="text"
-              placeholder="Search by Transaction Number..."
+              placeholder="Search Transaction..."
               value={searchTerm}
               onChange={(e) => setSearchTerm(e.target.value)}
             />
@@ -359,7 +405,7 @@ function TransactionHistory() {
               }}
             >
               <option value="today">Today</option>
-              <option value="thisWeek">This Week (Last 7 Days)</option>
+              <option value="thisWeek">This Week</option>
               <option value="thisMonth">This Month</option>
               <option value="thisYear">This Year</option>
               <option value="custom">Custom</option>
@@ -368,27 +414,38 @@ function TransactionHistory() {
               value={statusFilter}
               onChange={(e) => setStatusFilter(e.target.value)}
             >
-              <option value="">Status: All</option>
+              <option value="">All Status</option>
               {uniqueStatuses.map((s) => (
-                <option key={s} value={s}>
+                <option key={s} value={s}>  
                   {s}
                 </option>
               ))}
             </select>
-            <button className="history-clear-btn" onClick={handleClearFilters}>
+            <button className="transHis-clear-btn" onClick={handleClearFilters}>
               Clear Filters
             </button>
             <button
-              className="history-export-btn"
-              onClick={() =>
-                handleExport(filteredTransactions, activeTab, statusFilter)
-              }
+              className="transHis-export-btn"
+              onClick={() => {
+                const exportedBy = "Admin"; // Or get from your auth context/user data
+                const dateFilterLabel = dateRange === "custom" 
+                  ? `${new Date(customStart).toLocaleDateString()} - ${new Date(customEnd).toLocaleDateString()}`
+                  : dateRange.charAt(0).toUpperCase() + dateRange.slice(1);
+                
+                handleExport(
+                  filteredTransactions, 
+                  activeTab, 
+                  statusFilter || "All",
+                  exportedBy,
+                  dateFilterLabel
+                );
+              }}
             >
               <FaFileExport /> Export
             </button>
           </div>
 
-          <div className="transactions-table-container">
+          <div className="transHis-table-container">
             <DataTable
               columns={columns}
               data={filteredTransactions}

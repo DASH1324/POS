@@ -4,7 +4,7 @@ body {
     font-family: 'Segoe UI', sans-serif;
 }
 
-.transaction-history {
+.transHis-page {
     display: flex;
     flex-direction: row;
     min-height: 100vh;
@@ -22,16 +22,16 @@ body {
 }
 
 .transHis-content {
-    margin-top: 60px;
+    margin-top: 25px;
 }
 
-.tabs {
+.transHis-tabs {
     display: flex;
     margin-bottom: 15px;
     gap: 10px;
 }
 
-.tab {
+.transHis-tab {
     padding: 8px 16px;
     background-color: #ffffff;
     color: #666;
@@ -43,16 +43,16 @@ body {
     width: 150px;
 }
 
-.tab:hover {
+.transHis-tab:hover {
     background-color: #f1f1f1;
 }
 
-.active-tab {
+.transHis-tab-active {
     background-color: #4B929D;
     color: white;
 }
 
-.active-tab:hover {
+.transHis-tab-active:hover {
     background-color: #4B929D;
     color: white;
 }
@@ -68,12 +68,16 @@ body {
 
 .transHis-filter-bar input {
     font-size: 13px;
-    padding: 11px 11px;
+    padding: 9px 8px;
     border: 0.5px solid #EBEBEB;
     border-radius: 6px;
-    border-color:black;
     flex: 3;
     color: #888;
+}
+
+.transHis-filter-bar input:focus {
+    border: none;
+    outline: none;
 }
 
 .transHis-filter-bar select {
@@ -81,16 +85,20 @@ body {
     min-width: 150px;
     max-width: 300px;
     font-size: 13px;
-    padding: 11px 11px;
+    padding: 9px 8px;
     border: 0.5px solid #EBEBEB;
     border-radius: 6px;
-    border-color:black;
     color: #555; 
 }
 
-.history-clear-btn {
-    padding: 11px 11px;
-    background-color: #77a1a7;
+.transHis-filter-bar select:focus {
+    border: none;
+    outline: none;
+}
+
+.transHis-clear-btn {
+    padding: 8px 14px;
+    background-color: #d9534f;
     color: white;
     border: none;
     border-radius: 6px;
@@ -103,13 +111,13 @@ body {
     width: 110px;
 }
 
-.history-clear-btn:hover {
-    background: #3a7a85;
+.transHis-clear-btn:hover {
+    background-color: #c9302c;
 }
 
-.history-export-btn {
-    padding: 11px 11px;
-    background-color: #4B929D;
+.transHis-export-btn {
+    padding: 8px 14px;
+    background-color: #007BFF;
     color: white;
     border: none;
     border-radius: 6px;
@@ -122,22 +130,22 @@ body {
     width: 95px;
 }
 
-.history-export-btn:hover {
-    background: #3a7a85;
+.transHis-export-btn:hover {
+    background-color: #0069d9;
 }
 
-.transactions-table-container {
+.transHis-table-container {
     background-color: #4B929D;
 }
 
-.transactions-table tbody {
+.transHis-table tbody {
     display: block;
     max-height: 60vh;  
     overflow-y: auto;
     width: 100%;
 }
 
-.status-badge {
+.transHis-status-badge {
     padding: 4px 8px;
     border-radius: 12px;
     font-size: 12px;
@@ -145,42 +153,43 @@ body {
     text-transform: uppercase;
 }
 
-.status-badge.completed {
+.transHis-status-badge.completed {
   background-color: #d4edda;
   color: #28a745;
   border: 1px solid #c3e6cb;
 }
 
-.status-badge.cancelled {
-  background-color: #f8d7da;
-  color: #721c24;
-  border: 1px solid #f5c6cb;
+.transHis-status-badge.cancelled {
+  background-color: #e2e3e5; 
+  color: #6c757d;      
+  border: 1px solid #d6d8db;
 }
 
-.status-badge.processing {
+.transHis-status-badge.processing {
   background-color: #fff3cd;
   color: #856404;
   border: 1px solid #ffeaa7;
 }
 
-.status-badge.refund {
-  background-color: #f8d7da;
-  color: #721c24;
-  border: 1px solid #f5c6cb;
-}
-.status-badge.return {
+.transHis-status-badge.refund {
   background-color: #f8d7da;
   color: #721c24;
   border: 1px solid #f5c6cb;
 }
 
-.status-badge.forpickup {
+.transHis-status-badge.return {
+  background-color: #f8d7da;
+  color: #721c24;
+  border: 1px solid #f5c6cb;
+}
+
+.transHis-status-badge.forpickup {
   background-color: #d1ecf1;
   color: #0c5460;
   border: 1px solid #bee5eb;
 }
 
-.status-badge.request {
+.transHis-status-badge.request {
   background-color: #e3f2fd;
   color: #0d6efd;
   border: 1px solid #90caf9;

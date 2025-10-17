@@ -24,7 +24,7 @@ function SidebarComponent() {
     if (role) {
       setUserRole(role);
     }
-  }, [location]); // The dependency on `location` is the key fix.
+  }, [location]); // The dependency on location is the key fix.
 
   return (
     <div className="sidebar-wrapper">
@@ -108,4 +108,4 @@ function SidebarComponent() {
   );
 }
 
-export default SidebarComponent;
+export default SidebarComponent;  

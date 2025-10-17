@@ -215,13 +215,14 @@ async def log_spillage(
 
 
 @router.get("/", response_model=List[SpillageOut])
-async def get_spillage_for_cashier_by_date(
-    cashier_name: str,
-    date: date, 
+async def get_spillage_logs(
+    start_date: Optional[date] = None, 
+    end_date: Optional[date] = None,
+    cashier_name: Optional[str] = None, # Add cashier_name as an optional parameter
     token: str = Depends(oauth2_scheme)
 ):
     """
-    Get all spillage records for a specific cashier, filtered by a specific date.
+    Get all spillage records with optional filtering by date range and/or cashier name.
     """
     await validate_token_and_roles(token, ["admin", "manager", "cashier"])
 
@@ -229,16 +230,36 @@ async def get_spillage_for_cashier_by_date(
     try:
         conn = await get_db_connection()
         async with conn.cursor() as cursor:
+            # Start with the base query
             query = """
                 SELECT 
                     SpillageID, CashierName, SpillageDate, ProductName, 
                     Category, Quantity, Reason, LoggedAt
                 FROM ProductSpillage
-                WHERE CashierName = ? AND CAST(SpillageDate AS DATE) = ?
-                ORDER BY LoggedAt DESC
             """
             
-            await cursor.execute(query, (cashier_name, date))
+            # Dynamically build the WHERE clause for all filters
+            conditions = []
+            params = []
+            
+            if start_date:
+                conditions.append("CAST(SpillageDate AS DATE) >= ?")
+                params.append(start_date)
+            
+            if end_date:
+                conditions.append("CAST(SpillageDate AS DATE) <= ?")
+                params.append(end_date)
+                
+            if cashier_name:
+                conditions.append("CashierName = ?")
+                params.append(cashier_name)
+            
+            if conditions:
+                query += " WHERE " + " AND ".join(conditions)
+            
+            query += " ORDER BY LoggedAt DESC"
+            
+            await cursor.execute(query, tuple(params))
             rows = await cursor.fetchall()
             
             return [
@@ -255,7 +276,7 @@ async def get_spillage_for_cashier_by_date(
             ]
 
     except Exception as e:
-        logger.error(f"Error fetching spillage list for cashier {cashier_name}: {e}", exc_info=True)
+        logger.error(f"Error fetching spillage logs: {e}", exc_info=True)
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Error fetching spillage records: {str(e)}"
@@ -263,7 +284,6 @@ async def get_spillage_for_cashier_by_date(
     finally:
         if conn:
             await conn.close()
-
 
 @router.delete("/{spillage_id}")
 async def delete_spillage(

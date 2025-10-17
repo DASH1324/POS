@@ -7,9 +7,14 @@ function CustomDateModal({ show, onClose, onApply, initialStart, initialEnd }) {
   const [errorMessage, setErrorMessage] = useState(""); 
 
   useEffect(() => {
-    if (initialStart) setStartDate(initialStart);
-    if (initialEnd) setEndDate(initialEnd);
-  }, [initialStart, initialEnd]);
+    if (show) {
+      if (initialStart) setStartDate(initialStart);
+      if (initialEnd) setEndDate(initialEnd);
+    } else {
+      // Reset when modal closes
+      setErrorMessage("");
+    }
+  }, [show, initialStart, initialEnd]);
 
   const handleClose = () => {
     setErrorMessage(""); 
@@ -18,6 +23,10 @@ function CustomDateModal({ show, onClose, onApply, initialStart, initialEnd }) {
 
   const handleApply = () => {
     if (startDate && endDate) {
+      if (new Date(startDate) > new Date(endDate)) {
+        setErrorMessage("Start date cannot be after end date");
+        return;
+      }
       setErrorMessage("");
       onApply(startDate, endDate);
       onClose();
@@ -25,56 +34,56 @@ function CustomDateModal({ show, onClose, onApply, initialStart, initialEnd }) {
       setErrorMessage("Please select both start and end dates");
     }
   };
-  
-  const handleOverlayClick = (e) => {
-    if (e.target.className === "customDateModal-overlay") {
-      handleClose(); 
-    }
-  };
 
   if (!show) return null;
 
   return (
-    <div className="customDateModal-overlay" onClick={handleOverlayClick}>
-      <div className="customDateModal-container">
-        <h2>Select Custom Date Range</h2>
+    <div className="customDateModal-overlay" onClick={handleClose}>
+      <div className="customDateModal-modal" onClick={(e) => e.stopPropagation()}>
+        <div className="customDateModal-header">
+          <h3>Select Custom Date Range</h3>
+          <button className="customDateModal-close-modal" onClick={handleClose}>
+            ×
+          </button>
+        </div>
 
-        {errorMessage && (
-          <div className="customDateModal-error">
-            {errorMessage}
-          </div>
-        )}
+        <div className="customDateModal-content">
+          {errorMessage && (
+            <p className="customDateModal-error-message">{errorMessage}</p>
+          )}
 
-        <div className="customDateModal-inputs">
-          <div>
-            <label>Start Date:</label>
-            <input
-              type="date"
-              value={startDate}
-              onChange={(e) => {
-                setStartDate(e.target.value);
-                setErrorMessage(""); 
-              }}
-            />
-          </div>
-          <div>
-            <label>End Date:</label>
-            <input
-              type="date"
-              value={endDate}
-              onChange={(e) => {
-                setEndDate(e.target.value);
-                setErrorMessage("");
-              }}
-            />
+          <div className="customDateModal-date-row">
+            <div className="customDateModal-input-group">
+              <label>Start Date</label>
+              <input
+                type="date"
+                value={startDate}
+                onChange={(e) => {
+                  setStartDate(e.target.value);
+                  setErrorMessage(""); 
+                }}
+                className="customDateModal-date-input"
+              />
+            </div>
+
+            <div className="customDateModal-input-group">
+              <label>End Date</label>
+              <input
+                type="date"
+                value={endDate}
+                onChange={(e) => {
+                  setEndDate(e.target.value);
+                  setErrorMessage("");
+                }}
+                className="customDateModal-date-input"
+              />
+            </div>
           </div>
         </div>
-        <div className="customDateModal-actions">
-          <button className="customDateModal-btn cancel" onClick={handleClose}>
-            Cancel
-          </button>
-          <button className="customDateModal-btn apply" onClick={handleApply}>
-            Apply
+
+        <div className="customDateModal-footer">
+          <button className="customDateModal-btn-confirm" onClick={handleApply}>
+            Apply Range
           </button>
         </div>
       </div>
