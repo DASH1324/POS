@@ -29,7 +29,8 @@ function Menu() {
 
   // --- PROMOTIONS STATE ---
   const [promotions, setPromotions] = useState([]);
-  const [showBogoModal, setShowBogoModal] = useState(false);
+  const [showBogoInfoModal, setShowBogoInfoModal] = useState(false);
+  const [showBogoCongratsModal, setShowBogoCongratsModal] = useState(false);
   const [activeBogoPromo, setActiveBogoPromo] = useState(null);
 
   // State for order details
@@ -113,24 +114,6 @@ function Menu() {
         const apiDetails = await detailsResponse.json();
         const apiProducts = await productsResponse.json(); 
 
-        // DEBUG: Check what status values are coming from API
-        console.log('=== CHECKING PRODUCT STATUSES FROM API ===');
-        console.log('Total products from API:', apiDetails.length);
-        console.log('Sample product from API:', apiDetails[0]);
-        
-        const unavailableProducts = apiDetails.filter(p => p.Status === 'Unavailable');
-        console.log('Unavailable products count:', unavailableProducts.length);
-        if (unavailableProducts.length > 0) {
-          console.log('Sample unavailable products:', unavailableProducts.slice(0, 3).map(p => ({
-            name: p.ProductName,
-            status: p.Status,
-            category: p.ProductCategory
-          })));
-        }
-        
-        const availableProducts = apiDetails.filter(p => p.Status === 'Available');
-        console.log('Available products count:', availableProducts.length);
-
         const imageMap = apiProducts.reduce((map, product) => {
           map[product.ProductName] = product.ProductImage;
           return map;
@@ -144,29 +127,11 @@ function Menu() {
           description: p.Description,
           price: p.Price,
           category: p.ProductCategory,
-          status: p.Status,  // This should be 'Available' or 'Unavailable'
+          status: p.Status,
           image: imageMap[p.ProductName] || placeholderImage, 
           sizes: p.Sizes,
           hasAddons: p.HasAddOns,
         }));
-
-        // DEBUG: Verify status is preserved after mapping
-        console.log('=== AFTER MAPPING ===');
-        console.log('Total mapped products:', mappedProducts.length);
-        console.log('Sample mapped product:', mappedProducts[0]);
-        
-        const unavailableMapped = mappedProducts.filter(p => p.status === 'Unavailable');
-        console.log('Unavailable products after mapping:', unavailableMapped.length);
-        if (unavailableMapped.length > 0) {
-          console.log('Sample mapped unavailable:', unavailableMapped.slice(0, 3).map(p => ({
-            name: p.name,
-            status: p.status,
-            category: p.category
-          })));
-        }
-        
-        const availableMapped = mappedProducts.filter(p => p.status === 'Available');
-        console.log('Available products after mapping:', availableMapped.length);
         
         setProducts(mappedProducts);
 
@@ -188,7 +153,7 @@ function Menu() {
 
     if (activeToken && activeUsername) {
         initializeData(activeToken, activeUsername);
-        fetchPromotions(activeToken); // Fetch promotions on initial load
+        fetchPromotions(activeToken);
     }
 
   }, []);
@@ -256,13 +221,6 @@ function Menu() {
       filtered = products.filter(p => p.category === selectedFilter.value);
     }
     
-    // DEBUG: Check filtered products status
-    console.log('=== FILTERING PRODUCTS ===');
-    console.log('Filter type:', selectedFilter.type, 'Filter value:', selectedFilter.value);
-    console.log('Filtered count:', filtered.length);
-    const unavailableFiltered = filtered.filter(p => p.status === 'Unavailable');
-    console.log('Unavailable in filtered:', unavailableFiltered.length);
-    
     return filtered.sort((a, b) => {
       const aUnavailable = a.status === 'Unavailable';
       const bUnavailable = b.status === 'Unavailable';
@@ -274,11 +232,9 @@ function Menu() {
 
   const filteredProducts = useMemo(() => filterProducts(), [filterProducts]);
 
-  // Optimized: Get dynamic max quantity with caching
   const getDynamicMaxQuantity = useCallback(async (productName, category, productId) => {
     const cacheKey = `${productId}-${cartItems.length}-${cartItems.map(i => `${i.id}:${i.quantity}`).join(',')}`;
     
-    // Return cached result if available
     if (maxQuantityCache[cacheKey]) {
       return maxQuantityCache[cacheKey];
     }
@@ -340,7 +296,6 @@ function Menu() {
         productName: maxQtyData.productName
       };
 
-      // Cache the result
       setMaxQuantityCache(prev => ({ ...prev, [cacheKey]: result }));
       
       return result;
@@ -351,7 +306,6 @@ function Menu() {
     }
   }, [cartItems, maxQuantityCache]);
 
-  // Optimized: Check inventory conflicts with debouncing
   const checkInventoryConflicts = useCallback(async (newProductId) => {
     const token = localStorage.getItem('authToken');
     if (!token) {
@@ -397,7 +351,6 @@ function Menu() {
     }
 
     if (type === 'product') {
-      // Check for inventory conflicts first
       const conflictCheck = await checkInventoryConflicts(item.id);
       
       if (!conflictCheck.canAdd) {
@@ -409,7 +362,6 @@ function Menu() {
         return;
       }
 
-      // Fetch dynamic max quantity
       const maxQtyInfo = await getDynamicMaxQuantity(item.name, item.category, item.id);
       
       if (maxQtyInfo && maxQtyInfo.maxQuantity === 0) {
@@ -417,7 +369,58 @@ function Menu() {
         return;
       }
 
-      // Add or update cart item
+      // --- CHECK BOGO BEFORE ADDING ---
+      let previousBogoCompleted = false;
+      let isFirstAdd = false;
+      let wasBogoAlreadyStarted = false;
+      const bogoPromo = promotions.find(p => {
+        if (!p.type.startsWith('BOGO')) return false;
+        const applicableProducts = p.products.split(',').map(name => name.trim());
+        return applicableProducts.includes(item.name);
+      });
+
+      if (bogoPromo) {
+        const matches = bogoPromo.type.match(/(\d+)\+(\d+)/);
+        if (matches) {
+          const buyQuantity = parseInt(matches[1], 10);
+          const getQuantity = parseInt(matches[2], 10);
+          const requiredTotal = buyQuantity + getQuantity;
+          
+          // Parse the BOGO products
+          const applicableProducts = bogoPromo.products.split(',').map(name => name.trim());
+          const buyItemName = applicableProducts[0];
+          const getItemName = applicableProducts.length > 1 ? applicableProducts[1] : buyItemName;
+          
+          // Check if any BOGO product is already in cart
+          const hasBuyItem = cartItems.some(cartItem => cartItem.name === buyItemName);
+          const hasGetItem = cartItems.some(cartItem => cartItem.name === getItemName);
+          wasBogoAlreadyStarted = hasBuyItem || hasGetItem;
+          
+          // Check if this is the first BOGO product being added
+          isFirstAdd = !wasBogoAlreadyStarted;
+          
+          // For same product BOGO
+          if (buyItemName === getItemName) {
+            const currentItemInCart = cartItems.find(cartItem => cartItem.name === item.name);
+            const currentQuantity = currentItemInCart ? currentItemInCart.quantity : 0;
+            previousBogoCompleted = currentQuantity >= requiredTotal;
+          } 
+          // For different products BOGO
+          else {
+            const buyItemsInCart = cartItems.find(cartItem => cartItem.name === buyItemName);
+            const getItemsInCart = cartItems.find(cartItem => cartItem.name === getItemName);
+            const buyQty = buyItemsInCart ? buyItemsInCart.quantity : 0;
+            const getQty = getItemsInCart ? getItemsInCart.quantity : 0;
+            
+            // Check if BOGO was already completed before this add
+            const bogoSets = Math.floor(buyQty / buyQuantity);
+            const eligibleGetItems = bogoSets * getQuantity;
+            previousBogoCompleted = (buyQty >= buyQuantity && getQty >= eligibleGetItems);
+          }
+        }
+      }
+
+      // Add or update cart item and check BOGO completion
       setCartItems(prev => {
         const existingIndex = prev.findIndex(cartItem => 
           cartItem.id === item.id && 
@@ -425,6 +428,8 @@ function Menu() {
           (!cartItem.addons || cartItem.addons.length === 0)
         );
 
+        let updatedCart;
+        
         if (existingIndex !== -1) {
           const currentQty = prev[existingIndex].quantity;
           const maxQty = maxQtyInfo ? maxQtyInfo.maxQuantity : 999;
@@ -434,14 +439,14 @@ function Menu() {
             return prev;
           }
 
-          const updatedCart = [...prev];
+          updatedCart = [...prev];
+          const newQuantity = currentQty + 1;
           updatedCart[existingIndex] = {
             ...updatedCart[existingIndex],
-            quantity: currentQty + 1,
+            quantity: newQuantity,
             maxQuantity: maxQty,
             limitedBy: maxQtyInfo?.limitedBy
           };
-          return updatedCart;
         } else {
           const maxQty = maxQtyInfo ? maxQtyInfo.maxQuantity : 999;
           const newCartItem = { 
@@ -453,23 +458,73 @@ function Menu() {
             limitedBy: maxQtyInfo?.limitedBy,
             cartId: Date.now() + Math.random()
           };
-          return [...prev, newCartItem];
+          updatedCart = [...prev, newCartItem];
         }
+
+        // Check if BOGO is NOW completed after this addition using the UPDATED cart
+        if (bogoPromo && !previousBogoCompleted) {
+          const matches = bogoPromo.type.match(/(\d+)\+(\d+)/);
+          if (matches) {
+            const buyQuantity = parseInt(matches[1], 10);
+            const getQuantity = parseInt(matches[2], 10);
+            
+            const applicableProducts = bogoPromo.products.split(',').map(name => name.trim());
+            const buyItemName = applicableProducts[0];
+            const getItemName = applicableProducts.length > 1 ? applicableProducts[1] : buyItemName;
+            
+            let isNowCompleted = false;
+            
+            // Check quantities in the UPDATED cart
+            if (buyItemName === getItemName) {
+              // Same product BOGO
+              const requiredTotal = buyQuantity + getQuantity;
+              const currentItemInCart = updatedCart.find(cartItem => cartItem.name === buyItemName);
+              const currentQuantity = currentItemInCart ? currentItemInCart.quantity : 0;
+              
+              if (currentQuantity >= requiredTotal) {
+                isNowCompleted = true;
+              }
+            } else {
+              // Different products BOGO
+              const buyItemsInCart = updatedCart.find(cartItem => cartItem.name === buyItemName);
+              const getItemsInCart = updatedCart.find(cartItem => cartItem.name === getItemName);
+              const buyQty = buyItemsInCart ? buyItemsInCart.quantity : 0;
+              const getQty = getItemsInCart ? getItemsInCart.quantity : 0;
+              
+              // Check if we NOW have the required quantities
+              if (buyQty >= buyQuantity && getQty >= getQuantity) {
+                isNowCompleted = true;
+              }
+            }
+
+            // Show congratulations modal if BOGO just completed
+            if (isNowCompleted) {
+              console.log("BOGO Promotion completed! Showing congratulations modal:", bogoPromo);
+              
+              const valueMatch = bogoPromo.value.match(/(\d+\.?\d*)/);
+              const discountValue = valueMatch ? valueMatch[0] : '0';
+              const isPercentage = bogoPromo.value.includes('%');
+              
+              // Use setTimeout to ensure state update happens after cart update
+              setTimeout(() => {
+                setActiveBogoPromo({
+                  ...bogoPromo,
+                  congratsMessage: `Congratulations! You've completed the ${bogoPromo.type} promotion and received ${discountValue}${isPercentage ? '%' : '₱'} discount!`
+                });
+                setShowBogoCongratsModal(true);
+              }, 100);
+            }
+          }
+        }
+
+        return updatedCart;
       });
 
-      // --- BOGO PROMOTION CHECK ---
-      const bogoPromo = promotions.find(p => {
-          // The `type` field from your API is formatted like "BOGO (1+1)"
-          if (!p.type.startsWith('BOGO')) return false;
-          // The `products` field is a comma-separated string
-          const applicableProducts = p.products.split(',').map(name => name.trim());
-          return applicableProducts.includes(item.name);
-      });
-
-      if (bogoPromo) {
-          console.log("BOGO Promotion found:", bogoPromo);
-          setActiveBogoPromo(bogoPromo);
-          setShowBogoModal(true); // Open the modal to inform the user
+      // --- SHOW INFO MODAL ON FIRST ADD ---
+      if (bogoPromo && isFirstAdd && !previousBogoCompleted) {
+        console.log("First BOGO product added, showing info modal:", bogoPromo);
+        setActiveBogoPromo(bogoPromo);
+        setShowBogoInfoModal(true);
       }
 
     } else if (type === 'merchandise') {
@@ -505,7 +560,7 @@ function Menu() {
         }
       });
     }
-  }, [checkInventoryConflicts, getDynamicMaxQuantity, promotions]);
+  }, [checkInventoryConflicts, getDynamicMaxQuantity, promotions, cartItems]);
 
   const handleInitialCashSubmit = async (e) => {
     e.preventDefault();
@@ -547,14 +602,6 @@ function Menu() {
   };
 
   const ProductList = React.memo(({ products, addToCart }) => {
-    console.log('=== RENDERING PRODUCT LIST ===');
-    console.log('Total products to render:', products.length);
-    const unavailableInRender = products.filter(p => p.status === 'Unavailable');
-    console.log('Unavailable products in render:', unavailableInRender.length);
-    if (unavailableInRender.length > 0) {
-      console.log('Unavailable products:', unavailableInRender.map(p => p.name));
-    }
-
     return (
       <div className="menu-product-grid">
         {products.map(product => (
@@ -694,8 +741,8 @@ function Menu() {
         </div>
       )}
 
-      {/* --- BOGO PROMOTION MODAL --- */}
-      {showBogoModal && activeBogoPromo && (
+      {/* --- BOGO INFO MODAL (FIRST ADD) --- */}
+      {showBogoInfoModal && activeBogoPromo && (
         <div className="initialCash-modal-overlay">
           <div className="initialCash-modal-container">
             <div className="initialCash-modal-title">Promotional Offer!</div>
@@ -710,7 +757,7 @@ function Menu() {
             </div>
             <button
               onClick={() => {
-                setShowBogoModal(false);
+                setShowBogoInfoModal(false);
                 setActiveBogoPromo(null);
               }}
               className="initialCash-submit-btn"
@@ -722,8 +769,43 @@ function Menu() {
         </div>
       )}
 
+      {/* --- BOGO CONGRATULATIONS MODAL (COMPLETION) --- */}
+      {showBogoCongratsModal && activeBogoPromo && (
+        <div className="initialCash-modal-overlay">
+          <div className="initialCash-modal-container">
+            <div className="initialCash-modal-title" style={{color: '#4CAF50'}}>
+              🎉 Congratulations! 🎉
+            </div>
+            <div className="initialCash-modal-description" style={{textAlign: "center", alignSelf: 'stretch', padding: "0 20px"}}>
+              <strong>{activeBogoPromo.congratsMessage || `You've completed the ${activeBogoPromo.type} promotion!`}</strong>
+              <br/><br/>
+              <div style={{textAlign: "left"}}>
+                <strong>Promotion:</strong> {activeBogoPromo.name}
+                <br/>
+                <strong>Type:</strong> {activeBogoPromo.type}
+                <br/>
+                <strong>Discount:</strong> {activeBogoPromo.value}
+                <br/>
+                <strong>Products:</strong> {activeBogoPromo.products}
+              </div>
+              <br/>
+              <em>The discount will be automatically applied at checkout!</em>
+            </div>
+            <button
+              onClick={() => {
+                setShowBogoCongratsModal(false);
+                setActiveBogoPromo(null);
+              }}
+              className="initialCash-submit-btn"
+              style={{marginTop: "20px", backgroundColor: '#4CAF50'}}
+            >
+              Awesome!
+            </button>
+          </div>
+        </div>
+      )}
 
-      <div className={`menu-page-content ${showInitialCashModal || showBogoModal ? 'blurred' : ''}`}>
+      <div className={`menu-page-content ${showInitialCashModal || showBogoInfoModal || showBogoCongratsModal ? 'blurred' : ''}`}>
         <div className="menu-category-sidebar">
           <div className="menu-category-group">
             <div className={`menu-all-products-btn ${selectedFilter.type === 'all' ? 'active' : ''}`}
@@ -780,7 +862,7 @@ function Menu() {
         paymentMethod={paymentMethod}
         setPaymentMethod={setPaymentMethod}
         getDynamicMaxQuantity={getDynamicMaxQuantity}
-        promotions={promotions} // Pass promotions to the cart
+        promotions={promotions}
       />
     </div>
   );
