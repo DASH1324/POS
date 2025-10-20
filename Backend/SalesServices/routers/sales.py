@@ -1,4 +1,4 @@
-# FILE: sales.py - UPDATED WITH by_date ENDPOINT
+# FILE: sales.py - UPDATED TO INCLUDE E-WALLET IN GCASH SALES
 
 from fastapi import APIRouter, HTTPException, status, Depends
 from pydantic import BaseModel
@@ -18,7 +18,7 @@ from database import get_db_connection
 
 # --- Auth Configuration ---
 from fastapi.security import OAuth2PasswordBearer
-oauth2_scheme = OAuth2PasswordBearer(tokenUrl="http://127.0.0.1:4000/auth/token")
+oauth2_scheme = OAuth2PasswordBearer(tokenUrl="http://1227.0.0.1:4000/auth/token")
 USER_SERVICE_ME_URL = "http://localhost:4000/auth/users/me"
 
 # --- Define the new router ---
@@ -45,7 +45,6 @@ class SalesMetricsRequest(BaseModel):
     orderType: Optional[Literal['All', 'Store', 'Online']] = 'All'
     productType: Optional[Literal['All', 'Products', 'Merchandise']] = 'All'
 
-# NEW: Pydantic model for date-based requests
 class SalesMetricsByDateRequest(BaseModel):
     cashierName: str
     date: date
@@ -145,7 +144,6 @@ async def get_current_session_sales_metrics(
     request: SalesMetricsRequest,
     current_user: dict = Depends(get_current_active_user)
 ):
-    # This endpoint remains unchanged
     if current_user.get("userRole") not in ["cashier"]:
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Permission denied.")
     conn = None
@@ -170,7 +168,8 @@ async def get_current_session_sales_metrics(
                 )
                 SELECT ISNULL(SUM(FinalTotal), 0) AS TotalSales,
                     ISNULL(SUM(CASE WHEN PaymentMethod = 'Cash' THEN FinalTotal ELSE 0 END), 0) AS CashSales,
-                    ISNULL(SUM(CASE WHEN PaymentMethod = 'GCash' THEN FinalTotal ELSE 0 END), 0) AS GcashSales,
+                    -- MODIFIED: Include 'E-Wallet' with 'GCash'
+                    ISNULL(SUM(CASE WHEN PaymentMethod IN ('GCash', 'E-Wallet') THEN FinalTotal ELSE 0 END), 0) AS GcashSales,
                     ISNULL(SUM(ItemsInSale), 0) AS ItemsSold
                 FROM SaleTotals
             """
@@ -195,7 +194,6 @@ async def get_todays_sales_metrics(
     request: SalesMetricsRequest,
     current_user: dict = Depends(get_current_active_user)
 ):
-    # This endpoint remains unchanged
     if current_user.get("userRole") not in ["cashier"]:
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Permission denied.")
     conn = None
@@ -215,7 +213,8 @@ async def get_todays_sales_metrics(
                 )
                 SELECT ISNULL(SUM(FinalTotal), 0) AS TotalSales,
                     ISNULL(SUM(CASE WHEN PaymentMethod = 'Cash' THEN FinalTotal ELSE 0 END), 0) AS CashSales,
-                    ISNULL(SUM(CASE WHEN PaymentMethod = 'GCash' THEN FinalTotal ELSE 0 END), 0) AS GcashSales,
+                    -- MODIFIED: Include 'E-Wallet' with 'GCash'
+                    ISNULL(SUM(CASE WHEN PaymentMethod IN ('GCash', 'E-Wallet') THEN FinalTotal ELSE 0 END), 0) AS GcashSales,
                     ISNULL(SUM(ItemsInSale), 0) AS ItemsSold
                 FROM SaleTotals
             """
@@ -231,8 +230,6 @@ async def get_todays_sales_metrics(
         if conn: await conn.close()
 
 
-# --- [NEW ENDPOINT START] ---
-# This new endpoint handles requests for a specific date, fixing the 404 error.
 @router_sales_metrics.post(
     "/by_date",
     response_model=SalesMetricsResponse,
@@ -275,12 +272,12 @@ async def get_sales_metrics_by_date(
                 SELECT
                     ISNULL(SUM(FinalTotal), 0) AS TotalSales,
                     ISNULL(SUM(CASE WHEN PaymentMethod = 'Cash' THEN FinalTotal ELSE 0 END), 0) AS CashSales,
-                    ISNULL(SUM(CASE WHEN PaymentMethod = 'GCash' THEN FinalTotal ELSE 0 END), 0) AS GcashSales,
+                    -- MODIFIED: Include 'E-Wallet' with 'GCash'
+                    ISNULL(SUM(CASE WHEN PaymentMethod IN ('GCash', 'E-Wallet') THEN FinalTotal ELSE 0 END), 0) AS GcashSales,
                     ISNULL(SUM(ItemsInSale), 0) AS ItemsSold
                 FROM SaleTotals
             """
             
-            # Use the date from the request payload
             params = (request.cashierName, request.date)
             await cursor.execute(sql, params)
             row = await cursor.fetchone()
@@ -293,7 +290,6 @@ async def get_sales_metrics_by_date(
         raise HTTPException(status_code=500, detail="Failed to fetch sales metrics by date.")
     finally:
         if conn: await conn.close()
-# --- [NEW ENDPOINT END] ---
 
 
 @router_sales_metrics.post(
@@ -305,7 +301,6 @@ async def get_sales_report(
     request: SalesReportRequest,
     current_user: dict = Depends(get_current_active_user)
 ):
-    # This endpoint remains unchanged
     if current_user.get("userRole") not in ["admin", "manager"]:
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Permission denied.")
     base_query = """
@@ -415,8 +410,7 @@ async def get_sales_report(
     finally:
         if conn: await conn.close()
 
-
-# Add these new Pydantic models
+# The rest of the file remains unchanged.
 class SalesMonitoringRequest(BaseModel):
     dateRange: Literal['today', 'week', 'month']
     selectedProduct: Optional[str] = 'all'
@@ -440,7 +434,6 @@ class SalesMonitoringResponse(BaseModel):
     profitMargin: float
     transactionCount: int
 
-# Add this new endpoint to your router
 @router_sales_metrics.post(
     "/monitoring",
     response_model=SalesMonitoringResponse,
@@ -450,10 +443,6 @@ async def get_sales_monitoring_data(
     request: SalesMonitoringRequest,
     current_user: dict = Depends(get_current_active_user)
 ):
-    """
-    Get detailed sales monitoring data with product and category filtering.
-    Calculates revenue, profit, and quantity sold for each product.
-    """
     if current_user.get("userRole") not in ["admin", "manager", "cashier"]:
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Permission denied.")
     
@@ -461,7 +450,6 @@ async def get_sales_monitoring_data(
     try:
         conn = await get_db_connection()
         async with conn.cursor() as cursor:
-            # Determine date filter based on dateRange
             date_condition = ""
             if request.dateRange == 'today':
                 date_condition = "AND CAST(s.CreatedAt AS DATE) = CAST(GETDATE() AS DATE)"
@@ -470,7 +458,6 @@ async def get_sales_monitoring_data(
             elif request.dateRange == 'month':
                 date_condition = "AND s.CreatedAt >= DATEADD(month, -1, GETDATE())"
             
-            # Build product and category filters
             product_condition = ""
             category_condition = ""
             params = []
@@ -483,72 +470,44 @@ async def get_sales_monitoring_data(
                 category_condition = "AND si.Category = ?"
                 params.append(request.selectedCategory)
             
-            # Main query to get sales data
             sql = f"""
                 WITH SaleCalculations AS (
                     SELECT 
-                        s.SaleID,
-                        si.SaleItemID,
-                        si.ItemName,
-                        si.Category,
-                        si.Quantity,
-                        si.UnitPrice,
-                        s.OrderType,
-                        s.CreatedAt,
-                        -- Calculate item total with addons
+                        s.SaleID, si.SaleItemID, si.ItemName, si.Category, si.Quantity, si.UnitPrice,
+                        s.OrderType, s.CreatedAt,
                         (si.UnitPrice * si.Quantity + ISNULL((
                             SELECT SUM(a.Price * sia.Quantity)
-                            FROM SaleItemAddons sia
-                            JOIN Addons a ON sia.AddonID = a.AddonID
+                            FROM SaleItemAddons sia JOIN Addons a ON sia.AddonID = a.AddonID
                             WHERE sia.SaleItemID = si.SaleItemID
                         ), 0)) AS ItemTotalWithAddons,
-                        -- Get total discounts
                         (ISNULL(s.TotalDiscountAmount, 0) + ISNULL(s.PromotionalDiscountAmount, 0)) AS TotalDiscount
-                    FROM Sales s
-                    JOIN SaleItems si ON s.SaleID = si.SaleID
+                    FROM Sales s JOIN SaleItems si ON s.SaleID = si.SaleID
                     WHERE s.Status = 'completed'
-                    {date_condition}
-                    {product_condition}
-                    {category_condition}
+                    {date_condition} {product_condition} {category_condition}
                 ),
                 SaleTotals AS (
-                    SELECT 
-                        SaleID,
-                        SUM(ItemTotalWithAddons) AS SaleTotal
-                    FROM SaleCalculations
-                    GROUP BY SaleID
+                    SELECT SaleID, SUM(ItemTotalWithAddons) AS SaleTotal
+                    FROM SaleCalculations GROUP BY SaleID
                 ),
                 FinalCalculations AS (
                     SELECT 
-                        sc.SaleItemID,
-                        sc.SaleID,
-                        sc.ItemName,
-                        sc.Category,
-                        sc.Quantity,
-                        sc.OrderType,
-                        sc.CreatedAt,
-                        sc.ItemTotalWithAddons,
-                        -- Calculate proportional discount for this item
+                        sc.SaleItemID, sc.SaleID, sc.ItemName, sc.Category, sc.Quantity,
+                        sc.OrderType, sc.CreatedAt, sc.ItemTotalWithAddons,
                         CASE 
                             WHEN st.SaleTotal > 0 THEN (sc.ItemTotalWithAddons / st.SaleTotal) * sc.TotalDiscount
                             ELSE 0
                         END AS ProportionalDiscount
-                    FROM SaleCalculations sc
-                    JOIN SaleTotals st ON sc.SaleID = st.SaleID
+                    FROM SaleCalculations sc JOIN SaleTotals st ON sc.SaleID = st.SaleID
                 )
                 SELECT 
                     ROW_NUMBER() OVER (ORDER BY SUM(ItemTotalWithAddons - ProportionalDiscount) DESC) as id,
-                    ItemName as product,
-                    Category as category,
+                    ItemName as product, Category as category,
                     SUM(ItemTotalWithAddons - ProportionalDiscount) as revenue,
-                    -- Assuming 60% profit margin (you can adjust this based on your cost data)
                     SUM((ItemTotalWithAddons - ProportionalDiscount) * 0.60) as profit,
-                    SUM(Quantity) as quantity,
-                    MAX(CAST(CreatedAt AS DATE)) as date,
+                    SUM(Quantity) as quantity, MAX(CAST(CreatedAt AS DATE)) as date,
                     OrderType as orderType
                 FROM FinalCalculations
-                GROUP BY ItemName, Category, OrderType
-                ORDER BY revenue DESC
+                GROUP BY ItemName, Category, OrderType ORDER BY revenue DESC
             """
             
             await cursor.execute(sql, tuple(params))
@@ -558,7 +517,22 @@ async def get_sales_monitoring_data(
             total_revenue = 0.0
             total_profit = 0.0
             total_quantity = 0
-            transaction_count = len(rows)
+            transaction_count = 0
+            
+            # Use a set to count unique transactions based on SaleID
+            unique_sale_ids = set()
+            
+            # We need to re-query to get the transaction count correctly
+            count_sql = f"""
+                SELECT COUNT(DISTINCT s.SaleID)
+                FROM Sales s
+                JOIN SaleItems si ON s.SaleID = si.SaleID
+                WHERE s.Status = 'completed'
+                {date_condition} {product_condition} {category_condition}
+            """
+            await cursor.execute(count_sql, tuple(params))
+            count_row = await cursor.fetchone()
+            transaction_count = count_row[0] if count_row else 0
             
             for row in rows:
                 revenue = float(row.revenue) if row.revenue else 0.0
@@ -566,12 +540,8 @@ async def get_sales_monitoring_data(
                 quantity = int(row.quantity) if row.quantity else 0
                 
                 sales_data.append(ProductSalesDetail(
-                    id=row.id,
-                    product=row.product,
-                    category=row.category,
-                    revenue=revenue,
-                    profit=profit,
-                    quantity=quantity,
+                    id=row.id, product=row.product, category=row.category,
+                    revenue=revenue, profit=profit, quantity=quantity,
                     date=row.date.isoformat() if row.date else date.today().isoformat(),
                     orderType=row.orderType
                 ))
@@ -583,10 +553,8 @@ async def get_sales_monitoring_data(
             profit_margin = (total_profit / total_revenue * 100) if total_revenue > 0 else 0.0
             
             return SalesMonitoringResponse(
-                salesData=sales_data,
-                totalRevenue=total_revenue,
-                totalProfit=total_profit,
-                totalQuantity=total_quantity,
+                salesData=sales_data, totalRevenue=total_revenue,
+                totalProfit=total_profit, totalQuantity=total_quantity,
                 profitMargin=round(profit_margin, 2),
                 transactionCount=transaction_count
             )
