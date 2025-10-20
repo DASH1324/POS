@@ -2,11 +2,11 @@ import React, { useState, useEffect, useCallback } from "react";
 import { useNavigate, useLocation, Link } from 'react-router-dom';
 import './navbar.css';
 import logo from '../assets/logo.png';
-import { HiOutlineShoppingBag, HiOutlineClipboardList, HiOutlineChartBar, HiOutlineTrash, HiOutlineExclamation } from 'react-icons/hi';
+import { HiOutlineShoppingBag, HiOutlineClipboardList, HiOutlineChartBar, HiOutlineExclamation } from 'react-icons/hi';
 import { FaBell, FaChevronDown } from 'react-icons/fa';
 import { jwtDecode } from 'jwt-decode';
 import { confirmAlert } from 'react-confirm-alert';
-import 'react-confirm-alert/src/react-confirm-alert.css'; // default styles
+import 'react-confirm-alert/src/react-confirm-alert.css';
 import './confirmAlertCustom.css';
 
 const Navbar = ({ isCartOpen, isOrderPanelOpen }) => {
@@ -17,36 +17,65 @@ const Navbar = ({ isCartOpen, isOrderPanelOpen }) => {
   const navigate = useNavigate();
   const location = useLocation();
 
-  const toggleDropdown = () => {
-    setDropdownOpen(!isDropdownOpen);
-  };
+  const toggleDropdown = () => setDropdownOpen(!isDropdownOpen);
 
   const handleLogout = useCallback(() => {
     localStorage.removeItem('authToken');
     localStorage.removeItem('username');
+    localStorage.removeItem('userRole');
+
     navigate('/');
   }, [navigate]);
 
   const confirmLogout = () => {
-        confirmAlert({
-          customUI: ({ onClose }) => {
-            return (
-              <>
-                <div className="react-confirm-alert-close" onClick={onClose}>&times;</div>
-                <div className="react-confirm-alert-icon alert-danger">
-                  <HiOutlineExclamation />
-                </div>
-                <h1>Confirm Logout</h1>
-                <p>Are you sure you want to log out?</p>
-                <div className="react-confirm-alert-button-group">
-                  <button onClick={() => { handleLogout(); onClose(); }}>Yes</button>
-                  <button onClick={onClose}>No</button>
-                </div>
-              </>
-            );
-          }
-        });
-      };
+    confirmAlert({
+      customUI: ({ onClose }) => (
+        <>
+          <div className="react-confirm-alert-close" onClick={onClose}>&times;</div>
+          <div className="react-confirm-alert-icon alert-danger">
+            <HiOutlineExclamation />
+          </div>
+          <h1>Confirm Logout</h1>
+          <p>Are you sure you want to log out?</p>
+          <div className="react-confirm-alert-button-group">
+            <button onClick={() => { handleLogout(); onClose(); }}>Yes</button>
+            <button onClick={onClose}>No</button>
+          </div>
+        </>
+      )
+    });
+  };
+
+  // 🧩 Fetch employee name from backend
+  const fetchEmployeeName = useCallback(async (username, token) => {
+    try {
+      const response = await fetch(`http://127.0.0.1:4000/users/employee_name?username=${username}`, {
+        headers: {
+          "Authorization": `Bearer ${token}`,
+          "Content-Type": "application/json"
+        }
+      });
+
+      if (!response.ok) {
+        if (response.status === 401) {
+          console.error("Unauthorized. Logging out...");
+          handleLogout();
+          return;
+        }
+        throw new Error(`Error fetching employee name: ${response.statusText}`);
+      }
+
+      const data = await response.json();
+      if (data && data.employee_name) {
+        setUserName(data.employee_name);
+      } else {
+        console.warn("Employee name not found in response.");
+      }
+
+    } catch (error) {
+      console.error("Error fetching employee name:", error);
+    }
+  }, [handleLogout]);
 
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
@@ -67,10 +96,12 @@ const Navbar = ({ isCartOpen, isOrderPanelOpen }) => {
     const storedToken = localStorage.getItem('authToken');
 
     if (storedUsername && storedToken) {
-      setUserName(storedUsername);
       try {
         const decodedToken = jwtDecode(storedToken);
         setUserRole(decodedToken.role || "Cashier");
+
+        // 🔥 Fetch employee name from backend
+        fetchEmployeeName(storedUsername, storedToken);
       } catch (error) {
         console.error("Error decoding token:", error);
         handleLogout();
@@ -79,7 +110,7 @@ const Navbar = ({ isCartOpen, isOrderPanelOpen }) => {
       console.log("No session found. Redirecting to login.");
       navigate('/');
     }
-  }, [navigate, handleLogout]);
+  }, [navigate, handleLogout, fetchEmployeeName]);
 
   useEffect(() => {
     const timerId = setInterval(() => setCurrentDate(new Date()), 1000);
@@ -108,9 +139,6 @@ const Navbar = ({ isCartOpen, isOrderPanelOpen }) => {
           <Link to="/cashier/cashierSales" className={`nav-item ${location.pathname === '/cashier/cashierSales' ? 'active' : ''}`}>
             <HiOutlineChartBar className="icon" /> Sales
           </Link>
-          {/* <Link to="/cashier/cashierSpillage" className={`nav-item ${location.pathname === '/cashier/cashierSpillage' ? 'active' : ''}`}>
-            <HiOutlineTrash className="icon" /> Spillage
-          </Link> */}
         </div>
       </div>
 
@@ -128,13 +156,13 @@ const Navbar = ({ isCartOpen, isOrderPanelOpen }) => {
         </div>
 
         <div className="navbar-profile">
-            <div className="nav-profile-info">
-              <div className="nav-profile-role">Hi! I'm {userRole}</div>
-              <div className="nav-profile-name">{userName}</div>
-            </div>
+          <div className="nav-profile-info">
+            <div className="nav-profile-role">Hi! I'm {userRole}</div>
+            <div className="nav-profile-name">{userName}</div>
+          </div>
 
-            <div className="nav-dropdown-icon" onClick={toggleDropdown}><FaChevronDown /></div>
-            <div className="nav-bell-icon"><FaBell className="bell-outline" /></div>
+          <div className="nav-dropdown-icon" onClick={toggleDropdown}><FaChevronDown /></div>
+          <div className="nav-bell-icon"><FaBell className="bell-outline" /></div>
 
           {isDropdownOpen && (
             <div className="nav-profile-dropdown">
@@ -149,4 +177,4 @@ const Navbar = ({ isCartOpen, isOrderPanelOpen }) => {
   );
 };
 
-export default Navbar; 
+export default Navbar;

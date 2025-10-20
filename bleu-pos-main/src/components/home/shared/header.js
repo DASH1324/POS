@@ -11,7 +11,7 @@ import '../../confirmAlertCustom.css';
 const Header = ({ pageTitle }) => {
   const [isDropdownOpen, setDropdownOpen] = useState(false);
   const [currentDate, setCurrentDate] = useState(new Date());
-  const [userName, setUserName] = useState("Admin User");
+  const [userName, setUserName] = useState("Loading...");
   const [userRole, setUserRole] = useState("Admin");
   const navigate = useNavigate();
 
@@ -20,29 +20,60 @@ const Header = ({ pageTitle }) => {
   const handleLogout = useCallback(() => {
     localStorage.removeItem('authToken');
     localStorage.removeItem('username');
+    localStorage.removeItem('userRole');
     navigate('/');
   }, [navigate]);
 
   const confirmLogout = () => {
     confirmAlert({
-      customUI: ({ onClose }) => {
-        return (
-          <>
-            <div className="react-confirm-alert-close" onClick={onClose}>&times;</div>
-            <div className="react-confirm-alert-icon alert-danger">
-              <HiOutlineExclamation />
-            </div>
-            <h1>Confirm Logout</h1>
-            <p>Are you sure you want to log out?</p>
-            <div className="react-confirm-alert-button-group">
-              <button onClick={() => { handleLogout(); onClose(); }}>Yes</button>
-              <button onClick={onClose}>No</button>
-            </div>
-          </>
-        );
-      }
+      customUI: ({ onClose }) => (
+        <>
+          <div className="react-confirm-alert-close" onClick={onClose}>&times;</div>
+          <div className="react-confirm-alert-icon alert-danger">
+            <HiOutlineExclamation />
+          </div>
+          <h1>Confirm Logout</h1>
+          <p>Are you sure you want to log out?</p>
+          <div className="react-confirm-alert-button-group">
+            <button onClick={() => { handleLogout(); onClose(); }}>Yes</button>
+            <button onClick={onClose}>No</button>
+          </div>
+        </>
+      )
     });
   };
+
+  // ✅ Fetch full employee name from backend
+  const fetchEmployeeName = useCallback(async (username, token) => {
+    try {
+      const response = await fetch(`http://127.0.0.1:4000/users/employee_name?username=${username}`, {
+        headers: {
+          "Authorization": `Bearer ${token}`,
+          "Content-Type": "application/json",
+        },
+      });
+
+      if (!response.ok) {
+        if (response.status === 401) {
+          console.error("Unauthorized. Logging out...");
+          handleLogout();
+          return;
+        }
+        throw new Error(`Error fetching employee name: ${response.statusText}`);
+      }
+
+      const data = await response.json();
+      if (data && data.employee_name) {
+        setUserName(data.employee_name); // ✅ match backend key
+      } else {
+        console.warn("Employee name not found in response.");
+        setUserName(username); // fallback to username
+      }
+    } catch (error) {
+      console.error("Error fetching employee name:", error);
+      setUserName(username); // fallback if failed
+    }
+  }, [handleLogout]);
 
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
@@ -63,7 +94,6 @@ const Header = ({ pageTitle }) => {
     const storedToken = localStorage.getItem('authToken');
 
     if (storedUsername && storedToken) {
-      setUserName(storedUsername);
       try {
         const decodedToken = jwtDecode(storedToken);
         setUserRole(decodedToken.role || "Admin");
@@ -71,11 +101,14 @@ const Header = ({ pageTitle }) => {
         console.error("Error decoding token:", error);
         handleLogout();
       }
+
+      // ✅ Fetch full name instead of plain username
+      fetchEmployeeName(storedUsername, storedToken);
     } else {
       console.log("No session found. Redirecting to login.");
       navigate('/');
     }
-  }, [navigate, handleLogout]);
+  }, [navigate, handleLogout, fetchEmployeeName]);
 
   useEffect(() => {
     const timerId = setInterval(() => setCurrentDate(new Date()), 1000);

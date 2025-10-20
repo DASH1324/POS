@@ -61,6 +61,7 @@ class SpillageCreate(BaseModel):
     category: str
     quantity: int
     reason: str
+    logged_by: str  # Full employee name from frontend
 
 class SpillageOut(BaseModel):
     spillage_id: int
@@ -70,6 +71,7 @@ class SpillageOut(BaseModel):
     category: str
     quantity: int
     reason: str
+    logged_by: str
     logged_at: datetime
 
 # API Endpoints
@@ -166,13 +168,14 @@ async def log_spillage(
                     detail=f"Product '{spillage.product_name}' was not sold by cashier '{spillage.cashier_name}' on {spillage.spillage_date}"
                 )
             
-            # Insert spillage record
+            # Insert spillage record with LoggedBy from frontend
             insert_query = """
                 INSERT INTO ProductSpillage 
-                    (CashierName, SpillageDate, ProductName, Category, Quantity, Reason, LoggedAt)
+                    (CashierName, SpillageDate, ProductName, Category, Quantity, Reason, LoggedBy, LoggedAt)
                 OUTPUT INSERTED.SpillageID, INSERTED.CashierName, INSERTED.SpillageDate,
-                       INSERTED.ProductName, INSERTED.Category, INSERTED.Quantity, INSERTED.Reason, INSERTED.LoggedAt
-                VALUES (?, ?, ?, ?, ?, ?, GETDATE())
+                       INSERTED.ProductName, INSERTED.Category, INSERTED.Quantity, 
+                       INSERTED.Reason, INSERTED.LoggedBy, INSERTED.LoggedAt
+                VALUES (?, ?, ?, ?, ?, ?, ?, GETDATE())
             """
             
             await cursor.execute(
@@ -183,7 +186,8 @@ async def log_spillage(
                     spillage.product_name,
                     spillage.category,
                     spillage.quantity,
-                    spillage.reason
+                    spillage.reason,
+                    spillage.logged_by  # Use the full name passed from frontend
                 )
             )
             
@@ -198,6 +202,7 @@ async def log_spillage(
                 category=result.Category,
                 quantity=result.Quantity,
                 reason=result.Reason,
+                logged_by=result.LoggedBy,
                 logged_at=result.LoggedAt
             )
             
@@ -218,7 +223,7 @@ async def log_spillage(
 async def get_spillage_logs(
     start_date: Optional[date] = None, 
     end_date: Optional[date] = None,
-    cashier_name: Optional[str] = None, # Add cashier_name as an optional parameter
+    cashier_name: Optional[str] = None,
     token: str = Depends(oauth2_scheme)
 ):
     """
@@ -230,11 +235,11 @@ async def get_spillage_logs(
     try:
         conn = await get_db_connection()
         async with conn.cursor() as cursor:
-            # Start with the base query
+            # Start with the base query - include LoggedBy
             query = """
                 SELECT 
                     SpillageID, CashierName, SpillageDate, ProductName, 
-                    Category, Quantity, Reason, LoggedAt
+                    Category, Quantity, Reason, LoggedBy, LoggedAt
                 FROM ProductSpillage
             """
             
@@ -271,6 +276,7 @@ async def get_spillage_logs(
                     category=row.Category,
                     quantity=row.Quantity,
                     reason=row.Reason,
+                    logged_by=row.LoggedBy,
                     logged_at=row.LoggedAt
                 ) for row in rows
             ]

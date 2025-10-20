@@ -1,4 +1,4 @@
-import React, { useState, useMemo, useEffect } from "react"; 
+import React, { useState, useMemo, useEffect } from "react";
 import { FaEdit, FaTrash, FaPlus } from "react-icons/fa";
 import "./spillage.css";
 import Sidebar from "../shared/sidebar";
@@ -35,6 +35,7 @@ function Spillage() {
   const [spillageData, setSpillageData] = useState([]);
   const [isLoading, setIsLoading] = useState(true);
   const [cashiersMap, setCashiersMap] = useState({});
+  const [loggedByName, setLoggedByName] = useState(""); // Store logged-in user's full name
 
   const [userRole, setUserRole] = useState("");
 
@@ -43,6 +44,40 @@ function Spillage() {
     if (role) {
       setUserRole(role);
     }
+  }, []);
+
+  // Fetch the logged-in user's full employee name
+  useEffect(() => {
+    const fetchLoggedInUserName = async () => {
+      const username = localStorage.getItem('username');
+      const token = localStorage.getItem('authToken');
+      
+      if (username && token) {
+        try {
+          const response = await fetch(
+            `http://127.0.0.1:4000/users/employee_name?username=${username}`,
+            {
+              headers: {
+                "Authorization": `Bearer ${token}`,
+                "Content-Type": "application/json",
+              },
+            }
+          );
+
+          if (response.ok) {
+            const data = await response.json();
+            setLoggedByName(data.employee_name || username);
+          } else {
+            setLoggedByName(username); // Fallback to username
+          }
+        } catch (error) {
+          console.error("Error fetching employee name:", error);
+          setLoggedByName(username); // Fallback to username
+        }
+      }
+    };
+
+    fetchLoggedInUserName();
   }, []);
 
   // Fetch cashiers for mapping usernames to full names
@@ -168,10 +203,16 @@ function Spillage() {
       const itemDate = new Date(item.spillage_date);
       const matchesDate =
         !start || !end || (itemDate >= start && itemDate <= end);
+
+      // **MODIFICATION START**
+      // If the user is a manager, only show entries logged by them.
+      const matchesLoggedBy =
+        userRole !== 'manager' || (item.logged_by && item.logged_by === loggedByName);
+      // **MODIFICATION END**
       
-      return matchesSearch && matchesCategory && matchesDate;
+      return matchesSearch && matchesCategory && matchesDate && matchesLoggedBy; // Added matchesLoggedBy
     });
-  }, [spillageData, searchTerm, categoryFilter, dateRange, customStart, customEnd]);
+  }, [spillageData, searchTerm, categoryFilter, dateRange, customStart, customEnd, userRole, loggedByName]); // Added userRole and loggedByName to dependency array
 
   const uniqueCategories = useMemo(() => {
     return [...new Set(spillageData.map((item) => item.category).filter(Boolean))];
@@ -214,14 +255,20 @@ function Spillage() {
       { 
         name: "REASON", 
         selector: (row) => row.reason, 
-        width: "25%",
+        width: "20%",
         wrap: true,
+      },
+      {
+        name: "LOGGED BY",
+        selector: (row) => row.logged_by,
+        sortable: true,
+        width: "12%",
       },
       {
         name: "LOGGED AT",
         selector: (row) => new Date(row.logged_at).toLocaleString(),
         sortable: true,
-        width: "12%",
+        width: "13%",
       },
     ];
 
@@ -373,6 +420,7 @@ function Spillage() {
             show={isLogModalOpen}
             onClose={() => setIsLogModalOpen(false)}
             onSave={handleAddSpillage}
+            loggedByName={loggedByName}
           />
           {isEditModalOpen && selectedSpillage && (
             <EditSpillageModal

@@ -21,7 +21,6 @@ import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
 
 // API Endpoints
 const SESSION_API_URL = 'http://127.0.0.1:9001/api';
-// UPDATED: Changed API endpoints to a more generic name for date-based fetching
 const CANCELLED_ORDERS_API_URL = 'http://127.0.0.1:9000/auth/cancelled_orders';
 const SALES_METRICS_API_URL = 'http://127.0.0.1:9000/auth/sales_metrics';
 const CASH_TALLY_API_URL = 'http://127.0.0.1:9001/api/auth/cash_tally';
@@ -90,16 +89,13 @@ function CashierSales({ shiftLabel = "Morning Shift", shiftTime = "6:00AM – 2:
         setLoggedInUser(username);
     }
 
-    // UPDATED: Renamed function for clarity
     const fetchSalesMetricsByDate = async () => {
       const token = localStorage.getItem('authToken');
       if (!token || !username) return;
       setIsSalesLoading(true); setSalesError(null);
       try {
-        // UPDATED: Endpoint changed from /today to /by_date
         const response = await fetch(`${SALES_METRICS_API_URL}/by_date`, {
           method: 'POST', headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
-          // UPDATED: Added date to the request body
           body: JSON.stringify({
             cashierName: username,
             date: selectedDate,
@@ -155,10 +151,8 @@ function CashierSales({ shiftLabel = "Morning Shift", shiftTime = "6:00AM – 2:
         if (!token || !username) return;
         setIsCancelledLoading(true); setCancelledError(null);
         try {
-            // UPDATED: Endpoint changed from /today to /by_date
             const response = await fetch(`${CANCELLED_ORDERS_API_URL}/by_date`, {
                 method: 'POST', headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}`},
-                // UPDATED: Added date to the request body
                 body: JSON.stringify({
                   cashierName: username,
                   date: selectedDate,
@@ -184,10 +178,8 @@ function CashierSales({ shiftLabel = "Morning Shift", shiftTime = "6:00AM – 2:
         if (!token || !username) return;
         setIsTopProductsLoading(true); setTopProductsError(null);
         try {
-            // UPDATED: Endpoint changed from /today to /by_date
             const response = await fetch(`${TOP_PRODUCTS_API_URL}/by_date`, {
                 method: 'POST', headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
-                // UPDATED: Added date to the request body
                 body: JSON.stringify({
                   cashierName: username,
                   date: selectedDate,
@@ -213,7 +205,6 @@ function CashierSales({ shiftLabel = "Morning Shift", shiftTime = "6:00AM – 2:
       setSpillageError(null);
 
       try {
-        // UPDATED: Added date as a query parameter
         const url = `${SPILLAGE_API_URL}/?cashier_name=${encodeURIComponent(username)}&date=${selectedDate}`;
         const response = await fetch(url, {
           headers: { 'Authorization': `Bearer ${token}` }
@@ -222,20 +213,37 @@ function CashierSales({ shiftLabel = "Morning Shift", shiftTime = "6:00AM – 2:
         if (!response.ok) throw new Error(`HTTP error! Status: ${response.status}`);
 
         const data = await response.json();
-        const formattedData = data.map(entry => ({
-          id: entry.spillage_id,
-          timestamp: new Date(entry.logged_at).toLocaleString('en-US', {
-            month: 'short',
-            day: 'numeric',
-            hour: '2-digit',
-            minute: '2-digit',
-            hour12: true
-          }),
-          category: entry.category,
-          productName: entry.product_name,
-          quantity: entry.quantity,
-          reason: entry.reason
-        }));
+        
+        // Format and filter based on product type
+        const formattedData = data
+          .map(entry => ({
+            id: entry.spillage_id,
+            timestamp: new Date(entry.logged_at).toLocaleString('en-US', {
+              month: 'short',
+              day: 'numeric',
+              hour: '2-digit',
+              minute: '2-digit',
+              hour12: true
+            }),
+            category: entry.category,
+            productName: entry.product_name,
+            quantity: entry.quantity,
+            reason: entry.reason,
+            loggedBy: entry.logged_by || '-'
+          }))
+          .filter(entry => {
+            // Apply filtering based on productTypeFilter
+            if (productTypeFilter === 'All') {
+              return true; // Show all spillage entries
+            } else if (productTypeFilter === 'Merchandise') {
+              // Show only if category is "Merchandise"
+              return entry.category === 'Merchandise';
+            } else if (productTypeFilter === 'Products') {
+              // Show all categories EXCEPT "Merchandise"
+              return entry.category !== 'Merchandise';
+            }
+            return true;
+          });
 
         setSpillageEntries(formattedData);
       } catch (error) {
@@ -255,7 +263,6 @@ function CashierSales({ shiftLabel = "Morning Shift", shiftTime = "6:00AM – 2:
       fetchSessionData();
       fetchSessionSalesMetrics();
     }
-    // UPDATED: Added selectedDate to the dependency array to refetch data on date change
   }, [activeTab, orderTypeFilter, productTypeFilter, selectedDate]);
 
   const today = new Date();
@@ -293,11 +300,12 @@ function CashierSales({ shiftLabel = "Morning Shift", shiftTime = "6:00AM – 2:
   ];
 
   const spillageColumns = [
-    { name: "TIME", selector: (row) => row.timestamp, sortable: true, width: "22%" },
-    { name: "PRODUCT", selector: (row) => row.productName, sortable: true, width: "30%" },
-    { name: "CATEGORY", selector: (row) => row.category || '-', sortable: true, width: "18%" },
-    { name: "QTY", selector: (row) => row.quantity, center: "true", sortable: true, width: "12%" },
-    { name: "REASON", selector: (row) => row.reason, wrap: true, width: "18%" }
+    { name: "TIME", selector: (row) => row.timestamp, sortable: true, width: "18%" },
+    { name: "PRODUCT", selector: (row) => row.productName, sortable: true, width: "25%" },
+    { name: "CATEGORY", selector: (row) => row.category || '-', sortable: true, width: "15%" },
+    { name: "QTY", selector: (row) => row.quantity, center: "true", sortable: true, width: "10%" },
+    { name: "REASON", selector: (row) => row.reason, wrap: true, width: "17%" },
+    { name: "LOGGED BY", selector: (row) => row.loggedBy, sortable: true, width: "15%" }
   ];
 
   const modalCancelledColumns = [...cancelledProductsColumns];
@@ -407,8 +415,6 @@ function CashierSales({ shiftLabel = "Morning Shift", shiftTime = "6:00AM – 2:
       </div>
     );
   };
-
-
 
   const renderCashTallyContent = () => {
     const handleReportDiscrepancy = () => alert(`Discrepancy of ₱${Math.abs(discrepancyInSession).toFixed(2)} has been reported.`);
@@ -584,7 +590,7 @@ function CashierSales({ shiftLabel = "Morning Shift", shiftTime = "6:00AM – 2:
                 ))}
               </div>
 
-              {/* NEW: Bottom sections container with split layout */}
+              {/* Bottom sections container with split layout */}
               <div className="cashier-bottom-sections">
                 <div className="cashier-cancelled-section">
                   <div className="cashier-section-header">

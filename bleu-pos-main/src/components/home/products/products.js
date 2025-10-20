@@ -179,7 +179,7 @@ function Products() {
     if (activeTab === "merch") {
       return [
         {
-          name: "MERCHANDISE IMAGE",
+          name: "MERCHANDISE",
           selector: (row) => row.MerchandiseImage,
           cell: (row) => (
             <img
@@ -282,6 +282,8 @@ function Products() {
             </div>
           ) : (
             <>
+            
+
               <div className="productList-tabs">
                 {productTypes.map((type) => (
                   <button
@@ -293,8 +295,19 @@ function Products() {
                   >
                     {type.productTypeName}
                   </button>
+                  
                 ))}
+                <button
+                  key="merch"
+                  className={`productList-tab ${
+                    activeTab === "merch" ? "productList-tab--active" : ""
+                  }`}
+                  onClick={() => setActiveTab("merch")}
+                >
+                  Merchandise
+                </button>
               </div>
+              
 
               <div className="tab-content">
                 <div className="productList-filterBar">

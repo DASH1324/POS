@@ -2,7 +2,7 @@ import React, { useState, useEffect } from "react";
 import PropTypes from "prop-types";
 import "./sharedSpillageModal.css";
 
-function LogSpillageModal({ show, onClose, onSave }) {
+function LogSpillageModal({ show, onClose, onSave, loggedByName }) {
   const [cashierName, setCashierName] = useState("");
   const [date, setDate] = useState("");
   const [productType, setProductType] = useState("");
@@ -172,7 +172,7 @@ function LogSpillageModal({ show, onClose, onSave }) {
     ? availableProducts.filter((p) => p.category === productType)
     : [];
 
-  // NEW: Function to deduct from IMS using spillage endpoints
+  // Function to deduct from IMS using spillage endpoints
   const deductFromIMS = async (spillageData, token) => {
     const spillageItem = {
       product_name: spillageData.product_name,
@@ -274,6 +274,7 @@ function LogSpillageModal({ show, onClose, onSave }) {
         category: productType,
         quantity: parseInt(quantity),
         reason: reason,
+        logged_by: loggedByName // Pass the full employee name from header
       };
 
       // Save spillage log
@@ -293,7 +294,7 @@ function LogSpillageModal({ show, onClose, onSave }) {
 
       const savedSpillage = await response.json();
       
-      // NEW: Deduct from IMS after successful spillage save
+      // Deduct from IMS after successful spillage save
       try {
         await deductFromIMS(spillageData, token);
         console.log("Spillage logged and inventory deducted successfully");
@@ -504,6 +505,7 @@ LogSpillageModal.propTypes = {
   show: PropTypes.bool.isRequired,
   onClose: PropTypes.func.isRequired,
   onSave: PropTypes.func.isRequired,
+  loggedByName: PropTypes.string.isRequired, // New prop for logged-in user's full name
 };
 
 export default LogSpillageModal;
