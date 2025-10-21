@@ -17,6 +17,7 @@ const getAuthToken = () => {
 };
 
 const API_URL = "http://127.0.0.1:9000/auth/transaction_history/all";
+const CASHIERS_API_URL = "http://127.0.0.1:4000/users/cashiers";
 
 // Transform API data
 const transformApiData = (apiTransaction) => {
@@ -54,6 +55,7 @@ function TransactionHistory() {
   const [transactions, setTransactions] = useState([]);
   const [searchTerm, setSearchTerm] = useState("");
   const [statusFilter, setStatusFilter] = useState("");
+  const [cashierFilter, setCashierFilter] = useState("");
   const [selectedTransaction, setSelectedTransaction] = useState(null);
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [dateRange, setDateRange] = useState("thisWeek");
@@ -63,11 +65,36 @@ function TransactionHistory() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
   const [authError, setAuthError] = useState(false);
+  const [cashiersMap, setCashiersMap] = useState({});
 
   const handleAuthError = () => {
     localStorage.removeItem("authToken");
     setAuthError(true);
     navigate("/");
+  };
+
+  // Fetch cashiers for mapping usernames to full names
+  const fetchCashiers = async () => {
+    try {
+      const token = localStorage.getItem("authToken");
+      const response = await fetch("http://127.0.0.1:4000/users/cashiers", {
+        headers: {
+          Authorization: `Bearer ${token}`,
+        },
+      });
+
+      if (response.ok) {
+        const cashiers = await response.json();
+        // Create a map of username -> full name
+        const map = {};
+        cashiers.forEach(c => {
+          map[c.Username] = c.FullName;
+        });
+        setCashiersMap(map);
+      }
+    } catch (error) {
+      console.error("Error fetching cashiers:", error);
+    }
   };
 
   const fetchTransactions = useCallback(
@@ -120,6 +147,11 @@ function TransactionHistory() {
     [navigate]
   );
 
+  // Fetch cashiers
+  useEffect(() => {
+    fetchCashiers();
+  }, []);
+
   // Initial load
   useEffect(() => {
     const token = getAuthToken();
@@ -133,6 +165,7 @@ function TransactionHistory() {
   const handleClearFilters = () => {
     setSearchTerm("");
     setStatusFilter("");
+    setCashierFilter("");
     setDateRange("thisWeek");
     setCustomStart("");
     setCustomEnd("");
@@ -190,14 +223,22 @@ function TransactionHistory() {
       
       const matchesStatus =
         statusFilter === "" || transaction.status === statusFilter;
+      
+      // Cashier filter - match by full name from map
+      const cashierFullName = cashiersMap[transaction.cashierName] || transaction.cashierName;
+      const matchesCashier = 
+        cashierFilter === "" || cashierFullName === cashierFilter;
+      
       const tDate = new Date(transaction.date);
       const matchesDate = !start || !end || (tDate >= start && tDate <= end);
-      return matchesTab && matchesSearch && matchesStatus && matchesDate;
+      
+      return matchesTab && matchesSearch && matchesStatus && matchesCashier && matchesDate;
     });
-  }, [activeTab, transactions, searchTerm, statusFilter, getDateRange]);
+  }, [activeTab, transactions, searchTerm, statusFilter, cashierFilter, cashiersMap, getDateRange]);
 
   useEffect(() => {
     setStatusFilter("");
+    setCashierFilter("");
     setSearchTerm("");
   }, [activeTab]);
 
@@ -211,6 +252,13 @@ function TransactionHistory() {
       ),
     ];
   }, [transactions, activeTab]);
+
+  // Get unique cashiers (full names) - from ALL cashiers API, not just transactions
+  const uniqueCashiers = useMemo(() => {
+    // Get all cashier full names from the cashiersMap
+    const allCashierNames = Object.values(cashiersMap).filter(Boolean);
+    return [...new Set(allCashierNames)].sort();
+  }, [cashiersMap]);
 
   const handleRowClick = (row) => {
     setSelectedTransaction(row);
@@ -267,7 +315,7 @@ function TransactionHistory() {
     },
     {
       name: "CASHIER",
-      selector: (row) => row.cashierName || "—",
+      selector: (row) => cashiersMap[row.cashierName] || row.cashierName || "—",
       width: "15%",
       center: true,
     },
@@ -409,6 +457,17 @@ function TransactionHistory() {
               <option value="thisMonth">This Month</option>
               <option value="thisYear">This Year</option>
               <option value="custom">Custom</option>
+            </select>
+            <select
+              value={cashierFilter}
+              onChange={(e) => setCashierFilter(e.target.value)}
+            >
+              <option value="">All Cashiers</option>
+              {uniqueCashiers.map((cashier) => (
+                <option key={cashier} value={cashier}>
+                  {cashier}
+                </option>
+              ))}
             </select>
             <select
               value={statusFilter}
