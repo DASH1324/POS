@@ -85,7 +85,7 @@ class OnlineSaleItem(BaseModel):
     addons: List[OnlineAddonItem] = []
 
 class OnlineOrderRequest(BaseModel):
-    online_order_id: int
+    online_order_id: Optional[int] = None  # Made optional since POS generates its own ID
     customer_name: str
     cashier_name: str
     order_type: str
@@ -237,8 +237,15 @@ async def save_online_order(
     order_data: OnlineOrderRequest,
     current_user: dict = Depends(get_current_active_user)
 ):
-    # Role validation
-    allowed_roles = ["cashier"]
+    """
+    Saves an online order to POS. Can accept orders with 'pending' or 'processing' status.
+    - 'pending': Order is saved but inventory not deducted yet (done during payment confirmation)
+    - 'processing': Order is being prepared (cashier accepted it)
+    
+    Note: POS generates its own SaleID, so online_order_id is optional and only used for logging.
+    """
+    # Allow both cashier and system to save orders
+    allowed_roles = ["cashier", "admin", "manager", "user"]
     if current_user.get("userRole") not in allowed_roles:
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="You do not have permission to create orders.")
         
@@ -249,33 +256,36 @@ async def save_online_order(
 
         async with conn.cursor() as cursor:
             discount_amount = Decimal('0.0')
-            pos_order_status = 'processing'
-
-            # --- START: DATA CORRECTION AND HANDLING LOGIC ---
             
-            # 1. Correct the Payment Method
-            # If the frontend sends 'Cash' for a delivery/pick-up order, override it to 'GCash'
+            # Accept both 'pending' and 'processing' status
+            pos_order_status = order_data.status.lower()
+            if pos_order_status not in ['pending', 'processing', 'cancelled']:
+                logger.warning(f"Unexpected status '{pos_order_status}' for reference {order_data.reference_number}. Defaulting to 'pending'.")
+                pos_order_status = 'pending'
+
+            # Handle payment method correction
             corrected_payment_method = order_data.payment_method
             if order_data.order_type.lower() in ["delivery", "pick-up"] and corrected_payment_method.lower() == 'cash':
-                logger.warning(f"Received 'Cash' payment method for online order {order_data.online_order_id}. Overriding to 'GCash'.")
+                logger.warning(f"Received 'Cash' payment method for online order (ref: {order_data.reference_number}). Overriding to 'GCash'.")
                 corrected_payment_method = 'GCash'
             
-            # 2. Handle the GCash Reference Number
-            # Prioritize the actual reference number passed from the frontend.
-            # If it's missing, create a fallback link for internal tracking.
+            # Handle reference number
             final_reference_number = order_data.reference_number
             if not final_reference_number:
-                final_reference_number = f"ONLINE-{order_data.online_order_id}"
-                logger.warning(
-                    f"No 'reference_number' provided for online order {order_data.online_order_id}. "
-                    f"Using fallback internal link: '{final_reference_number}'"
-                )
-            else:
-                logger.info(
-                    f"Received and using actual reference number for online order "
-                    f"{order_data.online_order_id}: '{final_reference_number}'"
-                )
-            # --- END: DATA CORRECTION AND HANDLING LOGIC ---
+                # Use online_order_id if available, otherwise generate timestamp-based reference
+                if order_data.online_order_id:
+                    final_reference_number = f"ONLINE-{order_data.online_order_id}"
+                else:
+                    from datetime import datetime
+                    final_reference_number = f"REF-{int(datetime.now().timestamp())}"
+                logger.warning(f"No 'reference_number' provided. Using fallback: '{final_reference_number}'")
+
+            logger.info(f"=== SAVING ORDER TO POS ===")
+            if order_data.online_order_id:
+                logger.info(f"Online Order ID: {order_data.online_order_id}")
+            logger.info(f"Status: {pos_order_status}")
+            logger.info(f"Reference: {final_reference_number}")
+            logger.info(f"Cashier: {order_data.cashier_name}")
 
             # Insert the main sale record
             sql_insert_sale = """
@@ -295,7 +305,7 @@ async def save_online_order(
                 order_data.customer_name,
                 discount_amount,
                 pos_order_status, 
-                final_reference_number  # Use the prioritized reference number
+                final_reference_number
             )
             
             sale_id_row = await cursor.fetchone()
@@ -332,7 +342,7 @@ async def save_online_order(
                     addon_id_row = await cursor.fetchone()
                     
                     if not addon_id_row:
-                        logger.info(f"Addon '{addon.addon_name}' not found in POS. Creating it now with price {addon.price}")
+                        logger.info(f"Addon '{addon.addon_name}' not found in POS. Creating it with price {addon.price}")
                         await cursor.execute(
                             "INSERT INTO Addons (AddonName, Price) OUTPUT INSERTED.AddonID VALUES (?, ?)",
                             addon.addon_name, Decimal(str(addon.price))
@@ -350,10 +360,17 @@ async def save_online_order(
 
             await conn.commit()
             
-            logger.info(f"Successfully saved online order {order_data.online_order_id} as POS SaleID {new_sale_id}")
+            log_msg = f"✅ Successfully saved online order"
+            if order_data.online_order_id:
+                log_msg += f" (OOS ID: {order_data.online_order_id})"
+            log_msg += f" as POS SaleID {new_sale_id} with status '{pos_order_status}'"
+            logger.info(log_msg)
+            
             return {
-                "message": "Online order successfully saved to POS",
-                "pos_sale_id": new_sale_id
+                "message": f"Online order successfully saved to POS with status '{pos_order_status}'",
+                "pos_sale_id": new_sale_id,
+                "status": pos_order_status,
+                "reference_number": final_reference_number
             }
             
     except Exception as e:
@@ -613,6 +630,7 @@ async def update_pos_status_for_online_order(
 
     # Validate that only certain statuses can be synced
     valid_statuses = [
+        'processing',
         'completed', 
         'cancelled', 
         'ready for pick up', 

@@ -66,14 +66,19 @@ function Spillage() {
 
           if (response.ok) {
             const data = await response.json();
-            setLoggedByName(data.employee_name || username);
+            const employeeName = data.employee_name || username;
+            setLoggedByName(employeeName);
+            console.log("Logged by name set to:", employeeName); // Debug log
           } else {
+            console.error("Failed to fetch employee name, using username");
             setLoggedByName(username); // Fallback to username
           }
         } catch (error) {
           console.error("Error fetching employee name:", error);
           setLoggedByName(username); // Fallback to username
         }
+      } else {
+        console.error("No username or token found");
       }
     };
 
@@ -204,15 +209,13 @@ function Spillage() {
       const matchesDate =
         !start || !end || (itemDate >= start && itemDate <= end);
 
-      // **MODIFICATION START**
       // If the user is a manager, only show entries logged by them.
       const matchesLoggedBy =
         userRole !== 'manager' || (item.logged_by && item.logged_by === loggedByName);
-      // **MODIFICATION END**
       
-      return matchesSearch && matchesCategory && matchesDate && matchesLoggedBy; // Added matchesLoggedBy
+      return matchesSearch && matchesCategory && matchesDate && matchesLoggedBy;
     });
-  }, [spillageData, searchTerm, categoryFilter, dateRange, customStart, customEnd, userRole, loggedByName]); // Added userRole and loggedByName to dependency array
+  }, [spillageData, searchTerm, categoryFilter, dateRange, customStart, customEnd, userRole, loggedByName]);
 
   const uniqueCategories = useMemo(() => {
     return [...new Set(spillageData.map((item) => item.category).filter(Boolean))];
@@ -427,6 +430,7 @@ function Spillage() {
               spillage={selectedSpillage}
               onClose={() => setIsEditModalOpen(false)}
               onUpdate={handleUpdateSpillage}
+              loggedByName={loggedByName}
             />
           )}
           {isDeleteModalOpen && selectedSpillage && (

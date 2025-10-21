@@ -239,377 +239,315 @@ function Orders() {
     return status.toLowerCase();
   };
 
-  const handleUpdateStatus = async (orderToUpdate, newStatus, details) => {
-    const token = localStorage.getItem('authToken');
-    if (!token) {
-      toast.error("Authentication error. Please log in again.");
+  // Replace the handleUpdateStatus function in Orders.js
+
+const handleUpdateStatus = async (orderToUpdate, newStatus, details) => {
+  const token = localStorage.getItem('authToken');
+  if (!token) {
+    toast.error("Authentication error. Please log in again.");
+    return;
+  }
+
+  const headers = { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` };
+
+  if (newStatus === 'CANCELLED') {
+    // Both store and online orders require manager PIN for cancellation
+    if (details && details.pin) {
+      try {
+        // Verify manager PIN
+        const pinResponse = await fetch(`${AUTH_API_BASE_URL}/users/verify-pin`, {
+          method: 'POST',
+          headers: headers,
+          body: JSON.stringify({ pin: details.pin })
+        });
+        const pinData = await pinResponse.json();
+        if (!pinResponse.ok) throw new Error(pinData.detail || "Invalid Manager PIN.");
+
+        if (orderToUpdate.source === 'store') {
+          const cancelUrl = `${SALES_API_BASE_URL}/auth/purchase_orders/${orderToUpdate.id}/status`;
+          const cancelBody = JSON.stringify({ 
+            newStatus: 'cancelled', 
+            cancelDetails: { managerUsername: pinData.managerUsername } 
+          });
+          const cancelResponse = await fetch(cancelUrl, { method: 'PATCH', headers, body: cancelBody });
+          if (!cancelResponse.ok) throw new Error((await cancelResponse.json()).detail || "Failed to cancel the store order.");
+          
+          toast.success("Store order successfully cancelled!");
+        } else if (orderToUpdate.source === 'online') {
+          // NEW LOGIC: If order is PENDING, it's already in POS - just update status
+          if (orderToUpdate.status === 'PENDING') {
+            console.log("=== CANCELLING PENDING ORDER (ALREADY IN POS) ===");
+            
+            const referenceNumber = orderToUpdate.reference_number;
+            if (!referenceNumber) {
+              toast.error("Cannot cancel: Missing reference number for the order.");
+              return;
+            }
+
+            // Update POS status to cancelled
+            const posUrl = `${SALES_API_BASE_URL}/auth/purchase_orders/online/${encodeURIComponent(referenceNumber)}/status`;
+            const posBody = JSON.stringify({ newStatus: 'cancelled' });
+            const posUpdateResponse = await fetch(posUrl, { method: 'PATCH', headers, body: posBody });
+            
+            if (!posUpdateResponse.ok) {
+              const errorText = await posUpdateResponse.text();
+              console.error('Failed to update POS status to cancelled:', errorText);
+              throw new Error(`Failed to cancel order in POS: ${errorText}`);
+            }
+            
+            console.log('✅ Successfully updated POS status to cancelled');
+          }
+
+          // Update online order status to CANCELLED
+          const url = `${ONLINE_API_BASE_URL}/cart/admin/orders/${orderToUpdate.id}/status`;
+          const body = JSON.stringify({ new_status: newStatus });
+          const response = await fetch(url, { method: 'PATCH', headers, body });
+          if (!response.ok) throw new Error((await response.json()).detail || 'Failed to cancel online order.');
+          
+          toast.success("Online order successfully cancelled!");
+        }
+      } catch (err) {
+        console.error("Cancellation Error:", err);
+        toast.error(`Error: ${err.message}`);
+      }
+    } else {
+      toast.error("Manager PIN is required to cancel orders.");
       return;
     }
+  
+  } else {
+    // ACCEPTING ORDER (PENDING -> PREPARING)
+    if (orderToUpdate.source === 'online' && newStatus === 'PREPARING' && orderToUpdate.status === 'PENDING') {
+      try {
+        console.log("=== ACCEPTING ORDER (ALREADY IN POS AS PENDING) ===");
+        console.log("Order is already saved in POS. Just need to:");
+        console.log("1. Update POS status to 'processing'");
+        console.log("2. Update OOS status to 'PREPARING'");
+        console.log("3. Deduct inventory");
 
-    const headers = { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` };
+        const referenceNumber = orderToUpdate.reference_number;
+        if (!referenceNumber) {
+          toast.error("Cannot accept: Missing reference number for the order.");
+          return;
+        }
 
-    if (newStatus === 'CANCELLED') {
-      // Both store and online orders require manager PIN for cancellation
-      if (details && details.pin) {
-        try {
-          // Verify manager PIN
-          const pinResponse = await fetch(`${AUTH_API_BASE_URL}/users/verify-pin`, {
-            method: 'POST',
-            headers: headers,
-            body: JSON.stringify({ pin: details.pin })
-          });
-          const pinData = await pinResponse.json();
-          if (!pinResponse.ok) throw new Error(pinData.detail || "Invalid Manager PIN.");
-
-          if (orderToUpdate.source === 'store') {
-            const cancelUrl = `${SALES_API_BASE_URL}/auth/purchase_orders/${orderToUpdate.id}/status`;
-            const cancelBody = JSON.stringify({ 
-              newStatus: 'cancelled', 
-              cancelDetails: { managerUsername: pinData.managerUsername } 
+        // Separate items by category for inventory deduction
+        const productItems = [];
+        const merchandiseItems = [];
+        
+        console.log("=== SEPARATING ITEMS BY CATEGORY ===");
+        orderToUpdate.orderItems.forEach(item => {
+          const normalizedCategory = (item.category || '').trim().toLowerCase();
+          
+          console.log(`Processing: ${item.name}`);
+          console.log(`  Category: "${normalizedCategory}"`);
+          
+          if (normalizedCategory === 'merchandise' || 
+              normalizedCategory === 'all items' || 
+              normalizedCategory === 'allitems') {
+            merchandiseItems.push({
+              name: item.name,
+              quantity: item.quantity
             });
-            const cancelResponse = await fetch(cancelUrl, { method: 'PATCH', headers, body: cancelBody });
-            if (!cancelResponse.ok) throw new Error((await cancelResponse.json()).detail || "Failed to cancel the store order.");
-            
-            toast.success("Store order successfully cancelled!");
-          } else if (orderToUpdate.source === 'online') {
-            // Only PENDING orders can be cancelled, and they haven't been saved to POS yet
-            if (orderToUpdate.status === 'PENDING') {
-              console.log("=== SAVING PENDING ORDER TO POS AS CANCELLED ===");
-              
-              try {
-                // Create POS order payload with cancelled status
-                const generatedRefNumber = orderToUpdate.reference_number || `CANC-${Date.now()}`;
-                
-                const posOrderPayload = {
-                  online_order_id: orderToUpdate.id,
-                  customer_name: orderToUpdate.customerName,
-                  cashier_name: username || 'System',
-                  order_type: orderToUpdate.orderType,
-                  payment_method: orderToUpdate.paymentMethod,
-                  subtotal: orderToUpdate.total,
-                  total_amount: orderToUpdate.total,
-                  status: 'cancelled',
-                  reference_number: generatedRefNumber,
-                  items: orderToUpdate.orderItems.map(item => ({ 
-                    name: item.name, 
-                    quantity: item.quantity, 
-                    price: item.price, 
-                    category: item.category,
-                    addons: item.addons || [] 
-                  }))
-                };
-
-                console.log("=== POS ORDER PAYLOAD (CANCELLED) ===");
-                console.log(JSON.stringify(posOrderPayload, null, 2));
-
-                // Save to POS with cancelled status
-                const posCreateResponse = await fetch(`${SALES_API_BASE_URL}/auth/purchase_orders/online-order`, { 
-                  method: 'POST', 
-                  headers, 
-                  body: JSON.stringify(posOrderPayload) 
-                });
-
-                if (!posCreateResponse.ok) {
-                  const errorText = await posCreateResponse.text();
-                  console.error('Failed to save order to POS:', errorText);
-                  throw new Error(`Failed to save cancelled order to POS: ${errorText}`);
-                }
-
-                console.log("✅ Successfully saved cancelled order to POS");
-
-                // Now update the POS record status to cancelled
-                const posUrl = `${SALES_API_BASE_URL}/auth/purchase_orders/online/${encodeURIComponent(generatedRefNumber)}/status`;
-                const posBody = JSON.stringify({ newStatus: 'cancelled' });
-                const posUpdateResponse = await fetch(posUrl, { method: 'PATCH', headers, body: posBody });
-                
-                if (!posUpdateResponse.ok) {
-                  const errorText = await posUpdateResponse.text();
-                  console.error('Failed to update POS status to cancelled:', errorText);
-                  toast.warning("Order saved to POS but status update failed. Please check manually.");
-                } else {
-                  console.log('✅ Successfully updated POS status to cancelled');
-                }
-
-              } catch (posErr) {
-                console.error("Error saving to POS before cancellation:", posErr);
-                toast.error(`Error: ${posErr.message}`);
-                return;
-              }
-            }
-
-            // Now update online order status to CANCELLED
-            const url = `${ONLINE_API_BASE_URL}/cart/admin/orders/${orderToUpdate.id}/status`;
-            const body = JSON.stringify({ new_status: newStatus });
-            const response = await fetch(url, { method: 'PATCH', headers, body });
-            if (!response.ok) throw new Error((await response.json()).detail || 'Failed to cancel online order.');
-            
-            toast.success("Online order successfully cancelled!");
-          }
-        } catch (err) {
-          console.error("Cancellation Error:", err);
-          toast.error(`Error: ${err.message}`);
-        }
-      } else {
-        toast.error("Manager PIN is required to cancel orders.");
-        return;
-      }
-    
-    } else {
-      if (orderToUpdate.source === 'online' && newStatus === 'PREPARING' && orderToUpdate.status === 'PENDING') {
-        try {
-          console.log("=== ORDER ITEMS BEFORE PROCESSING ===");
-          orderToUpdate.orderItems.forEach(item => {
-            console.log(`Item: ${item.name}, Category: "${item.category}", Quantity: ${item.quantity}`);
-          });
-
-          const posOrderPayload = {
-            online_order_id: orderToUpdate.id,
-            customer_name: orderToUpdate.customerName,
-            cashier_name: username,
-            order_type: orderToUpdate.orderType,
-            payment_method: orderToUpdate.paymentMethod,
-            subtotal: orderToUpdate.total,
-            total_amount: orderToUpdate.total,
-            status: 'processing',
-            reference_number: orderToUpdate.reference_number || `REF-${Date.now()}`,
-            items: orderToUpdate.orderItems.map(item => ({ 
-              name: item.name, 
-              quantity: item.quantity, 
-              price: item.price, 
-              category: item.category,
-              addons: item.addons || [] 
-            }))
-          };
-
-          console.log("=== POS ORDER PAYLOAD ===");
-          console.log(JSON.stringify(posOrderPayload, null, 2));
-
-          const productItems = [];
-          const merchandiseItems = [];
-          
-          console.log("=== SEPARATING ITEMS BY CATEGORY ===");
-          orderToUpdate.orderItems.forEach(item => {
-            const normalizedCategory = (item.category || '').trim().toLowerCase();
-            
-            console.log(`Processing: ${item.name}`);
-            console.log(`  Original category: "${item.category}"`);
-            console.log(`  Normalized category: "${normalizedCategory}"`);
-            
-            if (normalizedCategory === 'merchandise' || 
-                normalizedCategory === 'all items' || 
-                normalizedCategory === 'allitems') {
-              merchandiseItems.push({
-                name: item.name,
-                quantity: item.quantity
-              });
-              console.log(`  ✓ Added to MERCHANDISE deduction`);
-            } else {
-              productItems.push({
-                product_name: item.name,
-                quantity: item.quantity,
-                category: item.category
-              });
-              console.log(`  ✓ Added to PRODUCT deduction`);
-            }
-          });
-
-          const productDeductionPayload = {
-            cartItems: productItems.map(item => ({
-              name: item.product_name,
+            console.log(`  ✓ Added to MERCHANDISE deduction`);
+          } else {
+            productItems.push({
+              product_name: item.name,
               quantity: item.quantity,
-              addons: (orderToUpdate.orderItems.find(oi => oi.name === item.product_name)?.addons || [])
-                .map(addon => ({
-                  addon_id: addon.addon_id || addon.AddonID || 0,
-                  addon_name: addon.addon_name || addon.AddonName || '',
-                  price: addon.price || addon.Price || 0,
-                  quantity: 1
-                }))
-            }))
-          };
+              category: item.category
+            });
+            console.log(`  ✓ Added to PRODUCT deduction`);
+          }
+        });
 
-          const merchandiseDeductionPayload = {
-            cartItems: merchandiseItems
-          };
+        // Prepare deduction payloads
+        const productDeductionPayload = {
+          cartItems: productItems.map(item => ({
+            name: item.product_name,
+            quantity: item.quantity,
+            addons: (orderToUpdate.orderItems.find(oi => oi.name === item.product_name)?.addons || [])
+              .map(addon => ({
+                addon_id: addon.addon_id || addon.AddonID || 0,
+                addon_name: addon.addon_name || addon.AddonName || '',
+                price: addon.price || addon.Price || 0,
+                quantity: 1
+              }))
+          }))
+        };
 
-          console.log("=== PRODUCT DEDUCTION PAYLOAD ===");
-          console.log(JSON.stringify(productDeductionPayload, null, 2));
-          console.log("=== MERCHANDISE DEDUCTION PAYLOAD ===");
-          console.log(JSON.stringify(merchandiseDeductionPayload, null, 2));
-          console.log(`=== API CALLS TO BE MADE: ${1 + (productItems.length > 0 ? 2 : 0) + (merchandiseItems.length > 0 ? 1 : 0)} ===`);
+        const merchandiseDeductionPayload = {
+          cartItems: merchandiseItems
+        };
 
-          const apiCalls = [
-            fetch(`${SALES_API_BASE_URL}/auth/purchase_orders/online-order`, { 
-              method: 'POST', 
-              headers, 
-              body: JSON.stringify(posOrderPayload) 
+        console.log("=== PRODUCT DEDUCTION PAYLOAD ===");
+        console.log(JSON.stringify(productDeductionPayload, null, 2));
+        console.log("=== MERCHANDISE DEDUCTION PAYLOAD ===");
+        console.log(JSON.stringify(merchandiseDeductionPayload, null, 2));
+
+        // API calls array
+        const apiCalls = [];
+        const apiCallDescriptions = [];
+
+        // 1. Update POS status to 'processing'
+        apiCalls.push(
+          fetch(`${SALES_API_BASE_URL}/auth/purchase_orders/online/${encodeURIComponent(referenceNumber)}/status`, {
+            method: 'PATCH',
+            headers,
+            body: JSON.stringify({ newStatus: 'processing' })
+          })
+        );
+        apiCallDescriptions.push("Update POS status");
+
+        // 2. Deduct product inventory (ingredients + materials)
+        if (productItems.length > 0) {
+          apiCalls.push(
+            fetch(`${INVENTORY_API_BASE_URL}/ingredients/deduct-from-sale`, {
+              method: 'POST',
+              headers,
+              body: JSON.stringify(productDeductionPayload)
+            }),
+            fetch(`${INVENTORY_API_BASE_URL}/materials/deduct-from-sale`, {
+              method: 'POST',
+              headers,
+              body: JSON.stringify(productDeductionPayload)
             })
-          ];
-
-          if (productItems.length > 0) {
-            apiCalls.push(
-              fetch(`${INVENTORY_API_BASE_URL}/ingredients/deduct-from-sale`, { 
-                method: 'POST', 
-                headers, 
-                body: JSON.stringify(productDeductionPayload) 
-              }),
-              fetch(`${INVENTORY_API_BASE_URL}/materials/deduct-from-sale`, { 
-                method: 'POST', 
-                headers, 
-                body: JSON.stringify(productDeductionPayload) 
-              })
-            );
-          }
-
-          if (merchandiseItems.length > 0) {
-            apiCalls.push(
-              fetch(`${INVENTORY_API_BASE_URL}/merchandise/deduct-from-sale`, { 
-                method: 'POST', 
-                headers, 
-                body: JSON.stringify(merchandiseDeductionPayload) 
-              })
-            );
-          }
-
-          const results = await Promise.allSettled(apiCalls);
-
-          const posResponse = results[0];
-          if (posResponse.status === 'rejected' || !posResponse.value.ok) {
-            const errorText = posResponse.status === 'fulfilled' ? await posResponse.value.text() : posResponse.reason;
-            throw new Error(`Critical Error: Could not save to POS. ${errorText}`);
-          }
-
-          let callIndex = 1;
-          if (productItems.length > 0) {
-            const ingredientsResponse = results[callIndex++];
-            if (ingredientsResponse.status === 'rejected' || !ingredientsResponse.value.ok) {
-              console.error("Failed to deduct ingredients:", 
-                ingredientsResponse.status === 'fulfilled' ? await ingredientsResponse.value.text() : ingredientsResponse.reason);
-            }
-
-            const materialsResponse = results[callIndex++];
-            if (materialsResponse.status === 'rejected' || !materialsResponse.value.ok) {
-              console.error("Failed to deduct materials:", 
-                materialsResponse.status === 'fulfilled' ? await materialsResponse.value.text() : materialsResponse.reason);
-            }
-          }
-
-          if (merchandiseItems.length > 0) {
-            const merchandiseResponse = results[callIndex++];
-            if (merchandiseResponse.status === 'rejected' || !merchandiseResponse.value.ok) {
-              const errorText = merchandiseResponse.status === 'fulfilled' 
-                ? await merchandiseResponse.value.text() 
-                : merchandiseResponse.reason;
-              console.error("❌ MERCHANDISE DEDUCTION FAILED:");
-              console.error("  Status:", merchandiseResponse.status);
-              console.error("  Error:", errorText);
-              console.error("  Payload sent:", JSON.stringify(merchandiseDeductionPayload, null, 2));
-              toast.warning("Order accepted but merchandise deduction may have failed. Please check inventory.");
-            } else {
-              const successData = await merchandiseResponse.value.json();
-              console.log("✅ Successfully deducted merchandise inventory");
-              console.log("  Response:", successData);
-            }
-          }
-          
-          console.log("Order saved to POS and inventory deduction initiated.");
-
-          const onlineStatusUrl = `${ONLINE_API_BASE_URL}/cart/admin/orders/${orderToUpdate.id}/status`;
-          const onlineStatusBody = JSON.stringify({ new_status: newStatus });
-          const onlineResponse = await fetch(onlineStatusUrl, { method: 'PATCH', headers, body: onlineStatusBody });
-          if (!onlineResponse.ok) {
-            throw new Error((await onlineResponse.json()).detail || 'POS/Inventory updated, but failed to update online order status.');
-          }
-          
-          toast.success("Order accepted and is now being prepared!");
-
-        } catch (err) {
-          console.error("Error accepting order:", err);
-          toast.error(`Error: ${err.message}`);
+          );
+          apiCallDescriptions.push("Deduct ingredients", "Deduct materials");
         }
-      } else {
-        try {
-          const updatePromises = [];
 
-          if (orderToUpdate.source === 'store') {
-            const url = `${SALES_API_BASE_URL}/auth/purchase_orders/${orderToUpdate.id}/status`;
-            const body = JSON.stringify({ newStatus: newStatus.toLowerCase() });
-            updatePromises.push(fetch(url, { method: 'PATCH', headers, body }));
+        // 3. Deduct merchandise inventory
+        if (merchandiseItems.length > 0) {
+          apiCalls.push(
+            fetch(`${INVENTORY_API_BASE_URL}/merchandise/deduct-from-sale`, {
+              method: 'POST',
+              headers,
+              body: JSON.stringify(merchandiseDeductionPayload)
+            })
+          );
+          apiCallDescriptions.push("Deduct merchandise");
+        }
 
-          } else if (orderToUpdate.source === 'online') {
-            // Update OOS (Online Order Service)
-            const oosUrl = `${ONLINE_API_BASE_URL}/cart/admin/orders/${orderToUpdate.id}/status`;
-            const oosBody = JSON.stringify({ new_status: newStatus });
-            updatePromises.push(fetch(oosUrl, { method: 'PATCH', headers, body: oosBody }));
-            
-            // Statuses that should sync to POS
-            const statusesToSyncToPOS = [
-              'COMPLETED', 
-              'WAITING FOR PICK UP', 
-              'DELIVERING',
-              'PICKED UP' 
-            ];
+        console.log(`=== MAKING ${apiCalls.length} API CALLS ===`);
 
-            if (statusesToSyncToPOS.includes(newStatus)) {
-              const referenceNumber = orderToUpdate.reference_number;
-              if (!referenceNumber) {
-                console.error(`No reference number found for online order ${orderToUpdate.id}`);
-                toast.error("Cannot update POS: Missing reference number for the order.");
-                return;
-              }
-              
-              // Convert status to backend format (lowercase)
-              const posStatus = convertStatusForBackend(newStatus);
+        const results = await Promise.allSettled(apiCalls);
 
-              const posUrl = `${SALES_API_BASE_URL}/auth/purchase_orders/online/${encodeURIComponent(referenceNumber)}/status`;
-              const posBody = JSON.stringify({ newStatus: posStatus });
-              
-              console.log(`=== POS UPDATE DETAILS ===`);
-              console.log(`Reference Number: ${referenceNumber}`);
-              console.log(`Original Status: ${newStatus}`);
-              console.log(`Converted Status: ${posStatus}`);
-              console.log(`URL: ${posUrl}`);
-              console.log(`Body:`, posBody);
-              
-              updatePromises.push(fetch(posUrl, { method: 'PATCH', headers, body: posBody }));
+        // Check results
+        let hasErrors = false;
+        results.forEach((result, index) => {
+          const description = apiCallDescriptions[index];
+          if (result.status === 'rejected' || !result.value.ok) {
+            hasErrors = true;
+            const errorText = result.status === 'fulfilled' ? result.value.statusText : result.reason;
+            console.error(`❌ ${description} failed:`, errorText);
+            if (index === 0) { // POS update is critical
+              throw new Error(`Critical Error: Could not update POS status. ${errorText}`);
             }
           } else {
-            toast.error("Cannot update order: Unknown source.");
-            return;
+            console.log(`✅ ${description} succeeded`);
           }
+        });
 
-          const results = await Promise.allSettled(updatePromises);
-          
-          let hasErrors = false;
-          let errorMessages = [];
-          
-          results.forEach((result, index) => {
-            if (result.status === 'rejected' || (result.status === 'fulfilled' && !result.value.ok)) {
-              hasErrors = true;
-              const errorMsg = result.reason || result.value?.statusText || 'Unknown error';
-              errorMessages.push(`Update ${index + 1} failed: ${errorMsg}`);
-              console.error(`Update ${index + 1} failed:`, result.reason || result.value?.statusText);
-            } else {
-              console.log(`Update ${index + 1} succeeded:`, result.value?.status);
-            }
-          });
-
-          if (hasErrors) {
-            console.error('=== UPDATE ERRORS ===', errorMessages);
-            throw new Error(errorMessages.join('; '));
-          }
-          
-          toast.success("Order status updated successfully!");
-
-        } catch (err) {
-          console.error("Error updating status:", err);
-          toast.error(`Error: ${err.message}`);
+        if (hasErrors) {
+          toast.warning("Order accepted but some inventory deductions may have failed. Please check inventory.");
         }
+
+        // 4. Update OOS status to PREPARING
+        const oosUrl = `${ONLINE_API_BASE_URL}/cart/admin/orders/${orderToUpdate.id}/status`;
+        const oosBody = JSON.stringify({ new_status: newStatus });
+        const oosResponse = await fetch(oosUrl, { method: 'PATCH', headers, body: oosBody });
+        
+        if (!oosResponse.ok) {
+          throw new Error((await oosResponse.json()).detail || 'Failed to update online order status.');
+        }
+        
+        console.log("✅ Successfully updated OOS status to PREPARING");
+        toast.success("Order accepted and is now being prepared!");
+
+      } catch (err) {
+        console.error("Error accepting order:", err);
+        toast.error(`Error: ${err.message}`);
+      }
+    } else {
+      // OTHER STATUS UPDATES (not accept/cancel)
+      try {
+        const updatePromises = [];
+
+        if (orderToUpdate.source === 'store') {
+          const url = `${SALES_API_BASE_URL}/auth/purchase_orders/${orderToUpdate.id}/status`;
+          const body = JSON.stringify({ newStatus: newStatus.toLowerCase() });
+          updatePromises.push(fetch(url, { method: 'PATCH', headers, body }));
+
+        } else if (orderToUpdate.source === 'online') {
+          // Update OOS (Online Order Service)
+          const oosUrl = `${ONLINE_API_BASE_URL}/cart/admin/orders/${orderToUpdate.id}/status`;
+          const oosBody = JSON.stringify({ new_status: newStatus });
+          updatePromises.push(fetch(oosUrl, { method: 'PATCH', headers, body: oosBody }));
+          
+          // Statuses that should sync to POS
+          const statusesToSyncToPOS = [
+            'COMPLETED', 
+            'WAITING FOR PICK UP', 
+            'DELIVERING',
+            'PICKED UP' 
+          ];
+
+          if (statusesToSyncToPOS.includes(newStatus)) {
+            const referenceNumber = orderToUpdate.reference_number;
+            if (!referenceNumber) {
+              console.error(`No reference number found for online order ${orderToUpdate.id}`);
+              toast.error("Cannot update POS: Missing reference number for the order.");
+              return;
+            }
+            
+            const posStatus = convertStatusForBackend(newStatus);
+
+            const posUrl = `${SALES_API_BASE_URL}/auth/purchase_orders/online/${encodeURIComponent(referenceNumber)}/status`;
+            const posBody = JSON.stringify({ newStatus: posStatus });
+            
+            console.log(`=== POS UPDATE DETAILS ===`);
+            console.log(`Reference Number: ${referenceNumber}`);
+            console.log(`New Status: ${posStatus}`);
+            
+            updatePromises.push(fetch(posUrl, { method: 'PATCH', headers, body: posBody }));
+          }
+        } else {
+          toast.error("Cannot update order: Unknown source.");
+          return;
+        }
+
+        const results = await Promise.allSettled(updatePromises);
+        
+        let hasErrors = false;
+        let errorMessages = [];
+        
+        results.forEach((result, index) => {
+          if (result.status === 'rejected' || (result.status === 'fulfilled' && !result.value.ok)) {
+            hasErrors = true;
+            const errorMsg = result.reason || result.value?.statusText || 'Unknown error';
+            errorMessages.push(`Update ${index + 1} failed: ${errorMsg}`);
+            console.error(`Update ${index + 1} failed:`, result.reason || result.value?.statusText);
+          } else {
+            console.log(`Update ${index + 1} succeeded:`, result.value?.status);
+          }
+        });
+
+        if (hasErrors) {
+          console.error('=== UPDATE ERRORS ===', errorMessages);
+          throw new Error(errorMessages.join('; '));
+        }
+        
+        toast.success("Order status updated successfully!");
+
+      } catch (err) {
+        console.error("Error updating status:", err);
+        toast.error(`Error: ${err.message}`);
       }
     }
+  }
 
-    await fetchOrders();
-    setSelectedOrder(prev => prev && prev.id === orderToUpdate.id ? { ...prev, status: newStatus.toUpperCase() } : null);
-  };
+  await fetchOrders();
+  setSelectedOrder(prev => prev && prev.id === orderToUpdate.id ? { ...prev, status: newStatus.toUpperCase() } : null);
+};
 
   const ordersData = activeTab === "store" ? storeOrders : onlineOrders;
   

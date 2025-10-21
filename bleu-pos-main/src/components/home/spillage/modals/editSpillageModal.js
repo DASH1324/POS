@@ -2,37 +2,141 @@ import React, { useState, useEffect } from "react";
 import PropTypes from "prop-types";
 import "./sharedSpillageModal.css";
 
-function EditSpillageModal({ spillage, onClose, onUpdate }) {
-  const [productType, setProductType] = useState(spillage.type || "");
-  const [productName, setProductName] = useState(spillage.productName || "");
-  const [amount, setAmount] = useState(spillage.amount || "");
-  const [size, setSize] = useState(spillage.size || "");
-  const [loggedBy, setLoggedBy] = useState(spillage.loggedBy || "");
-  const [date, setDate] = useState(spillage.date || "");
+function EditSpillageModal({ spillage, onClose, onUpdate, loggedByName }) {
+  const [productType, setProductType] = useState(spillage.category || "");
+  const [productName, setProductName] = useState(spillage.product_name || "");
+  const [amount, setAmount] = useState(spillage.quantity || "");
+  const [cashierName, setCashierName] = useState(spillage.cashier_name || "");
+  const [date, setDate] = useState(
+    spillage.spillage_date 
+      ? new Date(spillage.spillage_date).toISOString().split('T')[0] 
+      : ""
+  );
   const [reason, setReason] = useState(spillage.reason || "");
   const [errors, setErrors] = useState({});
   const [isUpdating, setIsUpdating] = useState(false);
+  const [cashiers, setCashiers] = useState([]);
+  const [isLoadingProducts, setIsLoadingProducts] = useState(false);
+  const [isLoadingCashiers, setIsLoadingCashiers] = useState(false);
+  const [availableProducts, setAvailableProducts] = useState([]);
+
+  // Fetch cashiers list
+  useEffect(() => {
+    fetchCashiers();
+  }, []);
+
+  // Fetch products when date OR cashierName changes
+  useEffect(() => {
+    if (date && cashierName) {
+      fetchProductsSoldByCashierOnDate(date, cashierName);
+    } else {
+      setAvailableProducts([]);
+    }
+  }, [date, cashierName]);
 
   // Reset fields when spillage changes
   useEffect(() => {
     if (spillage) {
-      setProductType(spillage.type || "");
-      setProductName(spillage.productName || "");
-      setAmount(spillage.amount || "");
-      setSize(spillage.size || "");
-      setLoggedBy(spillage.loggedBy || "");
-      setDate(spillage.date || "");
+      setProductType(spillage.category || "");
+      setProductName(spillage.product_name || "");
+      setAmount(spillage.quantity || "");
+      setCashierName(spillage.cashier_name || "");
+      setDate(
+        spillage.spillage_date 
+          ? new Date(spillage.spillage_date).toISOString().split('T')[0] 
+          : ""
+      );
       setReason(spillage.reason || "");
     }
   }, [spillage]);
 
   if (!spillage) return null;
 
+  const fetchCashiers = async () => {
+    setIsLoadingCashiers(true);
+    try {
+      const token = localStorage.getItem("authToken");
+      const response = await fetch("http://localhost:4000/users/cashiers", {
+        headers: {
+          Authorization: `Bearer ${token}`,
+        },
+      });
+
+      if (response.ok) {
+        const data = await response.json();
+        setCashiers(data);
+      }
+    } catch (error) {
+      console.error("Error fetching cashiers:", error);
+    } finally {
+      setIsLoadingCashiers(false);
+    }
+  };
+
+  const fetchProductsSoldByCashierOnDate = async (selectedDate, selectedCashier) => {
+    setIsLoadingProducts(true);
+    
+    try {
+      const token = localStorage.getItem("authToken");
+      
+      if (!token) {
+        throw new Error("No authentication token found. Please log in again.");
+      }
+
+      const response = await fetch(
+        `http://localhost:9003/wastelogs/products-sold?spillage_date=${selectedDate}&cashier_name=${encodeURIComponent(selectedCashier)}`,
+        {
+          headers: {
+            Authorization: `Bearer ${token}`,
+          },
+        }
+      );
+
+      if (!response.ok) {
+        const errorText = await response.text();
+        console.error("API Error:", response.status, errorText);
+        throw new Error(`Failed to fetch products: ${response.status}`);
+      }
+
+      const products = await response.json();
+      setAvailableProducts(products);
+
+      if (products.length === 0) {
+        setErrors((prev) => ({
+          ...prev,
+          productType: "No products were processed by this cashier on this date",
+        }));
+      } else {
+        setErrors((prev) => {
+          const { productType, ...rest } = prev;
+          return rest;
+        });
+      }
+    } catch (error) {
+      console.error("Error fetching products:", error);
+      setErrors((prev) => ({
+        ...prev,
+        productType: error.message || "Error loading products for this date and cashier",
+      }));
+      setAvailableProducts([]);
+    } finally {
+      setIsLoadingProducts(false);
+    }
+  };
+
   const handleFocus = (field) => {
     setErrors((prev) => ({ ...prev, [field]: "" }));
   };
 
-  const handleSubmit = (e) => {
+  // Get unique categories from available products
+  const categories = [...new Set(availableProducts.map((p) => p.category))];
+
+  // Filter products by selected category
+  const filteredProducts = productType
+    ? availableProducts.filter((p) => p.category === productType)
+    : [];
+
+  const handleSubmit = async (e) => {
     e.preventDefault();
     let newErrors = {};
 
@@ -41,8 +145,7 @@ function EditSpillageModal({ spillage, onClose, onUpdate }) {
     if (!amount || isNaN(amount) || parseInt(amount) <= 0) {
       newErrors.amount = "Enter a valid amount";
     }
-    if (!size.trim()) newErrors.size = "Size is required";
-    if (!loggedBy.trim()) newErrors.loggedBy = "Spilled by is required";
+    if (!cashierName.trim()) newErrors.cashierName = "Cashier is required";
     if (!date.trim()) newErrors.date = "Date is required";
     if (!reason.trim()) newErrors.reason = "Reason is required";
 
@@ -53,20 +156,43 @@ function EditSpillageModal({ spillage, onClose, onUpdate }) {
 
     setIsUpdating(true);
 
-    const updatedSpillage = {
-      ...spillage,
-      productName,
-      type: productType,
-      amount: parseInt(amount),
-      size,
-      loggedBy,
-      reason,
-      date,
-    };
+    try {
+      const token = localStorage.getItem("authToken");
+      
+      const response = await fetch(
+        `http://localhost:9003/wastelogs/${spillage.spillage_id}`,
+        {
+          method: "PUT",
+          headers: {
+            Authorization: `Bearer ${token}`,
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({
+            product_name: productName,
+            category: productType,
+            quantity: parseInt(amount),
+            cashier_name: cashierName,
+            spillage_date: date,
+            reason: reason,
+            logged_by: loggedByName,
+          }),
+        }
+      );
 
-    onUpdate(updatedSpillage);
-    setIsUpdating(false);
-    onClose();
+      if (response.ok) {
+        const updatedData = await response.json();
+        onUpdate(updatedData);
+        onClose();
+      } else {
+        const errorData = await response.json();
+        alert(`Failed to update spillage: ${errorData.detail || errorData.message || "Unknown error"}`);
+      }
+    } catch (error) {
+      console.error("Error updating spillage:", error);
+      alert("An error occurred while updating the spillage");
+    } finally {
+      setIsUpdating(false);
+    }
   };
 
   return (
@@ -82,16 +208,81 @@ function EditSpillageModal({ spillage, onClose, onUpdate }) {
         <form className="logSpillage-modal-form" onSubmit={handleSubmit}>
           <div className="form-row">
             <label>
+              Cashier Name: <span className="required">*</span>
+              <select
+                value={cashierName}
+                onChange={(e) => {
+                  setCashierName(e.target.value);
+                  setProductType("");
+                  setProductName("");
+                }}
+                onFocus={() => handleFocus("cashierName")}
+                className={errors.cashierName ? "error-field" : ""}
+                disabled={isLoadingCashiers}
+              >
+                <option value="">
+                  {isLoadingCashiers
+                    ? "Loading cashiers..."
+                    : cashiers.length === 0
+                    ? "No cashiers available"
+                    : "Select cashier"}
+                </option>
+                {cashiers.map((cashier) => (
+                  <option key={cashier.UserID} value={cashier.Username}>
+                    {cashier.FullName}
+                  </option>
+                ))}
+              </select>
+              {errors.cashierName && (
+                <p className="error-message">{errors.cashierName}</p>
+              )}
+            </label>
+
+            <label>
+              Date: <span className="required">*</span>
+              <input
+                type="date"
+                value={date}
+                onChange={(e) => {
+                  setDate(e.target.value);
+                  setProductType("");
+                  setProductName("");
+                }}
+                onFocus={() => handleFocus("date")}
+                className={errors.date ? "error-field" : ""}
+                max={new Date().toLocaleDateString('en-CA')}
+              />
+              {errors.date && <p className="error-message">{errors.date}</p>}
+            </label>
+          </div>
+
+          <div className="form-row">
+            <label>
               Product Type: <span className="required">*</span>
               <select
                 value={productType}
-                onChange={(e) => setProductType(e.target.value)}
+                onChange={(e) => {
+                  setProductType(e.target.value);
+                  setProductName("");
+                }}
                 onFocus={() => handleFocus("productType")}
                 className={errors.productType ? "error-field" : ""}
+                disabled={!date || !cashierName || isLoadingProducts}
               >
-                <option value="">Select type</option>
-                <option value="Drink">Drink</option>
-                <option value="Food">Food</option>
+                <option value="">
+                  {!cashierName || !date
+                    ? "Select cashier and date first"
+                    : isLoadingProducts
+                    ? "Loading..."
+                    : availableProducts.length === 0
+                    ? "No products processed"
+                    : "Select category"}
+                </option>
+                {categories.map((category) => (
+                  <option key={category} value={category}>
+                    {category}
+                  </option>
+                ))}
               </select>
               {errors.productType && (
                 <p className="error-message">{errors.productType}</p>
@@ -105,11 +296,20 @@ function EditSpillageModal({ spillage, onClose, onUpdate }) {
                 onChange={(e) => setProductName(e.target.value)}
                 onFocus={() => handleFocus("productName")}
                 className={errors.productName ? "error-field" : ""}
+                disabled={!productType || filteredProducts.length === 0}
               >
-                <option value="">Select product</option>
-                <option value="Cappuccino">Cappuccino</option>
-                <option value="Latte">Latte</option>
-                <option value="Cheeseburger">Cheeseburger</option>
+                <option value="">
+                  {!productType
+                    ? "Select category first"
+                    : filteredProducts.length === 0
+                    ? "No products available"
+                    : "Select product"}
+                </option>
+                {filteredProducts.map((product) => (
+                  <option key={product.product_name} value={product.product_name}>
+                    {product.product_name}
+                  </option>
+                ))}
               </select>
               {errors.productName && (
                 <p className="error-message">{errors.productName}</p>
@@ -127,57 +327,9 @@ function EditSpillageModal({ spillage, onClose, onUpdate }) {
                 onChange={(e) => setAmount(e.target.value)}
                 onFocus={() => handleFocus("amount")}
                 className={errors.amount ? "error-field" : ""}
+                placeholder="Enter quantity"
               />
               {errors.amount && <p className="error-message">{errors.amount}</p>}
-            </label>
-
-            <label>
-              Size: <span className="required">*</span>
-              <select
-                value={size}
-                onChange={(e) => setSize(e.target.value)}
-                onFocus={() => handleFocus("size")}
-                className={errors.size ? "error-field" : ""}
-              >
-                <option value="">Select size</option>
-                <option value="12oz">12oz</option>
-                <option value="22oz">22oz</option>
-                <option value="Solo">Solo</option>
-                <option value="Regular">Regular</option>
-              </select>
-              {errors.size && <p className="error-message">{errors.size}</p>}
-            </label>
-          </div>
-
-          <div className="form-row">
-            <label>
-              Spilled By: <span className="required">*</span>
-              <select
-                value={loggedBy}
-                onChange={(e) => setLoggedBy(e.target.value)}
-                onFocus={() => handleFocus("loggedBy")}
-                className={errors.loggedBy ? "error-field" : ""}
-              >
-                <option value="">Select staff</option>
-                <option value="Cashier A">Cashier A</option>
-                <option value="Cashier B">Cashier B</option>
-                <option value="Cashier C">Cashier C</option>
-              </select>
-              {errors.loggedBy && (
-                <p className="error-message">{errors.loggedBy}</p>
-              )}
-            </label>
-
-            <label>
-              Date: <span className="required">*</span>
-              <input
-                type="date"
-                value={date}
-                onChange={(e) => setDate(e.target.value)}
-                onFocus={() => handleFocus("date")}
-                className={errors.date ? "error-field" : ""}
-              />
-              {errors.date && <p className="error-message">{errors.date}</p>}
             </label>
           </div>
 
@@ -190,6 +342,7 @@ function EditSpillageModal({ spillage, onClose, onUpdate }) {
                 onChange={(e) => setReason(e.target.value)}
                 onFocus={() => handleFocus("reason")}
                 className={errors.reason ? "error-field" : ""}
+                placeholder="Describe what happened..."
               />
               {errors.reason && (
                 <p className="error-message">{errors.reason}</p>
@@ -197,11 +350,12 @@ function EditSpillageModal({ spillage, onClose, onUpdate }) {
             </label>
           </div>
 
+
           <div className="logSpillage-button-container">
             <button
               type="submit"
               className="logSpillage-submit-button"
-              disabled={isUpdating}
+              disabled={isUpdating || isLoadingProducts || isLoadingCashiers}
             >
               {isUpdating ? "Updating..." : "Update"}
             </button>
@@ -209,6 +363,7 @@ function EditSpillageModal({ spillage, onClose, onUpdate }) {
               type="button"
               className="logSpillage-cancel-button"
               onClick={onClose}
+              disabled={isUpdating}
             >
               Cancel
             </button>
@@ -223,6 +378,7 @@ EditSpillageModal.propTypes = {
   spillage: PropTypes.object.isRequired,
   onClose: PropTypes.func.isRequired,
   onUpdate: PropTypes.func.isRequired,
+  loggedByName: PropTypes.string.isRequired,
 };
 
 export default EditSpillageModal;
