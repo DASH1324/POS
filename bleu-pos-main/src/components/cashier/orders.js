@@ -647,7 +647,7 @@ const handleUpdateStatus = async (orderToUpdate, newStatus, details) => {
                   <option value="PREPARING">Preparing</option> 
                   <option value="WAITING FOR PICK UP">Waiting For Pick Up</option>
                   <option value="DELIVERING">Delivering</option>
-                  <option value="COMPLETED">Completed</option> 
+                  <option value="DELIVERED">Completed</option> 
                   <option value="CANCELLED">Cancelled</option> 
                 </>
               )}

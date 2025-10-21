@@ -75,7 +75,7 @@ async def auto_cancel_expired_orders():
                             await conn.commit()
                             
                             logger.info(
-                                f"✅ Auto-cancelled POS order SaleID={sale_id}, "
+                                f" Auto-cancelled POS order SaleID={sale_id}, "
                                 f"Ref={reference_number}, Type={order_type}"
                             )
                             
@@ -93,18 +93,18 @@ async def auto_cancel_expired_orders():
                                         )
                                         
                                         if response.status_code == 200:
-                                            logger.info(f"✅ Notified OOS to cancel order {reference_number}")
+                                            logger.info(f" Notified OOS to cancel order {reference_number}")
                                         else:
                                             logger.warning(
-                                                f"⚠️ Failed to notify OOS: {response.status_code} - {response.text}"
+                                                f" Failed to notify OOS: {response.status_code} - {response.text}"
                                             )
                                             
                                 except httpx.RequestError as e:
-                                    logger.error(f"❌ Failed to notify OOS for {reference_number}: {e}")
+                                    logger.error(f" Failed to notify OOS for {reference_number}: {e}")
                             
                         except Exception as e:
                             await conn.rollback()
-                            logger.error(f"❌ Failed to auto-cancel SaleID={sale_id}: {e}", exc_info=True)
+                            logger.error(f" Failed to auto-cancel SaleID={sale_id}: {e}", exc_info=True)
                             continue
                 else:
                     logger.info("No expired pending orders found")
@@ -112,10 +112,10 @@ async def auto_cancel_expired_orders():
             await conn.close()
             
         except Exception as e:
-            logger.error(f"❌ Error in auto-cancel task: {e}", exc_info=True)
+            logger.error(f" Error in auto-cancel task: {e}", exc_info=True)
         
         # Wait 5 minutes before next check
-        await asyncio.sleep(300)  # 300 seconds = 5 minutes
+        await asyncio.sleep(300)  
 
 
 @router_auto_cancel.post("/start")
@@ -129,7 +129,7 @@ async def start_auto_cancel_task():
     _background_task_running = True
     _background_task = asyncio.create_task(auto_cancel_expired_orders())
     
-    logger.info("🚀 Started auto-cancel background task")
+    logger.info(" Started auto-cancel background task")
     return {"message": "Auto-cancel task started successfully"}
 
 
@@ -150,7 +150,7 @@ async def stop_auto_cancel_task():
         except asyncio.CancelledError:
             pass
     
-    logger.info("🛑 Stopped auto-cancel background task")
+    logger.info(" Stopped auto-cancel background task")
     return {"message": "Auto-cancel task stopped successfully"}
 
 
