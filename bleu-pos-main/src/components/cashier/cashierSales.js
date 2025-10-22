@@ -214,35 +214,56 @@ function CashierSales({ shiftLabel = "Morning Shift", shiftTime = "6:00AM – 2:
 
         const data = await response.json();
         
-        // Format and filter based on product type
+        // Parse the selected date for comparison
+        const selectedDateObj = new Date(selectedDate);
+        selectedDateObj.setHours(0, 0, 0, 0);
+        
+        // Format and filter based on product type AND date match
         const formattedData = data
-          .map(entry => ({
-            id: entry.spillage_id,
-            timestamp: new Date(entry.logged_at).toLocaleString('en-US', {
-              month: 'short',
-              day: 'numeric',
-              hour: '2-digit',
-              minute: '2-digit',
-              hour12: true
-            }),
-            category: entry.category,
-            productName: entry.product_name,
-            quantity: entry.quantity,
-            reason: entry.reason,
-            loggedBy: entry.logged_by || '-'
-          }))
+          .map(entry => {
+            const loggedDate = new Date(entry.logged_at);
+            return {
+              id: entry.spillage_id,
+              timestamp: loggedDate.toLocaleString('en-US', {
+                month: 'short',
+                day: 'numeric',
+                hour: '2-digit',
+                minute: '2-digit',
+                hour12: true
+              }),
+              rawDate: loggedDate, // Keep raw date for filtering
+              category: entry.category,
+              productName: entry.product_name,
+              quantity: entry.quantity,
+              reason: entry.reason,
+              loggedBy: entry.logged_by || '-'
+            };
+          })
           .filter(entry => {
-            // Apply filtering based on productTypeFilter
+            // First check: date must match selectedDate
+            const entryDate = new Date(entry.rawDate);
+            entryDate.setHours(0, 0, 0, 0);
+            
+            const dateMatches = entryDate.getTime() === selectedDateObj.getTime();
+            
+            if (!dateMatches) {
+              return false; // Skip if date doesn't match
+            }
+            
+            // Second check: Apply product type filter
             if (productTypeFilter === 'All') {
-              return true; // Show all spillage entries
+              return true;
             } else if (productTypeFilter === 'Merchandise') {
-              // Show only if category is "Merchandise"
               return entry.category === 'Merchandise';
             } else if (productTypeFilter === 'Products') {
-              // Show all categories EXCEPT "Merchandise"
               return entry.category !== 'Merchandise';
             }
             return true;
+          })
+          .map(entry => {
+            // Remove rawDate before setting state (we don't need it in the display)
+            const { rawDate, ...displayEntry } = entry;
+            return displayEntry;
           });
 
         setSpillageEntries(formattedData);

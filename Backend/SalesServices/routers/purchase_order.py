@@ -112,6 +112,7 @@ class UpdateOrderStatusRequest(BaseModel):
         "waiting for pick up"
     ]
     cancelDetails: Optional[CancelDetails] = None
+    cashier_name: Optional[str] = None  
 
 class RefundOrderRequest(BaseModel):
     managerUsername: str
@@ -242,7 +243,7 @@ async def save_online_order(
     - 'pending': Order is saved but inventory not deducted yet (done during payment confirmation)
     - 'processing': Order is being prepared (cashier accepted it)
     
-    Note: POS generates its own SaleID, so online_order_id is optional and only used for logging.
+    Note: POS automatically generates its own SaleID using IDENTITY.
     """
     # Allow both cashier and system to save orders
     allowed_roles = ["cashier", "admin", "manager", "user"]
@@ -287,41 +288,79 @@ async def save_online_order(
             logger.info(f"Reference: {final_reference_number}")
             logger.info(f"Cashier: {order_data.cashier_name}")
 
-            # Insert the main sale record
-            sql_insert_sale = """
-                INSERT INTO Sales (
-                    OrderType, PaymentMethod, CashierName, CustomerName, 
-                    TotalDiscountAmount, Status, GCashReferenceNumber
+            # Method 1: Try with table variable and OUTPUT
+            try:
+                sql_insert_sale = """
+                    SET NOCOUNT ON;
+                    DECLARE @InsertedSaleID TABLE (SaleID INT);
+                    
+                    INSERT INTO Sales (
+                        OrderType, PaymentMethod, CashierName, CustomerName, 
+                        TotalDiscountAmount, Status, GCashReferenceNumber
+                    )
+                    OUTPUT INSERTED.SaleID INTO @InsertedSaleID
+                    VALUES (?, ?, ?, ?, ?, ?, ?);
+                    
+                    SELECT SaleID FROM @InsertedSaleID;
+                """
+                
+                await cursor.execute(
+                    sql_insert_sale, 
+                    order_data.order_type,
+                    corrected_payment_method,
+                    order_data.cashier_name,
+                    order_data.customer_name,
+                    discount_amount,
+                    pos_order_status, 
+                    final_reference_number
                 )
-                OUTPUT INSERTED.SaleID
-                VALUES (?, ?, ?, ?, ?, ?, ?)
-            """
+                
+                sale_id_row = await cursor.fetchone()
+                new_sale_id = sale_id_row[0] if sale_id_row else None
+                
+            except Exception as output_error:
+                # Fallback: Use @@IDENTITY if OUTPUT doesn't work
+                logger.warning(f"OUTPUT method failed: {output_error}. Trying @@IDENTITY method.")
+                await conn.rollback()
+                
+                sql_insert_sale_fallback = """
+                    INSERT INTO Sales (
+                        OrderType, PaymentMethod, CashierName, CustomerName, 
+                        TotalDiscountAmount, Status, GCashReferenceNumber
+                    )
+                    VALUES (?, ?, ?, ?, ?, ?, ?);
+                    SELECT @@IDENTITY AS SaleID;
+                """
+                
+                await cursor.execute(
+                    sql_insert_sale_fallback,
+                    order_data.order_type,
+                    corrected_payment_method,
+                    order_data.cashier_name,
+                    order_data.customer_name,
+                    discount_amount,
+                    pos_order_status,
+                    final_reference_number
+                )
+                
+                sale_id_row = await cursor.fetchone()
+                new_sale_id = int(sale_id_row[0]) if sale_id_row and sale_id_row[0] else None
             
-            await cursor.execute(
-                sql_insert_sale, 
-                order_data.order_type,
-                corrected_payment_method,
-                order_data.cashier_name,
-                order_data.customer_name,
-                discount_amount,
-                pos_order_status, 
-                final_reference_number
-            )
-            
-            sale_id_row = await cursor.fetchone()
-            if not sale_id_row:
+            if not new_sale_id:
                 await conn.rollback()
                 raise Exception("Failed to create sale record and retrieve new SaleID.")
-            new_sale_id = sale_id_row.SaleID
+            
+            logger.info(f"✅ Created Sale with auto-generated SaleID: {new_sale_id}")
 
             # Insert items and their addons
             for item in order_data.items:
+                item_category = item.category or 'Online'
+                
+                # Insert SaleItem - separated into two calls
                 sql_insert_item = """
                     INSERT INTO SaleItems (SaleID, ItemName, Quantity, UnitPrice, Category)
-                    OUTPUT INSERTED.SaleItemID
                     VALUES (?, ?, ?, ?, ?)
                 """
-                item_category = item.category or 'Online'
                 
                 await cursor.execute(
                     sql_insert_item, 
@@ -329,12 +368,16 @@ async def save_online_order(
                     Decimal(str(item.price)), item_category
                 )
                 
+                # Get the last inserted identity in a separate call
+                await cursor.execute("SELECT CAST(@@IDENTITY AS INT)")
                 sale_item_result = await cursor.fetchone()
-                if not sale_item_result:
+                new_sale_item_id = int(sale_item_result[0]) if sale_item_result and sale_item_result[0] else None
+                
+                if not new_sale_item_id:
                     await conn.rollback()
                     raise Exception(f"Failed to insert sale item: {item.name}")
                 
-                new_sale_item_id = sale_item_result.SaleItemID
+                logger.info(f"✅ Created SaleItem '{item.name}' with auto-generated SaleItemID: {new_sale_item_id}")
                 
                 # Insert addons for this item
                 for addon in item.addons:
@@ -343,20 +386,30 @@ async def save_online_order(
                     
                     if not addon_id_row:
                         logger.info(f"Addon '{addon.addon_name}' not found in POS. Creating it with price {addon.price}")
+                        
+                        # Insert addon - separated into two calls
+                        sql_insert_addon = "INSERT INTO Addons (AddonName, Price) VALUES (?, ?)"
+                        
                         await cursor.execute(
-                            "INSERT INTO Addons (AddonName, Price) OUTPUT INSERTED.AddonID VALUES (?, ?)",
+                            sql_insert_addon,
                             addon.addon_name, Decimal(str(addon.price))
                         )
+                        
+                        # Get the last inserted identity
+                        await cursor.execute("SELECT CAST(@@IDENTITY AS INT)")
                         addon_creation_result = await cursor.fetchone()
-                        if not addon_creation_result:
+                        correct_pos_addon_id = int(addon_creation_result[0]) if addon_creation_result and addon_creation_result[0] else None
+                        
+                        if not correct_pos_addon_id:
                             await conn.rollback()
                             raise Exception(f"Failed to create addon: {addon.addon_name}")
-                        correct_pos_addon_id = addon_creation_result.AddonID
+                        
+                        logger.info(f"✅ Created Addon '{addon.addon_name}' with auto-generated AddonID: {correct_pos_addon_id}")
                     else:
                         correct_pos_addon_id = addon_id_row.AddonID
 
-                    sql_insert_addon = "INSERT INTO SaleItemAddons (SaleItemID, AddonID, Quantity) VALUES (?, ?, ?)"
-                    await cursor.execute(sql_insert_addon, new_sale_item_id, correct_pos_addon_id, 1)
+                    sql_insert_sale_item_addon = "INSERT INTO SaleItemAddons (SaleItemID, AddonID, Quantity) VALUES (?, ?, ?)"
+                    await cursor.execute(sql_insert_sale_item_addon, new_sale_item_id, correct_pos_addon_id, 1)
 
             await conn.commit()
             
@@ -384,8 +437,7 @@ async def save_online_order(
         if conn:
             conn.autocommit = True 
             await conn.close()
-            
-            
+
 # Get all orders endpoint
 @router_purchase_order.get(
     "/all",
@@ -479,128 +531,129 @@ async def get_all_orders(current_user: dict = Depends(get_current_active_user)):
         
 # --- Function to change the status of an order ---
 @router_purchase_order.patch(
-    "/{order_id}/status",
+    "/online/{reference_number}/status",
     status_code=status.HTTP_200_OK,
-    summary="Update the status of a specific order"
+    summary="Update the status of a POS sale linked to an online order"
 )
-async def update_order_status(
-    order_id: str,
+async def update_pos_status_for_online_order(
+    reference_number: str,
     request: UpdateOrderStatusRequest,
     current_user: dict = Depends(get_current_active_user)
 ):
+    """
+    Updates the status of a POS order that was created from an online order.
+    Uses the GCash reference number to find and update the correct POS record.
+    
+    This endpoint is called AFTER the online order service updates its own database.
+    It ensures the POS database stays in sync with the online order status.
+    """
     allowed_roles = ["cashier", "rider"]
     if current_user.get("userRole") not in allowed_roles:
-        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Permission denied.")
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN, 
+            detail="Permission denied."
+        )
+
+    # Validate that only certain statuses can be synced
+    valid_statuses = [
+        'processing',
+        'completed', 
+        'cancelled', 
+        'ready for pick up', 
+        'delivering', 
+        'picked up',
+        'waiting for pick up'
+    ]
     
+    if request.newStatus not in valid_statuses:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Invalid status update. Allowed statuses: {', '.join(valid_statuses)}"
+        )
+
+    conn = None
     try:
-        parsed_id = int(order_id.split('-')[-1])
-    except (ValueError, IndexError):
-        raise HTTPException(status_code=400, detail="Invalid order ID format.")
-    
-    conn = await get_db_connection()
-    try:
+        conn = await get_db_connection()
         async with conn.cursor() as cursor:
-            if request.newStatus == 'cancelled':
-                if not request.cancelDetails or not request.cancelDetails.managerUsername:
-                    raise HTTPException(status_code=400, detail="Manager username required for cancellation.")
-                
-                items_to_restock = []
-                addons_to_restock = []
-                
-                try:
-                    await cursor.execute("UPDATE Sales SET Status = ?, UpdatedAt = GETDATE() WHERE SaleID = ?", (request.newStatus, parsed_id))
-                    if cursor.rowcount == 0:
-                        raise HTTPException(status_code=404, detail=f"Order '{order_id}' not found.")
-                    
-                    await cursor.execute("INSERT INTO CancelledOrders (SaleID, ManagerUsername, CancelledAt) VALUES (?, ?, GETDATE())", (parsed_id, request.cancelDetails.managerUsername))
-                    
-                    await cursor.execute("SELECT SaleItemID, ItemName, Quantity, Category FROM SaleItems WHERE SaleID = ?", parsed_id)
-                    items_to_restock = await cursor.fetchall()
-
-                    # Loop through each main item to find its addons
-                    for item in items_to_restock:
-                        await cursor.execute("""
-                            SELECT a.AddonName, sia.Quantity AS AddonQuantity
-                            FROM SaleItemAddons sia
-                            JOIN Addons a ON sia.AddonID = a.AddonID
-                            WHERE sia.SaleItemID = ?
-                        """, item.SaleItemID)
-                        item_addons = await cursor.fetchall()
-                        
-                        for addon in item_addons:
-                            total_addon_quantity = item.Quantity * addon.AddonQuantity
-                            addons_to_restock.append({
-                                "addon_name": addon.AddonName,
-                                "quantity": total_addon_quantity
-                            })
-
-                    await conn.commit()
-                    logger.info(f"Order {order_id} successfully cancelled by {request.cancelDetails.managerUsername}.")
-                except Exception as db_exc:
-                    await conn.rollback()
-                    logger.error(f"DB error during cancellation for order {order_id}: {db_exc}", exc_info=True)
-                    raise HTTPException(status_code=500, detail="Failed to save cancellation to DB.")
-                
-                if items_to_restock:
-                    product_items = []
-                    merchandise_items = []
-                    
-                    for item in items_to_restock:
-                        if item.Category == 'Merchandise':
-                            merchandise_items.append({"name": item.ItemName, "quantity": item.Quantity})
-                        else:
-                            product_items.append({"product_name": item.ItemName, "quantity": item.Quantity, "category": item.Category})
-                    
-                    token = current_user['access_token']
-                    headers = {"Authorization": f"Bearer {token}", "Content-Type": "application/json"}
-                    
-                    async with httpx.AsyncClient() as client:
-                        tasks = []
-                        service_names = []
-                        
-                        if product_items or addons_to_restock:
-                            product_payload = {
-                                "cancelled_items": product_items,
-                                "cancelled_addons": addons_to_restock
-                            }
-                            ingredients_url = "http://127.0.0.1:8002/ingredients/restock-from-cancelled-order"
-                            materials_url = "http://127.0.0.1:8002/materials/restock-from-cancelled-order"
-                            
-                            tasks.extend([
-                                client.post(ingredients_url, json=product_payload, headers=headers),
-                                client.post(materials_url, json=product_payload, headers=headers)
-                            ])
-                            service_names.extend(["Ingredients", "Materials"])
-                        
-                        if merchandise_items:
-                            merchandise_payload = {"cartItems": merchandise_items}
-                            merchandise_url = "http://127.0.0.1:8002/merchandise/restock-from-cancelled-order"
-                            tasks.append(client.post(merchandise_url, json=merchandise_payload, headers=headers))
-                            service_names.append("Merchandise")
-                        
-                        if tasks:
-                            results = await asyncio.gather(*tasks, return_exceptions=True)
-                            
-                            for i, res in enumerate(results):
-                                service = service_names[i]
-                                if isinstance(res, Exception):
-                                    logger.error(f"Restock call to {service} service failed for order {order_id}: {res}")
-                                elif res.status_code != 200:
-                                    logger.error(f"Restock to {service} service for order {order_id} failed: {res.status_code} - {res.text}")
-                                else:
-                                    logger.info(f"Successfully restocked {service} for order {order_id}")
-                
-                return {"message": "Order has been cancelled and inventory restock initiated for all item types."}
+            # Log the incoming request
+            logger.info(f"=== POS STATUS UPDATE REQUEST ===")
+            logger.info(f"Reference Number: {reference_number}")
+            logger.info(f"New Status: {request.newStatus}")
+            logger.info(f"Cashier Name from Request: {request.cashier_name}")
             
-            else:
-                await cursor.execute("UPDATE Sales SET Status = ?, UpdatedAt = GETDATE() WHERE SaleID = ?", (request.newStatus, parsed_id))
-                if cursor.rowcount == 0:
-                    raise HTTPException(status_code=404, detail=f"Order '{order_id}' not found.")
-                await conn.commit()
-                return {"message": f"Order status successfully updated to '{request.newStatus}'."}
-    
-    finally:
+            # First, check if the order exists
+            check_sql = "SELECT SaleID, Status, CashierName FROM Sales WHERE GCashReferenceNumber = ?"
+            await cursor.execute(check_sql, reference_number)
+            existing_order = await cursor.fetchone()
+            
+            if not existing_order:
+                logger.warning(
+                    f"No POS sale found with reference number '{reference_number}'. "
+                    f"This could mean the online order was never accepted."
+                )
+                raise HTTPException(
+                    status_code=404, 
+                    detail=f"No POS sale found with reference number '{reference_number}'."
+                )
+            
+            logger.info(f"Found POS Sale - ID: {existing_order.SaleID}, Current Status: {existing_order.Status}, Current Cashier: {existing_order.CashierName}")
+            
+            # Use cashier_name from request if provided, otherwise use current user's username
+            cashier_to_update = request.cashier_name or current_user.get('username')
+            
+            logger.info(f"Will update CashierName to: {cashier_to_update}")
+            
+            # Update the status AND cashier name
+            update_sql = """
+                UPDATE Sales 
+                SET Status = ?, 
+                    CashierName = ?, 
+                    UpdatedAt = GETDATE() 
+                WHERE GCashReferenceNumber = ?
+            """
+            await cursor.execute(update_sql, request.newStatus, cashier_to_update, reference_number)
+            
+            if cursor.rowcount == 0:
+                # This shouldn't happen since we just checked, but just in case
+                logger.error(f"Update affected 0 rows for reference '{reference_number}'")
+                raise HTTPException(
+                    status_code=500,
+                    detail="Failed to update the order status."
+                )
+            
+            await conn.commit()
+            
+            logger.info(
+                f"✅ Successfully updated POS status for reference '{reference_number}' "
+                f"from '{existing_order.Status}' to '{request.newStatus}' "
+                f"and cashier from '{existing_order.CashierName}' to '{cashier_to_update}'"
+            )
+            
+            return {
+                "message": f"POS status successfully updated to '{request.newStatus}'.",
+                "reference_number": reference_number,
+                "sale_id": existing_order.SaleID,
+                "previous_status": existing_order.Status,
+                "new_status": request.newStatus,
+                "cashier_name": cashier_to_update
+            }
+
+    except HTTPException:
+        # Re-raise HTTP exceptions as-is
+        raise
+    except Exception as e:
         if conn: 
+            await conn.rollback()
+        logger.error(
+            f"❌ Error updating POS status for reference '{reference_number}': {e}", 
+            exc_info=True
+        )
+        raise HTTPException(
+            status_code=500, 
+            detail=f"Failed to update the order status in the POS: {str(e)}"
+        )
+    finally:
+        if conn:
             await conn.close()
 
 

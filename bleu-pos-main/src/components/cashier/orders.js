@@ -300,7 +300,10 @@ const handleUpdateStatus = async (orderToUpdate, newStatus, details) => {
 
           // Update online order status to CANCELLED
           const url = `${ONLINE_API_BASE_URL}/cart/admin/orders/${orderToUpdate.id}/status`;
-          const body = JSON.stringify({ new_status: newStatus });
+          const body = JSON.stringify({ 
+            new_status: newStatus,
+            cashier_name: username // Send the cashier name from localStorage
+          });          
           const response = await fetch(url, { method: 'PATCH', headers, body });
           if (!response.ok) throw new Error((await response.json()).detail || 'Failed to cancel online order.');
           
