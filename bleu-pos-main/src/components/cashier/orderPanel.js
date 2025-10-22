@@ -216,15 +216,7 @@ function OrderPanel({ order, onClose, isOpen, isStore, onUpdateStatus }) {
             );
         } else if (status === 'WAITING FOR PICK UP') {
             if (type === 'delivery') {
-                mainAction = (
-                    <button 
-                        className="orderpanel-btn orderpanel-btn-complete" 
-                        onClick={() => onUpdateStatus(order, "DELIVERING")}
-                        disabled={isProcessing}
-                    >
-                        Pick Up by Rider
-                    </button>
-                );
+            mainAction = null;                    
             } else {
                 // Pick-up type
                 mainAction = (
@@ -238,15 +230,8 @@ function OrderPanel({ order, onClose, isOpen, isStore, onUpdateStatus }) {
                 );
             }
         } else if (status === 'DELIVERING') {
-            mainAction = (
-                <button 
-                    className="orderpanel-btn orderpanel-btn-complete" 
-                    onClick={() => onUpdateStatus(order, "COMPLETED")}
-                    disabled={isProcessing}
-                >
-                    Delivered
-                </button>
-            );
+              mainAction = null;
+            
         }
     }
 

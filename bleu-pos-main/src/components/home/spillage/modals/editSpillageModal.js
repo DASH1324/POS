@@ -20,6 +20,13 @@ function EditSpillageModal({ spillage, onClose, onUpdate, loggedByName }) {
   const [isLoadingCashiers, setIsLoadingCashiers] = useState(false);
   const [availableProducts, setAvailableProducts] = useState([]);
 
+  // Store original values for comparison
+  const [originalValues] = useState({
+    category: spillage.category || "",
+    product_name: spillage.product_name || "",
+    quantity: spillage.quantity || 0
+  });
+
   // Fetch cashiers list
   useEffect(() => {
     fetchCashiers();
@@ -136,6 +143,128 @@ function EditSpillageModal({ spillage, onClose, onUpdate, loggedByName }) {
     ? availableProducts.filter((p) => p.category === productType)
     : [];
 
+  // Helper function to call inventory restock/deduct endpoints
+  const handleInventoryAdjustment = async (token) => {
+    // Check if anything changed that affects inventory
+    const categoryChanged = originalValues.category !== productType;
+    const productChanged = originalValues.product_name !== productName;
+    const quantityChanged = originalValues.quantity !== parseInt(amount);
+
+    if (!categoryChanged && !productChanged && !quantityChanged) {
+      console.log("No inventory-affecting changes detected");
+      return;
+    }
+
+    console.log("Inventory affecting changes detected:", {
+      categoryChanged,
+      productChanged,
+      quantityChanged
+    });
+
+    const oldSpillage = {
+      product_name: originalValues.product_name,
+      category: originalValues.category,
+      quantity: originalValues.quantity
+    };
+
+    const newSpillage = {
+      product_name: productName,
+      category: productType,
+      quantity: parseInt(amount)
+    };
+
+    try {
+      // Determine which endpoints to call based on category
+      // Treat "All Items" as "Merchandise"
+      const oldCategory = (originalValues.category.toLowerCase() === "all items" 
+        ? "merchandise" 
+        : originalValues.category.toLowerCase());
+      const newCategory = (productType.toLowerCase() === "all items" 
+        ? "merchandise" 
+        : productType.toLowerCase());
+
+      // Handle old spillage restock (always restock the old values if changed)
+      if (oldCategory === "merchandise") {
+        // Call merchandise restock-and-deduct endpoint
+        console.log("Calling merchandise restock-and-deduct endpoint");
+        const merchResponse = await fetch(
+          "http://localhost:8002/merchandise/restock-and-deduct-spillage-edit",
+          {
+            method: "POST",
+            headers: {
+              "Content-Type": "application/json",
+              Authorization: `Bearer ${token}`,
+            },
+            body: JSON.stringify({
+              old_spillage: oldSpillage,
+              new_spillage: newSpillage
+            }),
+          }
+        );
+
+        if (!merchResponse.ok) {
+          const errorData = await merchResponse.json();
+          console.error("Merchandise inventory adjustment failed:", errorData);
+          throw new Error(errorData.detail || "Failed to adjust merchandise inventory");
+        }
+
+        console.log("Merchandise inventory adjusted successfully");
+      } else {
+        // It's a product - call both ingredients and materials endpoints
+        console.log("Calling ingredients restock-and-deduct endpoint");
+        const ingredientsResponse = await fetch(
+          "http://127.0.0.1:8002/ingredients/restock-and-deduct-spillage-edit",
+          {
+            method: "POST",
+            headers: {
+              "Content-Type": "application/json",
+              Authorization: `Bearer ${token}`,
+            },
+            body: JSON.stringify({
+              old_spillage: oldSpillage,
+              new_spillage: newSpillage
+            }),
+          }
+        );
+
+        if (!ingredientsResponse.ok) {
+          const errorData = await ingredientsResponse.json();
+          console.error("Ingredients inventory adjustment failed:", errorData);
+          throw new Error(errorData.detail || "Failed to adjust ingredients inventory");
+        }
+
+        console.log("Ingredients inventory adjusted successfully");
+
+        console.log("Calling materials restock-and-deduct endpoint");
+        const materialsResponse = await fetch(
+          "http://localhost:8002/materials/restock-and-deduct-spillage-edit",
+          {
+            method: "POST",
+            headers: {
+              "Content-Type": "application/json",
+              Authorization: `Bearer ${token}`,
+            },
+            body: JSON.stringify({
+              old_spillage: oldSpillage,
+              new_spillage: newSpillage
+            }),
+          }
+        );
+
+        if (!materialsResponse.ok) {
+          const errorData = await materialsResponse.json();
+          console.error("Materials inventory adjustment failed:", errorData);
+          throw new Error(errorData.detail || "Failed to adjust materials inventory");
+        }
+
+        console.log("Materials inventory adjusted successfully");
+      }
+    } catch (error) {
+      console.error("Error adjusting inventory:", error);
+      throw error;
+    }
+  };
+
   const handleSubmit = async (e) => {
     e.preventDefault();
     let newErrors = {};
@@ -159,6 +288,20 @@ function EditSpillageModal({ spillage, onClose, onUpdate, loggedByName }) {
     try {
       const token = localStorage.getItem("authToken");
       
+      // STEP 1: Handle inventory adjustment (restock old + deduct new)
+      try {
+        await handleInventoryAdjustment(token);
+        console.log("Inventory adjustment completed successfully");
+      } catch (inventoryError) {
+        console.error("Inventory adjustment failed:", inventoryError);
+        setErrors({
+          submit: `Inventory adjustment failed: ${inventoryError.message}. Spillage record not updated.`,
+        });
+        setIsUpdating(false);
+        return; // Don't proceed with spillage update if inventory fails
+      }
+
+      // STEP 2: Update spillage record in database
       const response = await fetch(
         `http://localhost:9003/wastelogs/${spillage.spillage_id}`,
         {
@@ -350,6 +493,11 @@ function EditSpillageModal({ spillage, onClose, onUpdate, loggedByName }) {
             </label>
           </div>
 
+          {errors.submit && (
+            <div className="form-row full-width">
+              <p className="error-message">{errors.submit}</p>
+            </div>
+          )}
 
           <div className="logSpillage-button-container">
             <button

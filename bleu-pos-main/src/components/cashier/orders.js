@@ -109,7 +109,11 @@ function Orders() {
       // Process online orders
       if (onlineResponse.status === 'fulfilled' && onlineResponse.value.ok) {
         const data = await onlineResponse.value.json();
-        
+         console.group('📦 ONLINE ORDERS API RESPONSE');
+      console.log('Response status:', onlineResponse.value.status);
+  console.log('Response data:', data);
+  console.table(Array.isArray(data) ? data : [data]); // Nice table view
+  console.groupEnd();
         const orders = Array.isArray(data) ? data : [];
         newOnlineOrders = orders.map(order => {
           const parsedItems = Array.isArray(order.items) ? order.items.map(item => ({
@@ -132,14 +136,17 @@ function Orders() {
             }
             return sum;
           }, 0);
-
+          // 🆕 NEW: Calculate items subtotal (price × quantity for each item)
+          const itemsSubtotal = parsedItems.reduce((sum, item) => {
+            return sum + (item.price * item.quantity);
+          }, 0);
           return {
             id: order.order_id,
             customerName: order.customer_name,
             date: new Date(order.order_date),
             orderType: order.order_type,
             paymentMethod: order.payment_method,
-            total: order.total_amount,
+            total: itemsSubtotal, // 🆕 Use calculated subtotal instead of total_amount
             status: order.order_status ? order.order_status.toUpperCase() : 'UNKNOWN',
             items: totalQuantity,
             orderItems: parsedItems,
