@@ -56,6 +56,12 @@ function CashierSales({ shiftLabel = "Morning Shift", shiftTime = "6:00AM – 2:
     coins10: 0, coins5: 0, coins1: 0, cents25: 0, cents10: 0, cents05: 0
   });
 
+  // PIN Modal states
+  const [showPinModal, setShowPinModal] = useState(false);
+  const [pinModalType, setPinModalType] = useState(null); // 'confirm' or 'discrepancy'
+  const [enteredPin, setEnteredPin] = useState("");
+  const [pinError, setPinError] = useState("");
+
   // Spillage state
   const [spillageEntries, setSpillageEntries] = useState([]);
   const [isSpillageLoading, setIsSpillageLoading] = useState(true);
@@ -350,25 +356,100 @@ function CashierSales({ shiftLabel = "Morning Shift", shiftTime = "6:00AM – 2:
   const openModal = (type) => setModalType(type);
   const closeModal = () => setModalType(null);
 
-  const handleConfirmCount = async () => {
-    if (!activeSessionId) { alert("Error: No active session found to close."); return; }
-    if (!window.confirm("Are you sure you want to confirm this count and close your session?")) return;
+  // Open PIN modal for confirm count
+  const handleConfirmCount = () => {
+    if (!activeSessionId) { 
+      alert("Error: No active session found to close."); 
+      return; 
+    }
+    setEnteredPin("");
+    setPinError("");
+    setPinModalType('confirm');
+    setShowPinModal(true);
+  };
+
+  // Open PIN modal for report discrepancy
+  const handleReportDiscrepancy = () => {
+    if (!activeSessionId) { 
+      alert("Error: No active session found."); 
+      return; 
+    }
+    setEnteredPin("");
+    setPinError("");
+    setPinModalType('discrepancy');
+    setShowPinModal(true);
+  };
+
+  // Confirm PIN and execute action
+  const confirmPinAction = async () => {
+    if (!enteredPin || enteredPin.length < 4) {
+      setPinError("Please enter a valid PIN.");
+      return;
+    }
+
     setIsSubmitting(true);
     const token = localStorage.getItem('authToken');
+
     try {
+      if (pinModalType === 'confirm') {
+        // Confirm Count action
         const response = await fetch(`${CASH_TALLY_API_URL}/close_session`, {
-            method: 'POST', headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
-            body: JSON.stringify({ sessionId: activeSessionId, cashCounts: cashCounts })
+          method: 'POST', 
+          headers: { 
+            'Content-Type': 'application/json', 
+            'Authorization': `Bearer ${token}` 
+          },
+          body: JSON.stringify({ 
+            sessionId: activeSessionId, 
+            cashCounts: cashCounts,
+            pin: enteredPin
+          })
         });
+
         const data = await response.json();
-        if (!response.ok) throw new Error(data.detail || "Failed to close the session.");
-        alert("Session closed successfully!");
+        
+        if (!response.ok) {
+          throw new Error(data.detail || "Failed to close the session.");
+        }
+
+        alert(`Session closed successfully! Verified by: ${data.checkedBy}`);
+        setShowPinModal(false);
         setActiveSessionId(null);
         setError(`Session ${data.sessionId} has been closed.`);
+
+      } else if (pinModalType === 'discrepancy') {
+        // Report Discrepancy action - NOW INCLUDES CASH COUNTS
+        const response = await fetch(`${CASH_TALLY_API_URL}/report_discrepancy`, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${token}`
+          },
+          body: JSON.stringify({
+            sessionId: activeSessionId,
+            discrepancyAmount: discrepancyInSession,
+            reportedBy: loggedInUser,
+            pin: enteredPin,
+            cashCounts: cashCounts  // Added cash counts here
+          })
+        });
+
+        const data = await response.json();
+
+        if (!response.ok) {
+          throw new Error(data.detail || "Failed to report discrepancy.");
+        }
+
+        alert(`Discrepancy of ₱${Math.abs(discrepancyInSession).toFixed(2)} has been reported and session closed.\nVerified by: ${data.checkedBy}\nClosing Cash: ₱${data.closingCash.toFixed(2)}\nCash Sales: ₱${data.cashSalesAtClose.toFixed(2)}`);
+        setShowPinModal(false);
+        setActiveSessionId(null);
+        setError(`Session ${data.sessionId} has been closed with discrepancy reported.`);
+      }
+
     } catch (err) {
-        alert(`Error: ${err.message}`);
+      setPinError(err.message);
     } finally {
-        setIsSubmitting(false);
+      setIsSubmitting(false);
     }
   };
 
@@ -438,7 +519,6 @@ function CashierSales({ shiftLabel = "Morning Shift", shiftTime = "6:00AM – 2:
   };
 
   const renderCashTallyContent = () => {
-    const handleReportDiscrepancy = () => alert(`Discrepancy of ₱${Math.abs(discrepancyInSession).toFixed(2)} has been reported.`);
     if (isLoading) return <div className="cashier-loading-container"><FontAwesomeIcon icon={faSpinner} spin size="3x" /><p>Loading Session Data...</p></div>;
     return (
         <div className="cashier-cash-tally-container">
@@ -653,6 +733,59 @@ function CashierSales({ shiftLabel = "Morning Shift", shiftTime = "6:00AM – 2:
         )}
       </div>
       {renderModal()}
+
+      {/* PIN Modal for Confirm Count and Report Discrepancy */}
+      {showPinModal && (
+        <div className="orderpanel-modal-overlay" onClick={() => setShowPinModal(false)}>
+          <div className="orderpanel-modal-content" onClick={(e) => e.stopPropagation()}>
+            <div className="orderpanel-modal-header">
+              <h3 className="orderpanel-modal-title">Manager PIN Required</h3>
+              <button className="orderpanel-close-modal" onClick={() => setShowPinModal(false)}>×</button>
+            </div>
+            <div className="orderpanel-modal-body">
+              <p className="orderpanel-modal-description">
+                {pinModalType === 'confirm' 
+                  ? 'Please ask a manager to enter their PIN to confirm and close this session.'
+                  : 'Please ask a manager to enter their PIN to report this discrepancy and close the session.'}
+              </p>
+              <input
+                type="password"
+                inputMode="numeric"
+                pattern="[0-9]*"
+                maxLength={6}
+                className="orderpanel-modal-input"
+                placeholder="Enter Manager PIN"
+                value={enteredPin}
+                onChange={(e) => {
+                  const value = e.target.value;
+                  if (/^\d*$/.test(value)) {
+                    setEnteredPin(value);
+                    setPinError("");
+                  }
+                }}
+                autoFocus
+              />
+              {pinError && <p className="orderpanel-modal-error">{pinError}</p>}
+            </div>
+            <div className="orderpanel-modal-footer">
+              <button 
+                className="orderpanel-modal-btn orderpanel-modal-cancel" 
+                onClick={() => setShowPinModal(false)}
+                disabled={isSubmitting}
+              >
+                Cancel
+              </button>
+              <button 
+                className="orderpanel-modal-btn orderpanel-modal-confirm" 
+                onClick={confirmPinAction}
+                disabled={isSubmitting || enteredPin.length < 4}
+              >
+                {isSubmitting ? "Verifying..." : "Confirm"}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

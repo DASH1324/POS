@@ -644,11 +644,11 @@ function Menu() {
       <div className="menu-product-grid">
         {merchandise.map(item => (
           <div key={item.MerchandiseID} className="menu-product-item">
-            {item.Status === 'Not Available' && (
-              <div className="menu-product-unavailable-overlay">
-                <span>Not Available</span>
-              </div>
-            )}
+                      {(item.Status === 'Not Available' || item.MerchandiseQuantity <= 0) && (
+            <div className="menu-product-unavailable-overlay">
+              <span>{item.MerchandiseQuantity <= 0 ? 'Out of Stock' : 'Not Available'}</span>
+            </div>
+          )}
             <div className="menu-product-main">
               <div className="menu-product-img-container">
                 <img src={item.MerchandiseImage || placeholderImage} alt={item.MerchandiseName} />

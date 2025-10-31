@@ -4,6 +4,8 @@ import dayjs from 'dayjs';
 import qr from '../../assets/qr.png';
 import { toast } from 'react-toastify';
 
+const AUTH_API_BASE_URL = 'http://127.0.0.1:4000';
+
 function OrderPanel({ order, onClose, isOpen, isStore, onUpdateStatus }) {
   const [showPinModal, setShowPinModal] = useState(false);
   const [enteredPin, setEnteredPin] = useState("");
@@ -60,6 +62,7 @@ function OrderPanel({ order, onClose, isOpen, isStore, onUpdateStatus }) {
   const promotionalDiscount = order.promotionalDiscount || 0;
   const manualDiscount = order.manualDiscount || 0;
   const appliedDiscountNames = order.appliedDiscounts || [];
+  
   // Get auth token from memory or context
   const getAuthToken = () => {
     // Try multiple possible token locations
@@ -115,6 +118,28 @@ function OrderPanel({ order, onClose, isOpen, isStore, onUpdateStatus }) {
     setIsProcessing(true);
     try {
       const token = getAuthToken();
+      
+      // Step 1: Verify PIN and get manager username
+      const pinResponse = await fetch(`${AUTH_API_BASE_URL}/users/verify-pin`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`
+        },
+        body: JSON.stringify({ pin: enteredPin })
+      });
+
+      if (!pinResponse.ok) {
+        const pinError = await pinResponse.json();
+        setPinError(pinError.detail || "Invalid Manager PIN.");
+        setIsProcessing(false);
+        return;
+      }
+
+      const pinData = await pinResponse.json();
+      const managerUsername = pinData.managerUsername;
+
+      // Step 2: Process refund with actual manager username
       const response = await fetch(`http://127.0.0.1:9000/auth/purchase_orders/${order.id}/refund`, {
         method: 'POST',
         headers: {
@@ -122,7 +147,7 @@ function OrderPanel({ order, onClose, isOpen, isStore, onUpdateStatus }) {
           'Authorization': `Bearer ${token}`
         },
         body: JSON.stringify({
-          managerUsername: `manager_${enteredPin}`,
+          managerUsername: managerUsername,  // Use actual username from PIN verification
           refundReason: "Customer requested refund"
         })
       });
@@ -135,7 +160,7 @@ function OrderPanel({ order, onClose, isOpen, isStore, onUpdateStatus }) {
           await onUpdateStatus(order, "REFUNDED");
         }
         
-        toast.success("Order refunded successfully!");
+        toast.success(`Order refunded successfully by ${managerUsername}!`);
       } else {
         let errorMessage = "Failed to process refund";
         try {
@@ -371,22 +396,15 @@ function OrderPanel({ order, onClose, isOpen, isStore, onUpdateStatus }) {
                 )}
                 
                 {promotionalDiscount > 0 && (
-
                     <div className="orderpanel-calc-row">
-
                         <span className="orderpanel-calc-label">Promotional Discount:</span>
-
                         <span className="orderpanel-calc-value">- ₱{promotionalDiscount.toFixed(2)}</span>
-                        </div>
+                    </div>
                 )}
                  {manualDiscount > 0 && (
-
                     <div className="orderpanel-calc-row">
-
                         <span className="orderpanel-calc-label">Discount:</span>
-
                         <span className="orderpanel-calc-value">- ₱{manualDiscount.toFixed(2)}</span>
-
                     </div>
                 )}
 
@@ -595,37 +613,23 @@ function OrderPanel({ order, onClose, isOpen, isStore, onUpdateStatus }) {
                       <span>₱{subtotal.toFixed(2)}</span>
                     </div>
                      {addOnsCost > 0 && (
-
                       <div className="orderpanel-receipt-line">
-
                         <span>ADD-ONS:</span>
-
                         <span>₱{addOnsCost.toFixed(2)}</span>
-
                       </div>
-
                     )}
 
                     {promotionalDiscount > 0 && (
-
                       <div className="orderpanel-receipt-line">
-
                         <span>PROMO DISCOUNT:</span>
-
                         <span>-₱{promotionalDiscount.toFixed(2)}</span>
-
                       </div>
-
                     )}
 
                     {manualDiscount > 0 && (
-
                       <div className="orderpanel-receipt-line">
-
                         <span>DISCOUNT:</span>
-
                         <span>-₱{manualDiscount.toFixed(2)}</span>
-
                       </div>
                     )}
                     <div className="orderpanel-receipt-line orderpanel-receipt-total">

@@ -6,10 +6,16 @@ import Header from "../shared/header";
 import CustomDateModal from "../shared/customDateModal";
 import DataTable from "react-data-table-component";
 import TransHisModal from "./modals/transactionDetailsModal";
-import { startOfToday, startOfMonth, startOfYear, endOfToday,
-endOfMonth, endOfYear, subDays
+import { 
+  startOfToday, 
+  startOfMonth, 
+  startOfYear, 
+  endOfToday,
+  endOfMonth, 
+  endOfYear, 
+  startOfWeek 
 } from "date-fns";
-import { FaFileExport, FaFilter, FaSearch, FaDollarSign, FaCashRegister, FaChartLine, FaCheckCircle } from "react-icons/fa";
+import { FaFileExport, FaFilter, FaSearch, FaCashRegister, FaCheckCircle } from "react-icons/fa";
 import { RiSmartphoneFill } from "react-icons/ri";
 import { HiReceiptRefund } from "react-icons/hi2";
 import { MdPayments } from "react-icons/md";
@@ -25,7 +31,7 @@ const getAuthToken = () => {
 const API_URL = "http://127.0.0.1:9000/auth/transaction_history/all";
 const CASHIERS_API_URL = "http://127.0.0.1:4000/users/cashiers";
 
-// Helper function for displaying date ranges (short month format)
+// Helper function for displaying date ranges
 const getPeriodText = (dateRange, customStart, customEnd) => {
   const today = new Date();
 
@@ -35,12 +41,9 @@ const getPeriodText = (dateRange, customStart, customEnd) => {
       return today.toLocaleDateString('en-US', options);
     }
     case "thisWeek": {
-      const lastDayOfWeek = new Date(today);
-      const firstDayOfWeek = new Date(today);
-      firstDayOfWeek.setDate(today.getDate() - 7);
-
+      const firstDayOfWeek = startOfWeek(today);
       const start = firstDayOfWeek.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
-      const end = lastDayOfWeek.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
+      const end = today.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
       return `${start} - ${end}`;
     }
     case "thisMonth": {
@@ -62,7 +65,7 @@ const getPeriodText = (dateRange, customStart, customEnd) => {
   }
 };
 
-// Transform API data
+// Transform API data to normalize payment methods
 const transformApiData = (apiTransaction) => {
   let transactionType = apiTransaction.type;
   
@@ -72,6 +75,13 @@ const transformApiData = (apiTransaction) => {
     transactionType = "Online";
   }
   
+  let paymentMethod = apiTransaction.paymentMethod;
+  if (paymentMethod && (paymentMethod.toLowerCase() === 'e-wallet')) {
+    paymentMethod = 'GCASH';
+  } else if (paymentMethod && (paymentMethod.toLowerCase() === 'gcash')) {
+    paymentMethod = 'GCASH';
+  }
+
   return {
     id: apiTransaction.id,
     date: new Date(apiTransaction.date).toISOString(),
@@ -81,7 +91,7 @@ const transformApiData = (apiTransaction) => {
     subtotal: apiTransaction.subtotal,
     discount: apiTransaction.discount,
     status: apiTransaction.status,
-    paymentMethod: apiTransaction.paymentMethod,
+    paymentMethod: paymentMethod,
     type: transactionType,
     discountsAndPromotions: apiTransaction.discountsAndPromotions,
     cashierName: apiTransaction.cashierName,
@@ -109,7 +119,7 @@ function TransactionHistory() {
   const [authError, setAuthError] = useState(false);
   const [cashiersMap, setCashiersMap] = useState({});
   const [isFilterOpen, setIsFilterOpen] = useState(false);
-  const [currentPeriodText, setCurrentPeriodText] = useState(getPeriodText('thisWeek', '', ''));
+  const [currentPeriodText, setCurrentPeriodText] = useState(getPeriodText('today', '', ''));
 
   const handleAuthError = () => {
     localStorage.removeItem("authToken");
@@ -117,16 +127,12 @@ function TransactionHistory() {
     navigate("/");
   };
 
-  // Fetch cashiers for mapping usernames to full names
   const fetchCashiers = async () => {
     try {
       const token = localStorage.getItem("authToken");
-      const response = await fetch("http://127.0.0.1:4000/users/cashiers", {
-        headers: {
-          Authorization: `Bearer ${token}`,
-        },
+      const response = await fetch(CASHIERS_API_URL, {
+        headers: { Authorization: `Bearer ${token}` },
       });
-
       if (response.ok) {
         const cashiers = await response.json();
         const map = {};
@@ -140,55 +146,43 @@ function TransactionHistory() {
     }
   };
 
-  const fetchTransactions = useCallback(
-    async (token) => {
-      if (!token) {
+  const fetchTransactions = useCallback(async (token) => {
+    if (!token) {
+      handleAuthError();
+      return;
+    }
+    setLoading(true);
+    setError(null);
+    setAuthError(false);
+    try {
+      const response = await fetch(API_URL, {
+        method: "GET",
+        headers: {
+          Authorization: `Bearer ${token}`,
+          "Content-Type": "application/json",
+        },
+      });
+      if (response.status === 401) {
         handleAuthError();
         return;
       }
-
-      setLoading(true);
-      setError(null);
-      setAuthError(false);
-
-      try {
-        const response = await fetch(API_URL, {
-          method: "GET",
-          headers: {
-            Authorization: `Bearer ${token}`,
-            "Content-Type": "application/json",
-          },
-        });
-
-        if (response.status === 401) {
-          handleAuthError();
-          return;
-        }
-
-        if (!response.ok) {
-          const errorText = await response.text();
-          throw new Error(
-            `HTTP error! Status: ${response.status} - ${errorText}`
-          );
-        }
-
-        const data = await response.json();
-
-        if (!Array.isArray(data)) {
-          throw new Error("Invalid data format received from API");
-        }
-
-        const transformedData = data.map(transformApiData);
-        setTransactions(transformedData);
-      } catch (err) {
-        console.error("Failed to fetch transactions:", err);
-        setError(err.message);
-      } finally {
-        setLoading(false);
+      if (!response.ok) {
+        const errorText = await response.text();
+        throw new Error(`HTTP error! Status: ${response.status} - ${errorText}`);
       }
-    },
-    [navigate]
-  );
+      const data = await response.json();
+      if (!Array.isArray(data)) {
+        throw new Error("Invalid data format received from API");
+      }
+      const transformedData = data.map(transformApiData);
+      setTransactions(transformedData);
+    } catch (err) {
+      console.error("Failed to fetch transactions:", err);
+      setError(err.message);
+    } finally {
+      setLoading(false);
+    }
+  }, [navigate]);
 
   useEffect(() => {
     fetchCashiers();
@@ -211,7 +205,8 @@ function TransactionHistory() {
     setSearchTerm("");
     setStatusFilter("");
     setCashierFilter("");
-    setDateRange("thisWeek");
+    setPaymentMethodFilter("");
+    setDateRange("today");
     setCustomStart("");
     setCustomEnd("");
   };
@@ -231,8 +226,7 @@ function TransactionHistory() {
       case "today":
         return [startOfToday(), endOfToday()];
       case "thisWeek":
-        const weekAgo = subDays(now, 7);
-        return [weekAgo, now];
+        return [startOfWeek(now), now];
       case "thisMonth":
         return [startOfMonth(now), endOfMonth(now)];
       case "thisYear":
@@ -278,15 +272,9 @@ function TransactionHistory() {
         (transaction.status || "").toLowerCase().includes(searchLower) ||
         (transaction.GCashReferenceNumber || "").toLowerCase().includes(searchLower);
       
-      const matchesStatus =
-        statusFilter === "" || transaction.status === statusFilter;
-      
-      const matchesCashier = 
-        cashierFilter === "" || cashierFullName === cashierFilter;
-
-      const matchesPaymentMethod =
-      paymentMethodFilter === "" || transaction.paymentMethod === paymentMethodFilter;
-      
+      const matchesStatus = statusFilter === "" || transaction.status === statusFilter;
+      const matchesCashier = cashierFilter === "" || cashierFullName === cashierFilter;
+      const matchesPaymentMethod = paymentMethodFilter === "" || transaction.paymentMethod === paymentMethodFilter;
       const tDate = new Date(transaction.date);
       const matchesDate = !start || !end || (tDate >= start && tDate <= end);
       
@@ -301,14 +289,8 @@ function TransactionHistory() {
   }, [activeTab]);
 
   const uniqueStatuses = useMemo(() => {
-    const currentTabTransactions = transactions.filter(
-      (t) => t.type === activeTab
-    );
-    return [
-      ...new Set(
-        currentTabTransactions.map((item) => item.status).filter(Boolean)
-      ),
-    ];
+    const currentTabTransactions = transactions.filter(t => t.type === activeTab);
+    return [...new Set(currentTabTransactions.map((item) => item.status).filter(Boolean))];
   }, [transactions, activeTab]);
 
   const uniqueCashiers = useMemo(() => {
@@ -318,12 +300,9 @@ function TransactionHistory() {
 
   const uniquePaymentMethods = useMemo(() => {
     const currentTabTransactions = transactions.filter((t) => t.type === activeTab);
-    return [
-      ...new Set(currentTabTransactions.map((t) => t.paymentMethod).filter(Boolean)),
-    ];
+    return [...new Set(currentTabTransactions.map((t) => t.paymentMethod).filter(Boolean))];
   }, [transactions, activeTab]);
 
-  // Calculate summary statistics
   const summary = useMemo(() => {
     const totalSales = filteredTransactions
       .filter(t => t.status.toLowerCase() === 'completed')
@@ -331,25 +310,25 @@ function TransactionHistory() {
     
     const totalTransactions = filteredTransactions.length;
     
+    // *** START OF CHANGE ***
+    // Updated the filter to include 'refunded' to correctly calculate the total.
     const totalRefunds = filteredTransactions
-      .filter(t => t.status.toLowerCase() === 'refund' || t.status.toLowerCase() === 'return')
+      .filter(t => {
+        const status = t.status.toLowerCase();
+        return status === 'refund' || status === 'return' || status === 'refunded';
+      })
       .reduce((sum, t) => sum + parseFloat(t.total || 0), 0);
+    // *** END OF CHANGE ***
     
     const cashSales = filteredTransactions
       .filter(t => t.status.toLowerCase() === 'completed' && t.paymentMethod === 'Cash')
       .reduce((sum, t) => sum + parseFloat(t.total || 0), 0);
     
     const digitalSales = filteredTransactions
-      .filter(t => t.status.toLowerCase() === 'completed' && t.paymentMethod === 'GCash')
+      .filter(t => t.status.toLowerCase() === 'completed' && t.paymentMethod === 'GCASH')
       .reduce((sum, t) => sum + parseFloat(t.total || 0), 0);
     
-    return {
-      totalSales,
-      totalTransactions,
-      totalRefunds,
-      cashSales,
-      digitalSales
-    };
+    return { totalSales, totalTransactions, totalRefunds, cashSales, digitalSales };
   }, [filteredTransactions]);
 
   const formatCurrency = (amount) => {
@@ -367,24 +346,10 @@ function TransactionHistory() {
   };
 
   const handleCustomDateApply = (startDate, endDate) => {
-    if (!startDate || !endDate) {
-      console.error("Invalid dates:", startDate, endDate);
-      return;
-    }
-    
+    if (!startDate || !endDate) return;
     const start = new Date(startDate);
     const end = new Date(endDate);
-    
-    if (isNaN(start.getTime()) || isNaN(end.getTime())) {
-      console.error("Invalid date format");
-      return;
-    }
-    
-    if (start > end) {
-      console.error("Start date cannot be after end date");
-      return;
-    }
-    
+    if (isNaN(start.getTime()) || isNaN(end.getTime()) || start > end) return;
     setCustomStart(startDate);
     setCustomEnd(endDate);
     setDateRange("custom");
@@ -392,114 +357,40 @@ function TransactionHistory() {
   };
 
   const columns = [
+    { name: "ORDER", selector: (row) => row.id, cell: (row) => <div style={{ fontWeight: "600" }}>{row.id}</div>, sortable: true, width: "9%", left: true },
     {
-      name: "ORDER",
-      selector: (row) => row.id,
-      cell: (row) => <div style={{ fontWeight: "600" }}>{row.id}</div>,
-      sortable: true,
-      width: "9%",
-      left: true,
-    },
-    {
-      name: "DATE & TIME",
-      selector: (row) => new Date(row.date),
+      name: "DATE & TIME", selector: (row) => new Date(row.date),
       cell: (row) => {
         const date = new Date(row.date);
         return (
           <div style={{ textAlign: "left" }}>
             <div style={{ fontWeight: "500" }}>{date.toLocaleDateString('en-CA')}</div>
-            <div style={{ fontSize: "12px", color: "#666" }}>
-              {date.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', hour12: true })}
-            </div>
+            <div style={{ fontSize: "12px", color: "#666" }}>{date.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', hour12: true })}</div>
           </div>
         );
-      },
-      sortable: true,
-      width: "11%",
+      }, sortable: true, width: "11%",
     },
+    { name: "CASHIER", selector: (row) => cashiersMap[row.cashierName] || row.cashierName || "—", width: "9%", center: true },
+    { name: "ORDER TYPE", selector: (row) => row.orderType || "—", width: "8%", center: true },
+    { name: "ITEMS", selector: (row) => row.items?.map(item => item.name).join(', ') || "—", width: "15%", center: true },
+    { name: "QTY", selector: (row) => row.items?.reduce((sum, item) => sum + (item.quantity || 0), 0) || 0, sortable: true, width: "6%", center: true },
+    { name: "SUBTOTAL", selector: (row) => row.subtotal, cell: (row) => <div style={{ fontWeight: "600" }}>₱{parseFloat(row.subtotal).toFixed(2)}</div>, sortable: true, width: "8%", center: true },
+    { name: "DISCOUNT", selector: (row) => row.discount, cell: (row) => <div>₱{parseFloat(row.discount || 0).toFixed(2)}</div>, sortable: true, width: "8%", center: true },
+    { name: "PAYMENT", selector: (row) => row.paymentMethod || "N/A", width: "8%", center: true },
+    { name: "TOTAL", selector: (row) => row.total, cell: (row) => <div style={{ fontWeight: "600" }}>₱{parseFloat(row.total).toFixed(2)}</div>, sortable: true, width: "8%", center: true },
     {
-      name: "CASHIER",
-      selector: (row) => cashiersMap[row.cashierName] || row.cashierName || "—",
-      width: "9%",
-      center: true,
-    },
-    {
-      name: "ORDER TYPE",
-      selector: (row) => row.orderType || "—",
-      width: "8%",
-      center: true,
-    },
-    {
-      name: "ITEMS",
-      selector: (row) => row.items?.map(item => item.name).join(', ') || "—",
-      width: "15%",
-      center: true,
-    },
-    {
-      name: "QTY",
-      selector: (row) => row.items?.reduce((sum, item) => sum + (item.quantity || 0), 0) || 0,
-      sortable: true,
-      width: "6%",
-      center: true,
-    },
-    {
-      name: "SUBTOTAL",
-      selector: (row) => row.subtotal,
-      cell: (row) => <div style={{ fontWeight: "600" }}>₱{parseFloat(row.subtotal).toFixed(2)}</div>,
-      sortable: true,
-      width: "8%",
-      center: true,
-    },
-    {
-      name: "DISCOUNT",
-      selector: (row) => row.discount,
-      cell: (row) => <div>₱{parseFloat(row.discount || 0).toFixed(2)}</div>,
-      sortable: true,
-      width: "8%",
-      center: true,
-    },
-    {
-      name: "PAYMENT",
-      selector: (row) => row.paymentMethod || "N/A",
-      width: "8%",
-      center: true,
-    },
-    {
-      name: "TOTAL",
-      selector: (row) => row.total,
-      cell: (row) => <div style={{ fontWeight: "600" }}>₱{parseFloat(row.total).toFixed(2)}</div>,
-      sortable: true,
-      width: "8%",
-      center: true,
-    },
-    {
-      name: "STATUS",
-      selector: (row) => row.status,
-      cell: (row) => (
-        <span className={`transHis-status-badge ${row.status.toLowerCase()}`}>
-          {row.status.toUpperCase()}
-        </span>
-      ),
-      sortable: true,
-      width: "10%",
-      center: true,
+      name: "STATUS", selector: (row) => row.status,
+      cell: (row) => <span className={`transHis-status-badge ${row.status.toLowerCase()}`}>{row.status.toUpperCase()}</span>,
+      sortable: true, width: "10%", center: true,
     },
   ];
 
   if (authError) {
     return (
       <div className="transHis-page">
-        <Sidebar />
-        <div className="transHis">
-          <Header pageTitle="Transaction History" />
-          <div className="transHis-content">
-            <div style={{ padding: "20px", textAlign: "center", color: "red" }}>
-              Authentication failed. Please login again.
-              <br />
-              <button onClick={() => navigate("/")}>Go to Login</button>
-            </div>
-          </div>
-        </div>
+        <Sidebar /><div className="transHis"><Header pageTitle="Transaction History" /><div className="transHis-content">
+            <div style={{ padding: "20px", textAlign: "center", color: "red" }}>Authentication failed. Please login again.<br /><button onClick={() => navigate("/")}>Go to Login</button></div>
+        </div></div>
       </div>
     );
   }
@@ -507,21 +398,11 @@ function TransactionHistory() {
   if (error) {
     return (
       <div className="transHis-page">
-        <Sidebar />
-        <div className="transHis">
-          <Header pageTitle="Transaction History" />
-          <div className="transHis-content">
-            <div style={{ padding: "20px", textAlign: "center" }}>
-              <div style={{ color: "red", marginBottom: "10px" }}>
-                Error loading transactions: {error}
-              </div>
-              <button onClick={handleRefresh} style={{ marginRight: "10px" }}>
-                Retry
-              </button>
-              <button onClick={() => navigate("/")}>Back to Login</button>
+        <Sidebar /><div className="transHis"><Header pageTitle="Transaction History" /><div className="transHis-content">
+            <div style={{ padding: "20px", textAlign: "center" }}><div style={{ color: "red", marginBottom: "10px" }}>Error loading transactions: {error}</div>
+              <button onClick={handleRefresh} style={{ marginRight: "10px" }}>Retry</button><button onClick={() => navigate("/")}>Back to Login</button>
             </div>
-          </div>
-        </div>
+        </div></div>
       </div>
     );
   }
@@ -532,271 +413,78 @@ function TransactionHistory() {
       <div className="transHis">
         <Header pageTitle="Transaction History" />
         <div className="transHis-content">
-          {/* Tabs and Filter Bar Wrapper */}
           <div className="transHis-tabs-filter-wrapper">
-            {/* Tabs - Left Side */}
             <div className="transHis-tabs">
-              <button
-                className={`transHis-tab ${activeTab === "Store" ? "transHis-tab-active" : ""}`}
-                onClick={() => setActiveTab("Store")}
-              >
-                Store
-              </button>
-              <button
-                className={`transHis-tab ${activeTab === "Online" ? "transHis-tab-active" : ""}`}
-                onClick={() => setActiveTab("Online")}
-              >
-                Online
-              </button>
+              <button className={`transHis-tab ${activeTab === "Store" ? "transHis-tab-active" : ""}`} onClick={() => setActiveTab("Store")}>Store</button>
+              <button className={`transHis-tab ${activeTab === "Online" ? "transHis-tab-active" : ""}`} onClick={() => setActiveTab("Online")}>Online</button>
             </div>
-
             {!loading && (
               <div className={`transHis-filter-bar ${isFilterOpen ? "open" : "collapsed"}`}>
-                <button
-                  className="transHis-filter-toggle-btn"
-                  onClick={() => setIsFilterOpen(!isFilterOpen)}
-                >
-                  <FaFilter />
-                  <span className="transHis-period-text">Date {currentPeriodText}</span>
-                </button>
-
-                <div className="transHis-filter-item">
-                  <div className="transHis-search-wrapper">
-                  <FaSearch className="transHis-search-icon" />
-                  <input
-                    type="text"
-                    placeholder="Search Transaction..."
-                    value={searchTerm}
-                    onChange={(e) => setSearchTerm(e.target.value)}
-                    className="transHis-search-input"
-                  />
-                </div>
-                </div>
-
-
-                <div className="transHis-filter-item">
-                  <span>Period:</span>
-                  <select
-                    value={dateRange}
+                <button className="transHis-filter-toggle-btn" onClick={() => setIsFilterOpen(!isFilterOpen)}><FaFilter /><span className="transHis-period-text">Date {currentPeriodText}</span></button>
+                <div className="transHis-filter-item"><div className="transHis-search-wrapper"><FaSearch className="transHis-search-icon" /><input type="text" placeholder="Search Transaction..." value={searchTerm} onChange={(e) => setSearchTerm(e.target.value)} className="transHis-search-input"/></div></div>
+                <div className="transHis-filter-item"><span>Period:</span><select value={dateRange}
                     onChange={(e) => {
                       const v = e.target.value;
                       setDateRange(v);
                       if (v === "custom") {
                         if (!customStart || !customEnd) {
                           const today = new Date().toISOString().split('T')[0];
-                          const weekAgo = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString().split('T')[0];
+                          const weekAgo = startOfWeek(new Date()).toISOString().split('T')[0];
                           setCustomStart(weekAgo);
                           setCustomEnd(today);
                         }
                         setIsCustomModalOpen(true);
                       }
-                    }}
-                    className="transHis-select transHis-select-date"
-                  >
-                    <option value="today">Today</option>
-                    <option value="thisWeek">This Week</option>
-                    <option value="thisMonth">This Month</option>
-                    <option value="thisYear">This Year</option>
-                    <option value="custom">Custom</option>
+                    }} className="transHis-select transHis-select-date">
+                    <option value="today">Today</option><option value="thisWeek">This Week</option><option value="thisMonth">This Month</option><option value="thisYear">This Year</option><option value="custom">Custom</option>
                   </select>
                 </div>
-
-                <div className="transHis-filter-item">
-                  <span>Cashier:</span>
-                  <select
-                    value={cashierFilter}
-                    onChange={(e) => setCashierFilter(e.target.value)}
-                    className="transHis-select transHis-select-cashier"
-                  >
-                    <option value="">All Cashiers</option>
-                    {uniqueCashiers.map((cashier) => (
-                      <option key={cashier} value={cashier}>
-                        {cashier}
-                      </option>
-                    ))}
+                <div className="transHis-filter-item"><span>Cashier:</span><select value={cashierFilter} onChange={(e) => setCashierFilter(e.target.value)} className="transHis-select transHis-select-cashier">
+                    <option value="">All Cashiers</option>{uniqueCashiers.map((cashier) => (<option key={cashier} value={cashier}>{cashier}</option>))}
                   </select>
                 </div>
-
-              <div className="transHis-filter-item">
-                <span>Payment:</span>
-                <select
-                  value={paymentMethodFilter}
-                  onChange={(e) => setPaymentMethodFilter(e.target.value)}
-                  className="transHis-select transHis-select-payment"
-                >
-                  <option value="">All Methods</option>
-                  {uniquePaymentMethods.map((method) => (
-                    <option key={method} value={method}>
-                      {method}
-                    </option>
-                  ))}
-                </select>
-              </div>
-
-                <div className="transHis-filter-item">
-                  <span>Status:</span>
-                  <select
-                    value={statusFilter}
-                    onChange={(e) => setStatusFilter(e.target.value)}
-                    className="transHis-select transHis-select-status"
-                  >
-                    <option value="">All Status</option>
-                    {uniqueStatuses.map((s) => (
-                      <option key={s} value={s}>  
-                        {s}
-                      </option>
-                    ))}
+                <div className="transHis-filter-item"><span>Payment:</span><select value={paymentMethodFilter} onChange={(e) => setPaymentMethodFilter(e.target.value)} className="transHis-select transHis-select-payment">
+                    <option value="">All Methods</option>{uniquePaymentMethods.map((method) => (<option key={method} value={method}>{method}</option>))}
                   </select>
                 </div>
-
-                <button className="transHis-clear-btn" onClick={handleClearFilters}>
-                  Clear Filters
-                </button>
-
-                <button
-                  className="transHis-export-btn"
-                  onClick={() => {
+                <div className="transHis-filter-item"><span>Status:</span><select value={statusFilter} onChange={(e) => setStatusFilter(e.target.value)} className="transHis-select transHis-select-status">
+                    <option value="">All Status</option>{uniqueStatuses.map((s) => (<option key={s} value={s}>{s}</option>))}
+                  </select>
+                </div>
+                <button className="transHis-clear-btn" onClick={handleClearFilters}>Clear Filters</button>
+                <button className="transHis-export-btn" onClick={() => {
                     const exportedBy = "Admin";
-                    const dateFilterLabel = dateRange === "custom" 
-                      ? `${new Date(customStart).toLocaleDateString()} - ${new Date(customEnd).toLocaleDateString()}`
-                      : dateRange.charAt(0).toUpperCase() + dateRange.slice(1);
-                    
-                    handleExport(
-                      filteredTransactions, 
-                      activeTab, 
-                      statusFilter || "All",
-                      exportedBy,
-                      dateFilterLabel
-                    );
-                  }}
-                >
-                  <FaFileExport /> Export
-                </button>
+                    const dateFilterLabel = dateRange === "custom" ? `${new Date(customStart).toLocaleDateString()} - ${new Date(customEnd).toLocaleDateString()}`: dateRange.charAt(0).toUpperCase() + dateRange.slice(1);
+                    handleExport(filteredTransactions, activeTab, statusFilter || "All", exportedBy, dateFilterLabel);
+                  }}><FaFileExport /> Export</button>
               </div>
             )}
           </div>
-
-          {/* Loading State */}
           {loading ? (
-            <div className="loading-container">
-              <div className="loading-bg">
-                <Lottie animationData={loadingAnimation} loop={true} className="loading-animation" />
-              </div>
-            </div>
+            <div className="loading-container"><div className="loading-bg"><Lottie animationData={loadingAnimation} loop={true} className="loading-animation" /></div></div>
           ) : (
             <>
-              {/* Summary Cards */}
               {filteredTransactions.length > 0 && (
                 <div className="transHis-cards-container">
-                  <div className="transHis-stat-card">
-                    <div className="transHis-card-icon transHis-icon-teal">
-                      <FaCashRegister />
-                    </div>
-                    <div className="transHis-card-content">
-                      <div className="transHis-card-label">TOTAL SALES</div>
-                      <div className="transHis-card-value">{formatCurrency(summary.totalSales)}</div>
-                    </div>
-                  </div>
-
-                  <div className="transHis-stat-card">
-                    <div className="transHis-card-icon transHis-icon-blue">
-                      <FaCheckCircle />
-                    </div>
-                    <div className="transHis-card-content">
-                      <div className="transHis-card-label">TOTAL TRANSACTIONS</div>
-                      <div className="transHis-card-value">{summary.totalTransactions}</div>
-                    </div>
-                  </div>
-
-                  <div className="transHis-stat-card">
-                    <div className="transHis-card-icon transHis-icon-red">
-                      <HiReceiptRefund />
-                    </div>
-                    <div className="transHis-card-content">
-                      <div className="transHis-card-label">TOTAL REFUNDS</div>
-                      <div className="transHis-card-value">{formatCurrency(summary.totalRefunds)}</div>
-                    </div>
-                  </div>
-
-                  <div className="transHis-stat-card">
-                    <div className="transHis-card-icon transHis-icon-green">
-                      <MdPayments />
-                    </div>
-                    <div className="transHis-card-content">
-                      <div className="transHis-card-label">CASH SALES</div>
-                      <div className="transHis-card-value">{formatCurrency(summary.cashSales)}</div>
-                    </div>
-                  </div>
-
-                  <div className="transHis-stat-card">
-                    <div className="transHis-card-icon transHis-icon-cyan">
-                      <RiSmartphoneFill />
-                    </div>
-                    <div className="transHis-card-content">
-                      <div className="transHis-card-label">GCASH</div>
-                      <div className="transHis-card-value">{formatCurrency(summary.digitalSales)}</div>
-                    </div>
-                  </div>
+                  <div className="transHis-stat-card"><div className="transHis-card-icon transHis-icon-teal"><FaCashRegister /></div><div className="transHis-card-content"><div className="transHis-card-label">TOTAL SALES</div><div className="transHis-card-value">{formatCurrency(summary.totalSales)}</div></div></div>
+                  <div className="transHis-stat-card"><div className="transHis-card-icon transHis-icon-blue"><FaCheckCircle /></div><div className="transHis-card-content"><div className="transHis-card-label">TOTAL TRANSACTIONS</div><div className="transHis-card-value">{summary.totalTransactions}</div></div></div>
+                  <div className="transHis-stat-card"><div className="transHis-card-icon transHis-icon-red"><HiReceiptRefund /></div><div className="transHis-card-content"><div className="transHis-card-label">TOTAL REFUNDS</div><div className="transHis-card-value">{formatCurrency(summary.totalRefunds)}</div></div></div>
+                  <div className="transHis-stat-card"><div className="transHis-card-icon transHis-icon-green"><MdPayments /></div><div className="transHis-card-content"><div className="transHis-card-label">CASH SALES</div><div className="transHis-card-value">{formatCurrency(summary.cashSales)}</div></div></div>
+                  <div className="transHis-stat-card"><div className="transHis-card-icon transHis-icon-cyan"><RiSmartphoneFill /></div><div className="transHis-card-content"><div className="transHis-card-label">GCASH</div><div className="transHis-card-value">{formatCurrency(summary.digitalSales)}</div></div></div>
                 </div>
               )}
-
               <div className="transHis-table-container">
                 <DataTable
-                  columns={columns}
-                  data={filteredTransactions}
-                  striped
-                  highlightOnHover
-                  responsive
-                  pagination
-                  paginationPerPage={7} 
-                  paginationRowsPerPageOptions={[7]}
-                  fixedHeader
-                  fixedHeaderScrollHeight="60vh"
-                  onRowClicked={handleRowClick}
-                  pointerOnHover
-                  noDataComponent={
-                    <div style={{ padding: "24px" }}>
-                      No {activeTab.toLowerCase()} transactions found.
-                    </div>
-                  }
+                  columns={columns} data={filteredTransactions} striped highlightOnHover responsive pagination paginationPerPage={7} paginationRowsPerPageOptions={[7]}
+                  fixedHeader fixedHeaderScrollHeight="60vh" onRowClicked={handleRowClick} pointerOnHover noDataComponent={<div style={{ padding: "24px" }}>No {activeTab.toLowerCase()} transactions found.</div>}
                   customStyles={{
-                    headCells: {
-                      style: {
-                        backgroundColor: "#4B929D",
-                        color: "#fff",
-                        fontWeight: "600",
-                        fontSize: "14px",
-                        padding: "12px",
-                        textTransform: "uppercase",
-                        textAlign: "center",
-                        letterSpacing: "1px",
-                      },
-                    },
-                    rows: {
-                      style: {
-                        minHeight: "55px",
-                        padding: "5px",
-                      },
-                    },
+                    headCells: { style: { backgroundColor: "#4B929D", color: "#fff", fontWeight: "600", fontSize: "14px", padding: "12px", textTransform: "uppercase", textAlign: "center", letterSpacing: "1px"}},
+                    rows: { style: { minHeight: "55px", padding: "5px"}},
                   }}
                 />
-
-                {selectedTransaction && (
-                  <TransHisModal
-                    show={isModalOpen}
-                    onClose={closeModal}
-                    transaction={selectedTransaction}
-                  />
-                )}
+                {selectedTransaction && (<TransHisModal show={isModalOpen} onClose={closeModal} transaction={selectedTransaction} />)}
               </div>
-
-              <CustomDateModal
-                show={isCustomModalOpen}
-                onClose={() => setIsCustomModalOpen(false)}
-                onApply={handleCustomDateApply}
-                initialStart={customStart}
-                initialEnd={customEnd}
-              />
+              <CustomDateModal show={isCustomModalOpen} onClose={() => setIsCustomModalOpen(false)} onApply={handleCustomDateApply} initialStart={customStart} initialEnd={customEnd} />
             </>
           )}
         </div>

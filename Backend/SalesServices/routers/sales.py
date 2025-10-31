@@ -292,128 +292,233 @@ async def get_sales_metrics_by_date(
         if conn: await conn.close()
 
 
+# =========================================================================================
+# === ALIGNED SALES REPORT ENDPOINT AND MODELS FOR REACT COMPONENT ========================
+# =========================================================================================
+
+# --- Pydantic model for the INCOMING REQUEST ---
+class AlignedSalesReportRequest(BaseModel):
+    reportType: Literal['today', 'yesterday', 'custom']
+    startDate: Optional[date] = None
+    endDate: Optional[date] = None
+
+# --- Pydantic Models for the OUTGOING RESPONSE ---
+class SalesReportSummary(BaseModel):
+    totalSales: float = 0.0
+    cashInDrawer: float = 0.0
+    discrepancy: float = 0.0
+    transactions: int = 0
+    refunds: float = 0.0
+    
+class PaymentSummary(BaseModel):
+    cashAmount: float = 0.0
+    gcashAmount: float = 0.0
+    
+class CategoryBreakdownItem(BaseModel):
+    category: str
+    quantity: int
+    sales: float
+
+class ProductBreakdownItem(BaseModel):
+    product: str
+    category: str
+    units: int
+    total: float
+
+class CashDrawerSummary(BaseModel):
+    opening: float = 0.0
+    cashSales: float = 0.0
+    refunds: float = 0.0
+    expected: float = 0.0
+    actual: float = 0.0
+    discrepancy: float = 0.0
+    reportedBy: str = "N/A"
+    verifiedBy: str = "N/A"
+
+class PaymentMethodItem(BaseModel):
+    type: str
+    transactions: int
+    amount: float
+
+class RefundItem(BaseModel):
+    id: str
+    product: str
+    amount: float
+    reason: Optional[str] = "N/A"
+    cashier: str
+    date: str
+
+class AlignedSalesReportResponse(BaseModel):
+    summary: SalesReportSummary
+    paymentSummary: PaymentSummary
+    categoryBreakdown: List[CategoryBreakdownItem]
+    productBreakdown: List[ProductBreakdownItem]
+    cashDrawer: CashDrawerSummary
+    paymentMethods: List[PaymentMethodItem]
+    refundsList: List[RefundItem]
+
+
 @router_sales_metrics.post(
     "/report",
-    response_model=SalesReportResponse,
-    summary="Generate a sales report for different time periods"
+    response_model=AlignedSalesReportResponse,
+    summary="Generate a comprehensive sales report for a specific period"
 )
 async def get_sales_report(
-    request: SalesReportRequest,
+    request: AlignedSalesReportRequest, 
     current_user: dict = Depends(get_current_active_user)
 ):
     if current_user.get("userRole") not in ["admin", "manager"]:
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Permission denied.")
-    base_query = """
+
+    start_date, end_date = None, None
+    if request.reportType == 'today':
+        start_date = end_date = date.today()
+    elif request.reportType == 'yesterday':
+        start_date = end_date = date.today() - timedelta(days=1)
+    elif request.reportType == 'custom':
+        start_date, end_date = request.startDate, request.endDate
+
+    if not start_date or not end_date:
+        raise HTTPException(status_code=400, detail="A valid date range is required for this report.")
+
+    base_query_cte = """
         WITH SaleAggregates AS (
-            SELECT s.SaleID, s.OrderType, s.CreatedAt, si.ItemName, si.Category, si.Quantity,
-                ((si.UnitPrice * si.Quantity) + ISNULL((SELECT SUM(a.Price * sia.Quantity) FROM SaleItemAddons sia JOIN Addons a ON sia.AddonID = a.AddonID WHERE sia.SaleItemID = si.SaleItemID), 0)) AS ItemTotalBeforeDiscount,
-                ((((si.UnitPrice * si.Quantity) + ISNULL((SELECT SUM(a.Price * sia.Quantity) FROM SaleItemAddons sia JOIN Addons a ON sia.AddonID = a.AddonID WHERE sia.SaleItemID = si.SaleItemID), 0)) / 
-                    NULLIF((SELECT SUM(si_inner.UnitPrice * si_inner.Quantity) + ISNULL(SUM(a_inner.Price * sia_inner.Quantity), 0) FROM SaleItems si_inner LEFT JOIN SaleItemAddons sia_inner ON si_inner.SaleItemID = sia_inner.SaleItemID LEFT JOIN Addons a_inner ON sia_inner.AddonID = a_inner.AddonID WHERE si_inner.SaleID = s.SaleID), 0)
-                ) * (ISNULL(s.TotalDiscountAmount, 0) + ISNULL(s.PromotionalDiscountAmount, 0))) AS ProportionalDiscount
-            FROM Sales s JOIN SaleItems si ON s.SaleID = si.SaleID WHERE s.Status = 'completed' {date_filter}
+            SELECT 
+                s.SaleID, s.OrderType, s.CreatedAt, s.PaymentMethod, s.CashierName,
+                si.ItemName, si.Category, si.Quantity,
+                (si.UnitPrice * si.Quantity) AS ItemSubtotal,
+                ISNULL((SELECT SUM(a.Price * sia.Quantity) FROM SaleItemAddons sia JOIN Addons a ON sia.AddonID = a.AddonID WHERE sia.SaleItemID = si.SaleItemID), 0) AS AddonsTotal,
+                ISNULL(s.TotalDiscountAmount, 0) + ISNULL(s.PromotionalDiscountAmount, 0) AS TotalSaleDiscount
+            FROM Sales s 
+            JOIN SaleItems si ON s.SaleID = si.SaleID 
+            WHERE s.Status = 'completed' AND CAST(s.CreatedAt AS DATE) BETWEEN ? AND ?
+        ),
+        SaleTotals AS (
+            SELECT SaleID, SUM(ItemSubtotal + AddonsTotal) as GrossTotal
+            FROM SaleAggregates GROUP BY SaleID
         ),
         FinalSales AS (
-            SELECT SaleID, OrderType, CreatedAt, ItemName, Category, Quantity, (ItemTotalBeforeDiscount - ISNULL(ProportionalDiscount, 0)) as LineTotal FROM SaleAggregates
+            SELECT 
+                sa.SaleID, sa.OrderType, sa.CreatedAt, sa.PaymentMethod, sa.CashierName, sa.ItemName, sa.Category, sa.Quantity,
+                (sa.ItemSubtotal + sa.AddonsTotal) - 
+                ( (sa.ItemSubtotal + sa.AddonsTotal) / NULLIF(st.GrossTotal, 0) * sa.TotalSaleDiscount ) as LineTotal
+            FROM SaleAggregates sa
+            JOIN SaleTotals st ON sa.SaleID = st.SaleID
         )
     """
-    date_filter = ""
-    params = []
-    reference_date = request.startDate if request.startDate else date.today()
-    if request.reportType == 'daily':
-        query = base_query + """
-            SELECT ItemName AS productName, Category AS category, SUM(Quantity) AS itemsSold,
-                ISNULL(SUM(CASE WHEN OrderType IN ('Dine In', 'Take Out') THEN LineTotal ELSE 0 END), 0) AS storeSale,
-                ISNULL(SUM(CASE WHEN OrderType IN ('Pick Up', 'Delivery') THEN LineTotal ELSE 0 END), 0) AS onlineSale,
-                SUM(LineTotal) AS totalSale
-            FROM FinalSales GROUP BY ItemName, Category ORDER BY totalSale DESC
-        """
-        date_filter = "AND CAST(s.CreatedAt AS DATE) = ?"
-        params.append(reference_date)
-    elif request.reportType == 'weekly':
-        query = base_query + """
-            , RankedItems AS ( SELECT ItemName, DATENAME(weekday, CreatedAt) as DayOfWeek, ROW_NUMBER() OVER(PARTITION BY DATENAME(weekday, CreatedAt) ORDER BY SUM(LineTotal) DESC) as rn FROM FinalSales GROUP BY ItemName, DATENAME(weekday, CreatedAt) )
-            SELECT DATENAME(weekday, CreatedAt) AS day, COUNT(DISTINCT SaleID) AS transactions, SUM(Quantity) AS itemsSold,
-                ISNULL(SUM(CASE WHEN OrderType IN ('Dine In', 'Take Out') THEN LineTotal ELSE 0 END), 0) AS storeSale,
-                ISNULL(SUM(CASE WHEN OrderType IN ('Pick Up', 'Delivery') THEN LineTotal ELSE 0 END), 0) AS onlineSale,
-                SUM(LineTotal) AS totalSale,
-                (SELECT TOP 1 ItemName FROM RankedItems ri WHERE ri.DayOfWeek = DATENAME(weekday, FinalSales.CreatedAt) AND ri.rn = 1) AS bestItem
-            FROM FinalSales GROUP BY DATENAME(weekday, CreatedAt), DATEPART(weekday, CreatedAt) ORDER BY DATEPART(weekday, CreatedAt)
-        """
-        date_filter = "AND CAST(s.CreatedAt AS DATE) >= DATEADD(day, -6, CAST(? AS DATE)) AND CAST(s.CreatedAt AS DATE) <= CAST(? AS DATE)"
-        params.extend([reference_date, reference_date])
-    elif request.reportType == 'monthly':
-        query = base_query + """
-            , RankedItems AS ( SELECT ItemName, DATEPART(week, CreatedAt) as WeekNum, ROW_NUMBER() OVER(PARTITION BY DATEPART(week, CreatedAt) ORDER BY SUM(LineTotal) DESC) as rn FROM FinalSales GROUP BY ItemName, DATEPART(week, CreatedAt) )
-            SELECT DATEPART(week, CreatedAt) AS weekNumber, MIN(CAST(CreatedAt AS DATE)) as weekStart, MAX(CAST(CreatedAt AS DATE)) as weekEnd,
-                COUNT(DISTINCT SaleID) AS transactions, SUM(Quantity) AS itemsSold,
-                ISNULL(SUM(CASE WHEN OrderType IN ('Dine In', 'Take Out') THEN LineTotal ELSE 0 END), 0) AS storeSale,
-                ISNULL(SUM(CASE WHEN OrderType IN ('Pick Up', 'Delivery') THEN LineTotal ELSE 0 END), 0) AS onlineSale,
-                SUM(LineTotal) AS totalSale,
-                (SELECT TOP 1 ItemName FROM RankedItems ri WHERE ri.WeekNum = DATEPART(week, FinalSales.CreatedAt) AND ri.rn = 1) AS bestItem
-            FROM FinalSales GROUP BY DATEPART(week, CreatedAt) ORDER BY weekNumber
-        """
-        date_filter = "AND DATEPART(month, s.CreatedAt) = DATEPART(month, ?) AND DATEPART(year, s.CreatedAt) = DATEPART(year, ?)"
-        params.extend([reference_date, reference_date])
-    elif request.reportType == 'yearly':
-        query = base_query + """
-            , RankedItems AS ( SELECT ItemName, DATENAME(month, CreatedAt) as MonthName, ROW_NUMBER() OVER(PARTITION BY DATENAME(month, CreatedAt) ORDER BY SUM(LineTotal) DESC) as rn FROM FinalSales GROUP BY ItemName, DATENAME(month, CreatedAt) )
-            SELECT DATENAME(month, CreatedAt) AS month, COUNT(DISTINCT SaleID) AS transactions, SUM(Quantity) AS itemsSold,
-                ISNULL(SUM(CASE WHEN OrderType IN ('Dine In', 'Take Out') THEN LineTotal ELSE 0 END), 0) AS storeSale,
-                ISNULL(SUM(CASE WHEN OrderType IN ('Pick Up', 'Delivery') THEN LineTotal ELSE 0 END), 0) AS onlineSale,
-                SUM(LineTotal) AS totalSale,
-                (SELECT TOP 1 ItemName FROM RankedItems ri WHERE ri.MonthName = DATENAME(month, FinalSales.CreatedAt) AND ri.rn = 1) AS bestItem
-            FROM FinalSales GROUP BY DATENAME(month, CreatedAt), DATEPART(month, CreatedAt) ORDER BY DATEPART(month, CreatedAt)
-        """
-        date_filter = "AND DATEPART(year, s.CreatedAt) = DATEPART(year, ?)"
-        params.append(reference_date)
-    elif request.reportType == 'custom':
-        if not request.startDate or not request.endDate: raise HTTPException(status_code=400, detail="Start date and end date are required for custom reports.")
-        query = base_query + """
-            , RankedItems AS ( SELECT ItemName, CAST(CreatedAt AS DATE) as SaleDate, ROW_NUMBER() OVER(PARTITION BY CAST(CreatedAt AS DATE) ORDER BY SUM(LineTotal) DESC) as rn FROM FinalSales GROUP BY ItemName, CAST(CreatedAt AS DATE) )
-            SELECT CAST(CreatedAt AS DATE) AS date, COUNT(DISTINCT SaleID) AS transactions, SUM(Quantity) AS itemsSold,
-                ISNULL(SUM(CASE WHEN OrderType IN ('Dine In', 'Take Out') THEN LineTotal ELSE 0 END), 0) AS storeSale,
-                ISNULL(SUM(CASE WHEN OrderType IN ('Pick Up', 'Delivery') THEN LineTotal ELSE 0 END), 0) AS onlineSale,
-                SUM(LineTotal) AS totalSale,
-                (SELECT TOP 1 ItemName FROM RankedItems ri WHERE ri.SaleDate = CAST(FinalSales.CreatedAt AS DATE) AND ri.rn = 1) AS bestItem
-            FROM FinalSales GROUP BY CAST(CreatedAt AS DATE) ORDER BY date
-        """
-        date_filter = "AND CAST(s.CreatedAt AS DATE) BETWEEN ? AND ?"
-        params.extend([request.startDate, request.endDate])
-    else:
-        raise HTTPException(status_code=400, detail="Invalid report type.")
-    final_sql = query.format(date_filter=date_filter)
+    params = [start_date, end_date]
     conn = None
     try:
         conn = await get_db_connection()
+        
+        # 1. Fetch Summary Data
+        summary_query = base_query_cte + """
+            SELECT 
+                ISNULL(SUM(LineTotal), 0) as totalSales,
+                COUNT(DISTINCT SaleID) as transactions,
+                ISNULL(SUM(CASE WHEN PaymentMethod = 'Cash' THEN LineTotal ELSE 0 END), 0) as cashAmount,
+                ISNULL(SUM(CASE WHEN PaymentMethod IN ('GCash', 'E-Wallet') THEN LineTotal ELSE 0 END), 0) as gcashAmount
+            FROM FinalSales;
+        """
         async with conn.cursor() as cursor:
-            await cursor.execute(final_sql, tuple(params))
-            rows = await cursor.fetchall()
-            results = []
-            totals = {"transactions": 0, "itemsSold": 0, "storeSale": 0.0, "onlineSale": 0.0, "totalSale": 0.0}
-            for row in rows:
-                row_dict = dict(zip([column[0] for column in cursor.description], row))
-                totals["itemsSold"] += row_dict.get("itemsSold", 0)
-                totals["storeSale"] += float(row_dict.get("storeSale", 0.0))
-                totals["onlineSale"] += float(row_dict.get("onlineSale", 0.0))
-                totals["totalSale"] += float(row_dict.get("totalSale", 0.0))
-                if "transactions" in row_dict: totals["transactions"] += row_dict["transactions"]
-                if request.reportType == 'monthly':
-                    row_dict["week"] = f"Week {row_dict.get('weekNumber', '')}"
-                    start_date = row_dict.get('weekStart')
-                    end_date = row_dict.get('weekEnd')
-                    if start_date and end_date: row_dict["period"] = f"{start_date.strftime('%b %d')} - {end_date.strftime('%b %d')}"
-                results.append(row_dict)
-            return SalesReportResponse(data=results, totals=totals)
+            await cursor.execute(summary_query, tuple(params))
+            # [FIX] Get column names BEFORE fetching data
+            columns = [column[0] for column in cursor.description]
+            summary_row = await cursor.fetchone()
+            summary_row_dict = dict(zip(columns, summary_row)) if summary_row else {}
+
+        # 2. Fetch Category Breakdown
+        category_query = base_query_cte + "SELECT Category AS category, SUM(Quantity) AS quantity, SUM(LineTotal) AS sales FROM FinalSales GROUP BY Category ORDER BY sales DESC;"
+        async with conn.cursor() as cursor:
+            await cursor.execute(category_query, tuple(params))
+            # [FIX] Get column names BEFORE fetching data
+            columns = [column[0] for column in cursor.description]
+            category_rows = await cursor.fetchall()
+            category_breakdown = [dict(zip(columns, row)) for row in category_rows]
+
+        # 3. Fetch Product Breakdown
+        product_query = base_query_cte + "SELECT ItemName AS product, Category AS category, SUM(Quantity) AS units, SUM(LineTotal) AS total FROM FinalSales GROUP BY ItemName, Category ORDER BY total DESC;"
+        async with conn.cursor() as cursor:
+            await cursor.execute(product_query, tuple(params))
+            # [FIX] Get column names BEFORE fetching data
+            columns = [column[0] for column in cursor.description]
+            product_rows = await cursor.fetchall()
+            product_breakdown = [dict(zip(columns, row)) for row in product_rows]
+
+        # 4. Fetch Payment Methods Breakdown
+        payment_methods_query = base_query_cte + "SELECT CASE WHEN PaymentMethod IN ('GCash', 'E-Wallet') THEN 'GCash' ELSE PaymentMethod END as type, COUNT(DISTINCT SaleID) as transactions, SUM(LineTotal) as amount FROM FinalSales GROUP BY CASE WHEN PaymentMethod IN ('GCash', 'E-Wallet') THEN 'GCash' ELSE PaymentMethod END;"
+        async with conn.cursor() as cursor:
+            await cursor.execute(payment_methods_query, tuple(params))
+            # [FIX] Get column names BEFORE fetching data
+            columns = [column[0] for column in cursor.description]
+            payment_rows = await cursor.fetchall()
+            payment_methods = [dict(zip(columns, row)) for row in payment_rows]
+
+        # 5. Fetch Refunds List
+        refunds_query = "SELECT CAST(ro.SaleID AS VARCHAR) as id, si.ItemName as product, (si.UnitPrice * si.Quantity) as amount, ro.RefundReason as reason, s.CashierName as cashier, FORMAT(ro.RefundedAt, 'MM/dd/yyyy') as date FROM RefundedOrders ro JOIN Sales s ON ro.SaleID = s.SaleID JOIN SaleItems si ON s.SaleID = si.SaleID WHERE CAST(ro.RefundedAt AS DATE) BETWEEN ? AND ? GROUP BY ro.SaleID, si.ItemName, si.UnitPrice, si.Quantity, ro.RefundReason, s.CashierName, ro.RefundedAt;"
+        async with conn.cursor() as cursor:
+            await cursor.execute(refunds_query, tuple(params))
+            # [FIX] Get column names BEFORE fetching data
+            columns = [column[0] for column in cursor.description]
+            refund_rows = await cursor.fetchall()
+            refunds_list = [dict(zip(columns, row)) for row in refund_rows]
+            total_refund_amount = sum(float(item.get('amount', 0.0)) for item in refunds_list)
+
+        # 6. Fetch Cash Drawer Summary
+        cash_drawer_query = "SELECT TOP 1 InitialCash as opening, CashSalesAtClose as cashSales, (SELECT ISNULL(SUM(si.UnitPrice * si.Quantity), 0) FROM RefundedOrders ro JOIN Sales s ON ro.SaleID = s.SaleID AND s.PaymentMethod = 'Cash' JOIN SaleItems si ON s.SaleID = si.SaleID WHERE CAST(ro.RefundedAt AS DATE) BETWEEN ? AND ?) as refunds, ClosingCash as actual, CashierName as reportedBy FROM CashierSessions WHERE Status = 'Closed' AND CAST(SessionEnd AS DATE) BETWEEN ? AND ? ORDER BY SessionEnd DESC;"
+        async with conn.cursor() as cursor:
+            await cursor.execute(cash_drawer_query, (start_date, end_date, start_date, end_date))
+            # [FIX] Get column names BEFORE fetching data
+            columns = [column[0] for column in cursor.description]
+            cash_drawer_row = await cursor.fetchone()
+            cash_drawer_row_dict = dict(zip(columns, cash_drawer_row)) if cash_drawer_row else {}
+        
+        cash_drawer = CashDrawerSummary()
+        if cash_drawer_row_dict:
+            opening_bal = float(cash_drawer_row_dict.get('opening') or 0.0)
+            cash_sales = float(cash_drawer_row_dict.get('cashSales') or 0.0)
+            refunds = float(cash_drawer_row_dict.get('refunds') or 0.0)
+            actual = float(cash_drawer_row_dict.get('actual') or 0.0)
+            expected = (opening_bal + cash_sales) - refunds
+            discrepancy = actual - expected
+            cash_drawer = CashDrawerSummary(
+                opening=opening_bal, cashSales=cash_sales, refunds=refunds, expected=expected, 
+                actual=actual, discrepancy=discrepancy, 
+                reportedBy=cash_drawer_row_dict.get('reportedBy', 'N/A'),
+                verifiedBy="Manager"
+            )
+
+        # Assemble the final response object
+        summary = SalesReportSummary(
+            totalSales=float(summary_row_dict.get('totalSales') or 0.0),
+            transactions=summary_row_dict.get('transactions') or 0,
+            refunds=total_refund_amount,
+            cashInDrawer=cash_drawer.actual,
+            discrepancy=cash_drawer.discrepancy
+        )
+        payment_summary = PaymentSummary(
+            cashAmount=float(summary_row_dict.get('cashAmount') or 0.0),
+            gcashAmount=float(summary_row_dict.get('gcashAmount') or 0.0)
+        )
+        
+        return AlignedSalesReportResponse(
+            summary=summary, paymentSummary=payment_summary, categoryBreakdown=category_breakdown,
+            productBreakdown=product_breakdown, cashDrawer=cash_drawer,
+            paymentMethods=payment_methods, refundsList=refunds_list
+        )
     except Exception as e:
-        logger.error(f"Error generating sales report: {e}", exc_info=True)
+        logger.error(f"Error generating aligned sales report: {e}", exc_info=True)
         raise HTTPException(status_code=500, detail="Failed to generate sales report.")
     finally:
         if conn: await conn.close()
 
-# The rest of the file remains unchanged.
+# =========================================================================================
+# === END OF ALIGNED SALES REPORT ENDPOINT ================================================
+# =========================================================================================
+
 class SalesMonitoringRequest(BaseModel):
     dateRange: Literal['today', 'week', 'month']
-    selectedProduct: Optional[str] = 'all'
+    selectedCashier: Optional[str] = 'all'  # CHANGED: from selectedProduct
     selectedCategory: Optional[str] = 'all'
 
 class ProductSalesDetail(BaseModel):
@@ -424,7 +529,7 @@ class ProductSalesDetail(BaseModel):
     profit: float
     quantity: int
     date: str
-    orderType: str
+    cashier: Optional[str]  # CHANGED: from orderType
 
 class SalesMonitoringResponse(BaseModel):
     salesData: List[ProductSalesDetail]
@@ -454,17 +559,20 @@ async def get_sales_monitoring_data(
             if request.dateRange == 'today':
                 date_condition = "AND CAST(s.CreatedAt AS DATE) = CAST(GETDATE() AS DATE)"
             elif request.dateRange == 'week':
-                date_condition = "AND s.CreatedAt >= DATEADD(day, -7, GETDATE())"
+                # Use DATEADD with day and DATEDIFF to get the start of the week (Sunday)
+                date_condition = "AND s.CreatedAt >= DATEADD(day, -DATEPART(weekday, GETDATE()) + 1, CAST(GETDATE() AS DATE))"
             elif request.dateRange == 'month':
-                date_condition = "AND s.CreatedAt >= DATEADD(month, -1, GETDATE())"
+                # Use DATEADD with day and DAY to get the first day of the month
+                date_condition = "AND s.CreatedAt >= DATEADD(day, 1 - DAY(GETDATE()), CAST(GETDATE() AS DATE))"
             
-            product_condition = ""
+            cashier_condition = "" # CHANGED
             category_condition = ""
             params = []
             
-            if request.selectedProduct and request.selectedProduct != 'all':
-                product_condition = "AND si.ItemName = ?"
-                params.append(request.selectedProduct)
+            # CHANGED: Use selectedCashier instead of selectedProduct
+            if request.selectedCashier and request.selectedCashier != 'all':
+                cashier_condition = "AND s.CashierName = ?"
+                params.append(request.selectedCashier)
             
             if request.selectedCategory and request.selectedCategory != 'all':
                 category_condition = "AND si.Category = ?"
@@ -474,7 +582,7 @@ async def get_sales_monitoring_data(
                 WITH SaleCalculations AS (
                     SELECT 
                         s.SaleID, si.SaleItemID, si.ItemName, si.Category, si.Quantity, si.UnitPrice,
-                        s.OrderType, s.CreatedAt,
+                        s.OrderType, s.CreatedAt, s.CashierName, -- ADDED CashierName
                         (si.UnitPrice * si.Quantity + ISNULL((
                             SELECT SUM(a.Price * sia.Quantity)
                             FROM SaleItemAddons sia JOIN Addons a ON sia.AddonID = a.AddonID
@@ -483,7 +591,7 @@ async def get_sales_monitoring_data(
                         (ISNULL(s.TotalDiscountAmount, 0) + ISNULL(s.PromotionalDiscountAmount, 0)) AS TotalDiscount
                     FROM Sales s JOIN SaleItems si ON s.SaleID = si.SaleID
                     WHERE s.Status = 'completed'
-                    {date_condition} {product_condition} {category_condition}
+                    {date_condition} {cashier_condition} {category_condition} -- UPDATED conditions
                 ),
                 SaleTotals AS (
                     SELECT SaleID, SUM(ItemTotalWithAddons) AS SaleTotal
@@ -492,7 +600,7 @@ async def get_sales_monitoring_data(
                 FinalCalculations AS (
                     SELECT 
                         sc.SaleItemID, sc.SaleID, sc.ItemName, sc.Category, sc.Quantity,
-                        sc.OrderType, sc.CreatedAt, sc.ItemTotalWithAddons,
+                        sc.OrderType, sc.CreatedAt, sc.ItemTotalWithAddons, sc.CashierName, -- ADDED CashierName
                         CASE 
                             WHEN st.SaleTotal > 0 THEN (sc.ItemTotalWithAddons / st.SaleTotal) * sc.TotalDiscount
                             ELSE 0
@@ -503,11 +611,13 @@ async def get_sales_monitoring_data(
                     ROW_NUMBER() OVER (ORDER BY SUM(ItemTotalWithAddons - ProportionalDiscount) DESC) as id,
                     ItemName as product, Category as category,
                     SUM(ItemTotalWithAddons - ProportionalDiscount) as revenue,
-                    SUM((ItemTotalWithAddons - ProportionalDiscount) * 0.60) as profit,
-                    SUM(Quantity) as quantity, MAX(CAST(CreatedAt AS DATE)) as date,
-                    OrderType as orderType
+                    SUM((ItemTotalWithAddons - ProportionalDiscount) * 0.60) as profit, -- Assuming 60% profit margin
+                    SUM(Quantity) as quantity,
+                    CAST(CreatedAt AS DATE) as date, -- CHANGED: Group by date
+                    CashierName as cashier -- CHANGED: Select CashierName
                 FROM FinalCalculations
-                GROUP BY ItemName, Category, OrderType ORDER BY revenue DESC
+                GROUP BY ItemName, Category, CashierName, CAST(CreatedAt AS DATE) -- CHANGED: Group by
+                ORDER BY revenue DESC
             """
             
             await cursor.execute(sql, tuple(params))
@@ -517,18 +627,14 @@ async def get_sales_monitoring_data(
             total_revenue = 0.0
             total_profit = 0.0
             total_quantity = 0
-            transaction_count = 0
             
-            # Use a set to count unique transactions based on SaleID
-            unique_sale_ids = set()
-            
-            # We need to re-query to get the transaction count correctly
+            # We need to re-query to get the transaction count correctly based on filters
             count_sql = f"""
                 SELECT COUNT(DISTINCT s.SaleID)
                 FROM Sales s
                 JOIN SaleItems si ON s.SaleID = si.SaleID
                 WHERE s.Status = 'completed'
-                {date_condition} {product_condition} {category_condition}
+                {date_condition} {cashier_condition} {category_condition} -- UPDATED conditions
             """
             await cursor.execute(count_sql, tuple(params))
             count_row = await cursor.fetchone()
@@ -543,7 +649,7 @@ async def get_sales_monitoring_data(
                     id=row.id, product=row.product, category=row.category,
                     revenue=revenue, profit=profit, quantity=quantity,
                     date=row.date.isoformat() if row.date else date.today().isoformat(),
-                    orderType=row.orderType
+                    cashier=row.cashier # CHANGED
                 ))
                 
                 total_revenue += revenue
