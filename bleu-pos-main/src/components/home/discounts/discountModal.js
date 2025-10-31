@@ -224,7 +224,6 @@ const DiscountModal = ({
             </select>
           </div>
 
-          {/* Action Buttons - FIXED: Now inside form */}
           <div className="mngDiscounts-modal-footer">
             <button
               type="button"

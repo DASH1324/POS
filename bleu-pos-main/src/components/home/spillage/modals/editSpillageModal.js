@@ -328,30 +328,34 @@ function EditSpillageModal({ spillage, onClose, onUpdate, loggedByName }) {
         onClose();
       } else {
         const errorData = await response.json();
-        alert(`Failed to update spillage: ${errorData.detail || errorData.message || "Unknown error"}`);
+        setErrors({
+          submit: `Failed to update spillage: ${errorData.detail || errorData.message || "Unknown error"}`,
+        });
       }
     } catch (error) {
       console.error("Error updating spillage:", error);
-      alert("An error occurred while updating the spillage");
+      setErrors({
+        submit: "An error occurred while updating the spillage",
+      });
     } finally {
       setIsUpdating(false);
     }
   };
 
   return (
-    <div className="logSpillage-modal-overlay">
-      <div className="logSpillage-modal-container">
-        <div className="logSpillage-modal-header">
-          <h2>Edit Spillage</h2>
-          <span className="logSpillage-close-button" onClick={onClose}>
-            ×
-          </span>
+    <div className="spillage-modal-overlay" onClick={onClose}>
+      <div className="spillage-modal" onClick={(e) => e.stopPropagation()}>
+        <div className="spillage-modal-header">
+          <h3>Edit Spillage</h3>
+          <button className="spillage-close-modal" onClick={onClose}>×</button>
         </div>
 
-        <form className="logSpillage-modal-form" onSubmit={handleSubmit}>
-          <div className="form-row">
-            <label>
-              Cashier Name: <span className="required">*</span>
+        <form className="spillage-modal-content" onSubmit={handleSubmit}>
+          <div className="spillage-form-row">
+            <label className="spillage-form-label">
+              <span className="spillage-label-text">
+                Cashier Name <span className="spillage-required">*</span>
+              </span>
               <select
                 value={cashierName}
                 onChange={(e) => {
@@ -360,7 +364,7 @@ function EditSpillageModal({ spillage, onClose, onUpdate, loggedByName }) {
                   setProductName("");
                 }}
                 onFocus={() => handleFocus("cashierName")}
-                className={errors.cashierName ? "error-field" : ""}
+                className={`spillage-input ${errors.cashierName ? "spillage-error-field" : ""}`}
                 disabled={isLoadingCashiers}
               >
                 <option value="">
@@ -377,12 +381,14 @@ function EditSpillageModal({ spillage, onClose, onUpdate, loggedByName }) {
                 ))}
               </select>
               {errors.cashierName && (
-                <p className="error-message">{errors.cashierName}</p>
+                <p className="spillage-error-message">{errors.cashierName}</p>
               )}
             </label>
 
-            <label>
-              Date: <span className="required">*</span>
+            <label className="spillage-form-label">
+              <span className="spillage-label-text">
+                Date <span className="spillage-required">*</span>
+              </span>
               <input
                 type="date"
                 value={date}
@@ -392,16 +398,18 @@ function EditSpillageModal({ spillage, onClose, onUpdate, loggedByName }) {
                   setProductName("");
                 }}
                 onFocus={() => handleFocus("date")}
-                className={errors.date ? "error-field" : ""}
+                className={`spillage-input ${errors.date ? "spillage-error-field" : ""}`}
                 max={new Date().toLocaleDateString('en-CA')}
               />
-              {errors.date && <p className="error-message">{errors.date}</p>}
+              {errors.date && <p className="spillage-error-message">{errors.date}</p>}
             </label>
           </div>
 
-          <div className="form-row">
-            <label>
-              Product Type: <span className="required">*</span>
+          <div className="spillage-form-row">
+            <label className="spillage-form-label">
+              <span className="spillage-label-text">
+                Product Type <span className="spillage-required">*</span>
+              </span>
               <select
                 value={productType}
                 onChange={(e) => {
@@ -409,7 +417,7 @@ function EditSpillageModal({ spillage, onClose, onUpdate, loggedByName }) {
                   setProductName("");
                 }}
                 onFocus={() => handleFocus("productType")}
-                className={errors.productType ? "error-field" : ""}
+                className={`spillage-input ${errors.productType ? "spillage-error-field" : ""}`}
                 disabled={!date || !cashierName || isLoadingProducts}
               >
                 <option value="">
@@ -428,17 +436,19 @@ function EditSpillageModal({ spillage, onClose, onUpdate, loggedByName }) {
                 ))}
               </select>
               {errors.productType && (
-                <p className="error-message">{errors.productType}</p>
+                <p className="spillage-error-message">{errors.productType}</p>
               )}
             </label>
 
-            <label>
-              Product Name: <span className="required">*</span>
+            <label className="spillage-form-label">
+              <span className="spillage-label-text">
+                Product Name <span className="spillage-required">*</span>
+              </span>
               <select
                 value={productName}
                 onChange={(e) => setProductName(e.target.value)}
                 onFocus={() => handleFocus("productName")}
-                className={errors.productName ? "error-field" : ""}
+                className={`spillage-input ${errors.productName ? "spillage-error-field" : ""}`}
                 disabled={!productType || filteredProducts.length === 0}
               >
                 <option value="">
@@ -455,65 +465,71 @@ function EditSpillageModal({ spillage, onClose, onUpdate, loggedByName }) {
                 ))}
               </select>
               {errors.productName && (
-                <p className="error-message">{errors.productName}</p>
+                <p className="spillage-error-message">{errors.productName}</p>
               )}
             </label>
           </div>
 
-          <div className="form-row">
-            <label>
-              Amount: <span className="required">*</span>
+          <div className="spillage-form-row">
+            <label className="spillage-form-label">
+              <span className="spillage-label-text">
+                Quantity <span className="spillage-required">*</span>
+              </span>
               <input
                 type="number"
                 min="1"
                 value={amount}
                 onChange={(e) => setAmount(e.target.value)}
                 onFocus={() => handleFocus("amount")}
-                className={errors.amount ? "error-field" : ""}
+                className={`spillage-input ${errors.amount ? "spillage-error-field" : ""}`}
                 placeholder="Enter quantity"
               />
-              {errors.amount && <p className="error-message">{errors.amount}</p>}
+              {errors.amount && (
+                <p className="spillage-error-message">{errors.amount}</p>
+              )}
             </label>
           </div>
 
-          <div className="form-row full-width">
-            <label>
-              Reason: <span className="required">*</span>
+          <div className="spillage-form-row spillage-full-width">
+            <label className="spillage-form-label">
+              <span className="spillage-label-text">
+                Reason <span className="spillage-required">*</span>
+              </span>
               <textarea
                 rows="3"
                 value={reason}
                 onChange={(e) => setReason(e.target.value)}
                 onFocus={() => handleFocus("reason")}
-                className={errors.reason ? "error-field" : ""}
+                className={`spillage-input spillage-textarea ${errors.reason ? "spillage-error-field" : ""}`}
                 placeholder="Describe what happened..."
               />
               {errors.reason && (
-                <p className="error-message">{errors.reason}</p>
+                <p className="spillage-error-message">{errors.reason}</p>
               )}
             </label>
           </div>
 
           {errors.submit && (
-            <div className="form-row full-width">
-              <p className="error-message">{errors.submit}</p>
+            <div className="spillage-form-row spillage-full-width">
+              <p className="spillage-error-message">{errors.submit}</p>
             </div>
           )}
 
-          <div className="logSpillage-button-container">
-            <button
-              type="submit"
-              className="logSpillage-submit-button"
-              disabled={isUpdating || isLoadingProducts || isLoadingCashiers}
-            >
-              {isUpdating ? "Updating..." : "Update"}
-            </button>
+          <div className="spillage-modal-footer">
             <button
               type="button"
-              className="logSpillage-cancel-button"
+              className="spillage-btn-cancel"
               onClick={onClose}
               disabled={isUpdating}
             >
               Cancel
+            </button>
+            <button
+              type="submit"
+              className="spillage-btn-confirm"
+              disabled={isUpdating || isLoadingProducts || isLoadingCashiers}
+            >
+              {isUpdating ? "Updating..." : "Update Spillage"}
             </button>
           </div>
         </form>

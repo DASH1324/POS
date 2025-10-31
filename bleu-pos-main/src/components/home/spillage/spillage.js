@@ -1,5 +1,5 @@
 import React, { useState, useMemo, useEffect } from "react";
-import { FaEdit, FaTrash, FaPlus } from "react-icons/fa";
+import { FaEdit, FaTrash, FaPlus, FaFilter, FaSearch, FaClipboardList, FaDollarSign, FaExclamationTriangle, FaBoxes, FaUserTie } from "react-icons/fa";
 import "./spillage.css";
 import Sidebar from "../shared/sidebar";
 import Header from "../shared/header";
@@ -9,13 +9,14 @@ import LogSpillageModal from "./modals/logSpillageModal";
 import EditSpillageModal from "./modals/editSpillageModal";
 import DeleteSpillageModal from "./modals/deleteSpillageModal";
 import CustomDateModal from "../shared/customDateModal";
+import loadingAnimation from "../../../assets/animation/loading.json";
+import Lottie from "lottie-react";
+import '../../confirmAlertCustom.css';
 import {
   startOfToday,
-  startOfWeek,
   startOfMonth,
   startOfYear,
   endOfToday,
-  endOfWeek,
   endOfMonth,
   endOfYear,
 } from "date-fns";
@@ -35,9 +36,9 @@ function Spillage() {
   const [spillageData, setSpillageData] = useState([]);
   const [isLoading, setIsLoading] = useState(true);
   const [cashiersMap, setCashiersMap] = useState({});
-  const [loggedByName, setLoggedByName] = useState(""); // Store logged-in user's full name
-
+  const [loggedByName, setLoggedByName] = useState("");
   const [userRole, setUserRole] = useState("");
+  const [isFilterOpen, setIsFilterOpen] = useState(false);
 
   useEffect(() => {
     const role = localStorage.getItem("userRole");
@@ -68,31 +69,33 @@ function Spillage() {
             const data = await response.json();
             const employeeName = data.employee_name || username;
             setLoggedByName(employeeName);
-            console.log("Logged by name set to:", employeeName); // Debug log
           } else {
-            console.error("Failed to fetch employee name, using username");
-            setLoggedByName(username); // Fallback to username
+            setLoggedByName(username);
           }
         } catch (error) {
           console.error("Error fetching employee name:", error);
-          setLoggedByName(username); // Fallback to username
+          setLoggedByName(username);
         }
-      } else {
-        console.error("No username or token found");
       }
     };
 
     fetchLoggedInUserName();
   }, []);
 
-  // Fetch cashiers for mapping usernames to full names
   useEffect(() => {
-    fetchCashiers();
-  }, []);
+    const fetchData = async () => {
+      setIsLoading(true);
+      try {
+        await fetchCashiers();
+        await fetchSpillageData();
+      } catch (error) {
+        console.error("Error during data fetching:", error);
+      } finally {
+        setIsLoading(false);
+      }
+    };
 
-  // Fetch spillage data from API
-  useEffect(() => {
-    fetchSpillageData();
+    fetchData();
   }, []);
 
   const fetchCashiers = async () => {
@@ -106,7 +109,6 @@ function Spillage() {
 
       if (response.ok) {
         const cashiers = await response.json();
-        // Create a map of username -> full name
         const map = {};
         cashiers.forEach(c => {
           map[c.Username] = c.FullName;
@@ -119,7 +121,6 @@ function Spillage() {
   };
 
   const fetchSpillageData = async () => {
-    setIsLoading(true);
     try {
       const token = localStorage.getItem("authToken");
       const response = await fetch("http://localhost:9003/wastelogs/", {
@@ -136,8 +137,7 @@ function Spillage() {
       setSpillageData(data);
     } catch (error) {
       console.error("Error fetching spillage data:", error);
-    } finally {
-      setIsLoading(false);
+      setSpillageData([]);
     }
   };
 
@@ -209,13 +209,61 @@ function Spillage() {
       const matchesDate =
         !start || !end || (itemDate >= start && itemDate <= end);
 
-      // If the user is a manager, only show entries logged by them.
       const matchesLoggedBy =
         userRole !== 'manager' || (item.logged_by && item.logged_by === loggedByName);
       
       return matchesSearch && matchesCategory && matchesDate && matchesLoggedBy;
     });
   }, [spillageData, searchTerm, categoryFilter, dateRange, customStart, customEnd, userRole, loggedByName]);
+
+  // Calculate summary statistics
+  const summary = useMemo(() => {
+    const totalReports = filteredData.length;
+    
+    const totalEstimatedCost = filteredData.reduce((sum, item) => 
+      sum + (parseFloat(item.estimated_cost) || 0), 0
+    );
+    
+    // Most frequent cause
+    const reasonCount = {};
+    filteredData.forEach(item => {
+      const reason = item.reason || "Unknown";
+      reasonCount[reason] = (reasonCount[reason] || 0) + 1;
+    });
+    const mostFrequentCause = Object.keys(reasonCount).length > 0
+      ? Object.entries(reasonCount).reduce((a, b) => a[1] > b[1] ? a : b)[0]
+      : "N/A";
+    const mostFrequentCount = reasonCount[mostFrequentCause] || 0;
+    
+    const totalItemsWasted = filteredData.reduce((sum, item) => 
+      sum + (parseInt(item.quantity) || 0), 0
+    );
+    
+    // Staff most involved
+    const staffCount = {};
+    filteredData.forEach(item => {
+      const cashierName = cashiersMap[item.cashier_name] || item.cashier_name || "Unknown";
+      staffCount[cashierName] = (staffCount[cashierName] || 0) + 1;
+    });
+    const staffMostInvolved = Object.keys(staffCount).length > 0
+      ? Object.entries(staffCount).reduce((a, b) => a[1] > b[1] ? a : b)[0]
+      : "N/A";
+    const staffMostInvolvedCount = staffCount[staffMostInvolved] || 0;
+    
+    return {
+      totalReports,
+      totalEstimatedCost,
+      mostFrequentCause,
+      mostFrequentCount,
+      totalItemsWasted,
+      staffMostInvolved,
+      staffMostInvolvedCount
+    };
+  }, [filteredData, cashiersMap]);
+
+  const formatCurrency = (amount) => {
+    return `₱${parseFloat(amount).toFixed(2)}`;
+  };
 
   const uniqueCategories = useMemo(() => {
     return [...new Set(spillageData.map((item) => item.category).filter(Boolean))];
@@ -224,54 +272,54 @@ function Spillage() {
   const columns = useMemo(() => {
     const baseColumns = [
       {
-        name: "PRODUCT NAME",
+        name: "PRODUCT & QUANTITY",
         selector: (row) => row.product_name,
+        cell: (row) => (
+          <div>
+            <div style={{ fontWeight: "600", marginBottom: "4px" }}>
+              {row.product_name}
+            </div>
+            <div style={{ fontSize: "12px", color: "#666" }}>
+              Qty: {row.quantity}
+            </div>
+          </div>
+        ),
         sortable: true,
-        width: "15%",
+        width: "18%",
       },
       { 
         name: "CATEGORY", 
         selector: (row) => row.category, 
         sortable: true, 
-        width: "10%" 
-      },
-      { 
-        name: "QUANTITY", 
-        selector: (row) => row.quantity, 
-        sortable: true, 
-        width: "8%",
+        width: "16%",
         center: true,
       },
       {
         name: "CASHIER",
         selector: (row) => cashiersMap[row.cashier_name] || row.cashier_name,
         sortable: true,
-        width: "12%",
+        width: "16%",
+        center: true,
       },
       {
         name: "DATE",
         selector: (row) => new Date(row.spillage_date).toLocaleDateString(),
         sortable: true,
-        width: "10%",
+        width: "16%",
         center: true,
       },
       { 
         name: "REASON", 
         selector: (row) => row.reason, 
-        width: "20%",
-        wrap: true,
+        width: "18%",
+        center: true,
       },
       {
         name: "LOGGED BY",
         selector: (row) => row.logged_by,
         sortable: true,
-        width: "12%",
-      },
-      {
-        name: "LOGGED AT",
-        selector: (row) => new Date(row.logged_at).toLocaleString(),
-        sortable: true,
-        width: "13%",
+        width: "16%",
+        center: true,
       },
     ];
 
@@ -279,10 +327,10 @@ function Spillage() {
       baseColumns.push({
         name: "ACTIONS",
         cell: (row) => (
-          <div className="spillage-action-buttons">
+          <div className="mSpillage-action-buttons">
             <button
               type="button"
-              className="action-btn edit-btn"
+              className="mSpillage-edit-btn"
               onClick={(e) => {
                 e.stopPropagation();
                 setSelectedSpillage(row);
@@ -294,7 +342,7 @@ function Spillage() {
             </button>
             <button
               type="button"
-              className="action-btn delete-btn"
+              className="mSpillage-delete-btn"
               onClick={(e) => {
                 e.stopPropagation();
                 setSelectedSpillage(row);
@@ -307,7 +355,7 @@ function Spillage() {
           </div>
         ),
         center: true,
-        width: "10%",
+        width: "12%",
       });
     }
 
@@ -315,95 +363,203 @@ function Spillage() {
   }, [userRole, cashiersMap]);
 
   return (
-    <div className="spillage-page">
+    <div className="mSpillage-page">
       <Sidebar />
-      <div className="spillage">
+      <div className="mSpillage">
         <Header pageTitle="Spillage Management" />
-        <div className="spillage-filter-bar">
-          <input
-            type="text"
-            placeholder="Search by Product..."
-            value={searchTerm}
-            onChange={(e) => setSearchTerm(e.target.value)}
-          />
-          <select
-            value={dateRange}
-            onChange={(e) => {
-              const v = e.target.value;
-              setDateRange(v);
-              if (v === "custom") setIsCustomModalOpen(true);
-            }}
-          >
-            <option value="today">Today</option>
-            <option value="thisWeek">This Week</option>
-            <option value="thisMonth">This Month</option>
-            <option value="thisYear">This Year</option>
-            <option value="custom">Custom</option>
-          </select>
-          <select
-            value={categoryFilter}
-            onChange={(e) => setCategoryFilter(e.target.value)}
-          >
-            <option value="">Category: All</option>
-            {uniqueCategories.map((c) => (
-              <option key={c} value={c}>
-                {c}
-              </option>
-            ))}
-          </select>
-          <button className="spillage-clear-btn" onClick={handleClearFilters}>
-            Clear Filters
-          </button>
-          
-          {userRole !== 'admin' && (
-            <button
-              className="spillage-add-btn"
-              onClick={() => setIsLogModalOpen(true)}
-            >
-              <FaPlus /> Log Spillage
-            </button>
+        <div className="mSpillage-content">
+          {isLoading ? (
+            <div className="loading-container">
+              <div className="loading-bg">
+                <Lottie animationData={loadingAnimation} loop={true} className="loading-animation" />
+              </div>
+            </div>
+          ) : (
+            <>
+            <div className="mSpillage-filter-wrapper">
+              <div className={`mSpillage-filter-bar ${isFilterOpen ? "open" : "collapsed"}`}>
+                <button
+                  className="mSpillage-filter-toggle-btn"
+                  onClick={() => setIsFilterOpen(!isFilterOpen)}
+                >
+                  <FaFilter />
+                </button>
+
+                <div className="mSpillage-filter-item">
+                  <div className="mSpillage-search-wrapper">
+                    <FaSearch className="mSpillage-search-icon" />
+                    <input
+                      type="text"
+                      placeholder="Search by Product..."
+                      value={searchTerm}
+                      onChange={(e) => setSearchTerm(e.target.value)}
+                      className="mSpillage-search-input"
+                    />
+                  </div>
+                </div>
+
+                <div className="mSpillage-filter-item">
+                  <span>Date Range:</span>
+                  <select
+                    value={dateRange}
+                    onChange={(e) => {
+                      const v = e.target.value;
+                      setDateRange(v);
+                      if (v === "custom") setIsCustomModalOpen(true);
+                    }}
+                    className="mSpillage-select"
+                  >
+                    <option value="today">Today</option>
+                    <option value="thisWeek">This Week</option>
+                    <option value="thisMonth">This Month</option>
+                    <option value="thisYear">This Year</option>
+                    <option value="custom">Custom</option>
+                  </select>
+                </div>
+
+                <div className="mSpillage-filter-item">
+                  <span>Category:</span>
+                  <select
+                    value={categoryFilter}
+                    onChange={(e) => setCategoryFilter(e.target.value)}
+                    className="mSpillage-select"
+                  >
+                    <option value="">All Categories</option>
+                    {uniqueCategories.map((c) => (
+                      <option key={c} value={c}>
+                        {c}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+
+                <button className="mSpillage-clear-btn" onClick={handleClearFilters}>
+                  Clear Filters
+                </button>
+              </div>
+                
+                {userRole !== 'admin' && (
+                  <button
+                    className="mSpillage-add-btn"
+                    onClick={() => setIsLogModalOpen(true)}
+                  >
+                    <FaPlus /> Log Spillage
+                  </button>
+                )}
+              </div>
+
+              {/* Summary Cards */}
+              {filteredData.length > 0 && (
+                <div className="mSpillage-cards-container">
+                  <div className="mSpillage-stat-card">
+                    <div className="mSpillage-card-icon mSpillage-icon-blue">
+                      <FaClipboardList />
+                    </div>
+                    <div className="mSpillage-card-content">
+                      <div className="mSpillage-card-label">TOTAL REPORTS</div>
+                      <div className="mSpillage-card-value">{summary.totalReports}</div>
+                    </div>
+                  </div>
+
+                  <div className="mSpillage-stat-card">
+                    <div className="mSpillage-card-icon mSpillage-icon-red">
+                      <FaDollarSign />
+                    </div>
+                    <div className="mSpillage-card-content">
+                      <div className="mSpillage-card-label">TOTAL ESTIMATED COST</div>
+                      <div className="mSpillage-card-value">{formatCurrency(summary.totalEstimatedCost)}</div>
+                    </div>
+                  </div>
+
+                  <div className="mSpillage-stat-card">
+                    <div className="mSpillage-card-icon mSpillage-icon-orange">
+                      <FaExclamationTriangle />
+                    </div>
+                    <div className="mSpillage-card-content">
+                      <div className="mSpillage-card-label">MOST FREQUENT CAUSE</div>
+                      <div className="mSpillage-card-value" style={{ fontSize: "16px" }}>
+                        {summary.mostFrequentCause.length > 25 
+                          ? summary.mostFrequentCause.substring(0, 25) + "..." 
+                          : summary.mostFrequentCause}
+                      </div>
+                      <div className="mSpillage-card-subvalue">
+                        {summary.mostFrequentCount} {summary.mostFrequentCount === 1 ? 'incident' : 'incidents'}
+                      </div>
+                    </div>
+                  </div>
+
+                  <div className="mSpillage-stat-card">
+                    <div className="mSpillage-card-icon mSpillage-icon-purple">
+                      <FaBoxes />
+                    </div>
+                    <div className="mSpillage-card-content">
+                      <div className="mSpillage-card-label">TOTAL ITEMS WASTED</div>
+                      <div className="mSpillage-card-value">{summary.totalItemsWasted}</div>
+                    </div>
+                  </div>
+
+                  <div className="mSpillage-stat-card">
+                    <div className="mSpillage-card-icon mSpillage-icon-teal">
+                      <FaUserTie />
+                    </div>
+                    <div className="mSpillage-card-content">
+                      <div className="mSpillage-card-label">STAFF MOST INVOLVED</div>
+                      <div className="mSpillage-card-value" style={{ fontSize: "18px" }}>
+                        {summary.staffMostInvolved}
+                      </div>
+                      <div className="mSpillage-card-subvalue">
+                        {summary.staffMostInvolvedCount} {summary.staffMostInvolvedCount === 1 ? 'report' : 'reports'}
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              <div className="mSpillage-table-container">
+                <DataTable
+                  columns={columns}
+                  data={filteredData}
+                  striped
+                  highlightOnHover
+                  responsive
+                  pagination
+                  paginationPerPage={8}
+                  paginationRowsPerPageOptions={[8]}
+                  fixedHeader
+                  fixedHeaderScrollHeight="60vh"
+                  pointerOnHover
+                  onRowClicked={(row) => {
+                    setSelectedSpillage(row);
+                    setIsDetailsModalOpen(true);
+                  }}
+                  noDataComponent={
+                    <div style={{ padding: "24px" }}>No spillage logs found.</div>
+                  }
+                  customStyles={{
+                    headCells: {
+                      style: {
+                        backgroundColor: "#4B929D",
+                        color: "#fff",
+                        fontWeight: "600",
+                        fontSize: "14px",
+                        padding: "12px",
+                        textTransform: "uppercase",
+                        textAlign: "center",
+                        letterSpacing: "1px",
+                      },
+                    },
+                    rows: {
+                      style: {
+                        minHeight: "55px",
+                        padding: "5px",
+                      },
+                    },
+                  }}
+                />
+              </div>
+            </>
           )}
-        </div>
-        <div className="spillage-table-container">
-          <DataTable
-            columns={columns}
-            data={filteredData}
-            striped
-            highlightOnHover
-            responsive
-            pagination
-            fixedHeader
-            fixedHeaderScrollHeight="60vh"
-            pointerOnHover
-            progressPending={isLoading}
-            onRowClicked={(row) => {
-              setSelectedSpillage(row);
-              setIsDetailsModalOpen(true);
-            }}
-            noDataComponent={
-              <div style={{ padding: "24px" }}>No spillage logs found.</div>
-            }
-            customStyles={{
-              headCells: {
-                style: {
-                  backgroundColor: "#4B929D",
-                  color: "#fff",
-                  fontWeight: "600",
-                  fontSize: "14px",
-                  padding: "12px",
-                  textTransform: "uppercase",
-                  textAlign: "center",
-                  letterSpacing: "1px",
-                },
-              },
-              rows: {
-                style: {
-                  minHeight: "55px",
-                  padding: "5px",
-                },
-              },
-            }}
-          />
+
           <SpillageDetailsModal
             show={isDetailsModalOpen}
             onClose={() => setIsDetailsModalOpen(false)}

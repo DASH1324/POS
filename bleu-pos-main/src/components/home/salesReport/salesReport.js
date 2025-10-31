@@ -3,11 +3,74 @@ import "./salesReport.css";
 import Sidebar from "../shared/sidebar";
 import Header from "../shared/header";
 import DataTable from "react-data-table-component";
-import { FaFileExport, FaShoppingCart, FaStore, FaGlobe, FaDollarSign, FaReceipt } from "react-icons/fa"; 
+import { 
+  FaFileExport, FaShoppingCart, FaStore, FaGlobe, FaDollarSign, 
+  FaReceipt, FaFilter, FaExclamationTriangle, FaFilePdf, 
+  FaFileDownload, FaPrint, FaCheckCircle, FaUser, 
+  FaCashRegister, FaChartPie, FaUndo, FaBalanceScale 
+} from "react-icons/fa"; 
+import { FontAwesomeIcon } from "@fortawesome/react-fontawesome";
+import { faArrowTrendUp, faArrowTrendDown } from "@fortawesome/free-solid-svg-icons";
 import CustomDateModal from "../shared/customDateModal";
 import handleSalesReportExport from "./salesReportExport";
+import Lottie from "lottie-react";
+import loadingAnimation from "../../../assets/animation/loading.json";
+import '../../confirmAlertCustom.css';
 
-// --- HELPER: Formats a date object to 'YYYY-MM-DD' string ---
+const USE_MOCK_DATA = true
+
+// --- ENHANCED MOCK DATA ---
+const mockSalesData = {
+  summary: {
+    totalSales: 25430,
+    cashInDrawer: 25200,
+    discrepancy: -230,
+    transactions: 187,
+    refunds: 500,
+    paymentBreakdown: {
+      cash: 60,
+      gcash: 40,
+    },
+    paymentSummary: {
+      cashAmount: 15200,
+      cashPrevious: 14500,
+      gcashAmount: 10230,
+      gcashPrevious: 9800,
+    }
+  },
+  categoryBreakdown: [
+    { category: "Drinks", quantity: 421, sales: 12630, percentage: 50 },
+    { category: "Food", quantity: 275, sales: 9240, percentage: 36 },
+    { category: "Merchandise", quantity: 42, sales: 3560, percentage: 14 }
+  ],
+  productBreakdown: [
+    { product: "Iced Latte", category: "Drinks", units: 80, total: 12000 },
+    { product: "Carbonara", category: "Food", units: 50, total: 7500 },
+    { product: "Mug (Merch)", category: "Merchandise", units: 20, total: 2000 },
+    { product: "Blueberry Cheesecake", category: "Food", units: 35, total: 5250 },
+    { product: "Cold Brew", category: "Drinks", units: 45, total: 6750 }
+  ],
+  cashDrawer: {
+    opening: 2000,
+    cashSales: 15000,
+    refunds: 300,
+    expected: 16700,
+    actual: 16500,
+    discrepancy: -200,
+    reportedBy: "Maria Santos",
+    verifiedBy: "Manager - Juan Dela Cruz"
+  },
+  paymentMethods: [
+    { type: "Cash", transactions: 102, amount: 15200 },
+    { type: "GCash", transactions: 58, amount: 8900 },
+  ],
+  refundsList: [
+    { id: "102", product: "Iced Mocha", amount: 150, reason: "Customer Complaint", cashier: "Maria", date: "10/26/2025" },
+    { id: "103", product: "Croissant", amount: 120, reason: "Wrong Order", cashier: "Juan", date: "10/26/2025" },
+    { id: "104", product: "Latte", amount: 130, reason: "Temperature Issue", cashier: "Maria", date: "10/26/2025" }
+  ]
+};
+
 const formatDate = (date) => {
   const year = date.getFullYear();
   const month = String(date.getMonth() + 1).padStart(2, '0');
@@ -15,40 +78,23 @@ const formatDate = (date) => {
   return `${year}-${month}-${day}`;
 };
 
-// --- HELPER FUNCTION FOR DISPLAYING DATE RANGES ---
 const getPeriodText = (tab, customStart = null, customEnd = null) => {
   const today = new Date();
-
   switch (tab) {
-    case "daily": {
-      const options = { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' };
-      return `Date: ${today.toLocaleDateString('en-US', options)}`;
-    }
-    case "weekly": {
-      // Last 7 days including today
-      const lastDayOfWeek = new Date(today);
-      const firstDayOfWeek = new Date(today);
-      firstDayOfWeek.setDate(today.getDate() - 6);
-
-      const start = firstDayOfWeek.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
-      const end = lastDayOfWeek.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
-      return `Date Period: ${start} - ${end}`;
-    }
-    case "monthly": {
-      return `Month: ${today.toLocaleDateString('en-US', { month: 'long' })}`;
-    }
-    case "yearly": {
-      return `Year: ${today.getFullYear()}`;
+    case "today":
+      return `Date: ${today.toLocaleDateString('en-US', { year: 'numeric', month: 'short', day: 'numeric' })}`;
+    case "yesterday": {
+      const yesterday = new Date(today);
+      yesterday.setDate(today.getDate() - 1);
+      return `Date: ${yesterday.toLocaleDateString('en-US', { year: 'numeric', month: 'short', day: 'numeric' })}`;
     }
     case "custom": {
       if (customStart && customEnd) {
         const startDate = new Date(customStart);
         const endDate = new Date(customEnd);
         const timeZoneOffset = startDate.getTimezoneOffset() * 60000;
-
         const start = new Date(startDate.getTime() + timeZoneOffset).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
         const end = new Date(endDate.getTime() + timeZoneOffset).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
-
         return `Date Period: ${start} - ${end}`;
       }
       return "Date Period: None Selected";
@@ -59,209 +105,81 @@ const getPeriodText = (tab, customStart = null, customEnd = null) => {
 };
 
 function SalesReport() {
-  const [activeTab, setActiveTab] = useState("daily");
+  const [activeTab, setActiveTab] = useState("today");
+  const [selectedCashier, setSelectedCashier] = useState("all");
+  const [selectedBranch, setSelectedBranch] = useState("main");
   const [isCustomModalOpen, setIsCustomModalOpen] = useState(false);
-
-  const [reportData, setReportData] = useState([]);
-  const [reportTotals, setReportTotals] = useState({ transactions: 0, itemsSold: 0, storeSale: 0, onlineSale: 0, totalSale: 0 });
+  const [isFilterOpen, setIsFilterOpen] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState(null);
-
-  const [currentPeriodText, setCurrentPeriodText] = useState(getPeriodText("daily"));
+  const [currentPeriodText, setCurrentPeriodText] = useState(getPeriodText("today"));
   const [customRange, setCustomRange] = useState({ start: null, end: null });
+  const [remarks, setRemarks] = useState("");
+  const [isVerified, setIsVerified] = useState(false);
+  const [salesBreakdownTab, setSalesBreakdownTab] = useState('category');
+  const [financialTab, setFinancialTab] = useState('cashDrawer');
 
-  const fetchSalesReport = async (tab, startDate, endDate) => {
-    setIsLoading(true);
-    setError(null);
-    const token = localStorage.getItem('authToken');
-
-    if (!token) {
-      setError("Authentication token not found. Please log in.");
-      setIsLoading(false);
-      return;
-    }
-
-    const body = { reportType: tab, startDate, endDate };
-
-    try {
-      const response = await fetch('http://127.0.0.1:9000/auth/sales_metrics/report', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${token}`
-        },
-        body: JSON.stringify(body)
-      });
-
-      if (!response.ok) {
-        const errorData = await response.json();
-        throw new Error(errorData.detail || `Error: ${response.status}`);
-      }
-
-      const result = await response.json();
-      setReportData(result.data);
-      setReportTotals(result.totals);
-
-    } catch (err) {
-      setError(err.message);
-      setReportData([]);
-      setReportTotals({ transactions: 0, itemsSold: 0, storeSale: 0, onlineSale: 0, totalSale: 0 });
-    } finally {
-      setIsLoading(false);
-    }
-  };
+  const data = mockSalesData;
 
   useEffect(() => {
-    if (activeTab === 'custom') {
-      setReportData([]);
-      setReportTotals({ transactions: 0, itemsSold: 0, storeSale: 0, onlineSale: 0, totalSale: 0 });
-      setCurrentPeriodText(getPeriodText('custom', customRange.start, customRange.end));
-      return;
-    }
-
-    const todayStr = formatDate(new Date());
-    fetchSalesReport(activeTab, todayStr, todayStr);
-    setCurrentPeriodText(getPeriodText(activeTab));
-
-  }, [activeTab]);
-
-  const dailyColumns = [
-    { name: "PRODUCT NAME", selector: (row) => row.productName, sortable: true },
-    { name: "CATEGORY", selector: (row) => row.category, center: true, sortable: true },
-    { name: "ITEMS SOLD", selector: (row) => row.itemsSold, center: true, sortable: true },
-    { name: "STORE SALE", selector: (row) => `₱${Number(row.storeSale).toFixed(2)}`, center: true, sortable: true },
-    { name: "ONLINE SALE", selector: (row) => `₱${Number(row.onlineSale).toFixed(2)}`, center: true, sortable: true },
-    { name: "TOTAL SALE", selector: (row) => `₱${Number(row.totalSale).toFixed(2)}`, center: true, sortable: true },
-  ];
-
-  const weeklyColumns = [
-    { name: "DAY", selector: (row) => row.day, sortable: true },
-    { name: "TRANSACTIONS", selector: (row) => row.transactions, center: true, sortable: true },
-    { name: "ITEMS SOLD", selector: (row) => row.itemsSold, center: true, sortable: true },
-    { name: "STORE SALE", selector: (row) => `₱${Number(row.storeSale).toFixed(2)}`, center: true, sortable: true },
-    { name: "ONLINE SALE", selector: (row) => `₱${Number(row.onlineSale).toFixed(2)}`, center: true, sortable: true },
-    { name: "TOTAL SALE", selector: (row) => `₱${Number(row.totalSale).toFixed(2)}`, center: true, sortable: true },
-    { name: "BEST SELLING", selector: (row) => row.bestItem, sortable: true },
-  ];
-
-  const monthlyColumns = [
-    { name: "WEEK", selector: (row) => row.week, sortable: true },
-    { name: "DATE PERIOD", selector: (row) => row.period, sortable: true },
-    { name: "TRANSACTIONS", selector: (row) => row.transactions, center: true, sortable: true },
-    { name: "ITEMS SOLD", selector: (row) => row.itemsSold, center: true, sortable: true },
-    { name: "STORE SALE", selector: (row) => `₱${Number(row.storeSale).toFixed(2)}`, center: true, sortable: true },
-    { name: "ONLINE SALE", selector: (row) => `₱${Number(row.onlineSale).toFixed(2)}`, center: true, sortable: true },
-    { name: "TOTAL SALE", selector: (row) => `₱${Number(row.totalSale).toFixed(2)}`, center: true, sortable: true },
-    { name: "BEST SELLING", selector: (row) => row.bestItem, sortable: true },
-  ];
-
-  const yearlyColumns = [
-    { name: "MONTH", selector: (row) => row.month, sortable: true },
-    { name: "TRANSACTIONS", selector: (row) => row.transactions, center: true, sortable: true },
-    { name: "ITEMS SOLD", selector: (row) => row.itemsSold, center: true, sortable: true },
-    { name: "STORE SALE", selector: (row) => `₱${Number(row.storeSale).toFixed(2)}`, center: true, sortable: true },
-    { name: "ONLINE SALE", selector: (row) => `₱${Number(row.onlineSale).toFixed(2)}`, center: true, sortable: true },
-    { name: "TOTAL SALE", selector: (row) => `₱${Number(row.totalSale).toFixed(2)}`, center: true, sortable: true },
-    { name: "BEST SELLING", selector: (row) => row.bestItem, sortable: true },
-  ];
-
-  const customColumns = [
-    { name: "DATE", selector: (row) => row.date, sortable: true },
-    { name: "TRANSACTIONS", selector: (row) => row.transactions, center: true, sortable: true },
-    { name: "ITEMS SOLD", selector: (row) => row.itemsSold, center: true, sortable: true },
-    { name: "STORE SALE", selector: (row) => `₱${Number(row.storeSale).toFixed(2)}`, center: true, sortable: true },
-    { name: "ONLINE SALE", selector: (row) => `₱${Number(row.onlineSale).toFixed(2)}`, center: true, sortable: true },
-    { name: "TOTAL SALE", selector: (row) => `₱${Number(row.totalSale).toFixed(2)}`, center: true, sortable: true },
-    { name: "BEST SELLING", selector: (row) => row.bestItem, sortable: true },
-  ];
-
-  const { columns, data } = useMemo(() => {
-    switch (activeTab) {
-      case "weekly": return { columns: weeklyColumns, data: reportData };
-      case "monthly": return { columns: monthlyColumns, data: reportData };
-      case "yearly": return { columns: yearlyColumns, data: reportData };
-      case "custom": return { columns: customColumns, data: reportData };
-      default: return { columns: dailyColumns, data: reportData };
-    }
-  }, [activeTab, reportData]);
-
-  const renderTotals = () => (
-    <div className="aSalesRep-cards-container">
-      <div className="aSalesRep-stat-card">
-        <div className="aSalesRep-card-icon aSalesRep-icon-green">
-          <FaDollarSign />
-        </div>
-        <div className="aSalesRep-card-content">
-          <div className="aSalesRep-card-label">TOTAL SALES</div>
-          <div className="aSalesRep-card-value">₱{reportTotals.totalSale.toFixed(2)}</div>
-        </div>
-      </div>
-
-      {activeTab !== "daily" && (
-        <div className="aSalesRep-stat-card">
-          <div className="aSalesRep-card-icon aSalesRep-icon-blue">
-            <FaReceipt />
-          </div>
-          <div className="aSalesRep-card-content">
-            <div className="aSalesRep-card-label">TRANSACTIONS</div>
-            <div className="aSalesRep-card-value">{reportTotals.transactions}</div>
-          </div>
-        </div>
-      )}
-
-      <div className="aSalesRep-stat-card">
-        <div className="aSalesRep-card-icon aSalesRep-icon-orange">
-          <FaShoppingCart />
-        </div>
-        <div className="aSalesRep-card-content">
-          <div className="aSalesRep-card-label">ITEMS SOLD</div>
-          <div className="aSalesRep-card-value">{reportTotals.itemsSold}</div>
-        </div>
-      </div>
-
-      <div className="aSalesRep-stat-card">
-        <div className="aSalesRep-card-icon aSalesRep-icon-teal">
-          <FaStore />
-        </div>
-        <div className="aSalesRep-card-content">
-          <div className="aSalesRep-card-label">STORE SALES</div>
-          <div className="aSalesRep-card-value">₱{reportTotals.storeSale.toFixed(2)}</div>
-        </div>
-      </div>
-
-      <div className="aSalesRep-stat-card">
-        <div className="aSalesRep-card-icon aSalesRep-icon-cyan">
-          <FaGlobe />
-        </div>
-        <div className="aSalesRep-card-content">
-          <div className="aSalesRep-card-label">ONLINE SALES</div>
-          <div className="aSalesRep-card-value">₱{reportTotals.onlineSale.toFixed(2)}</div>
-        </div>
-      </div>
-    </div>
-  );
+    setCurrentPeriodText(getPeriodText(activeTab, customRange.start, customRange.end));
+  }, [activeTab, customRange]);
 
   const handleCustomApply = (startDate, endDate) => {
     const startStr = formatDate(new Date(startDate));
     const endStr = formatDate(new Date(endDate));
-
-    fetchSalesReport('custom', startStr, endStr);
     setCustomRange({ start: startStr, end: endStr });
     setCurrentPeriodText(getPeriodText('custom', startStr, endStr));
     setActiveTab("custom");
     setIsCustomModalOpen(false);
-  }
+  };
+
+  const categoryColumns = [
+    { name: "CATEGORY", selector: (row) => row.category, sortable: true },
+    { name: "QUANTITY SOLD", selector: (row) => row.quantity, center: true, sortable: true },
+    { name: "SALES AMOUNT", selector: (row) => `₱${row.sales.toLocaleString()}`, center: true, sortable: true },
+    { name: "% OF TOTAL", selector: (row) => `${row.percentage}%`, center: true, sortable: true },
+  ];
+
+  const productColumns = [
+    { name: "PRODUCT", selector: (row) => row.product, sortable: true },
+    { name: "CATEGORY", selector: (row) => row.category, center: true, sortable: true },
+    { name: "UNITS SOLD", selector: (row) => row.units, center: true, sortable: true },
+    { name: "TOTAL SALES", selector: (row) => `₱${row.total.toLocaleString()}`, center: true, sortable: true },
+  ];
+
+  const paymentColumns = [
+    { name: "PAYMENT TYPE", selector: (row) => row.type, sortable: true },
+    { name: "TRANSACTIONS", selector: (row) => row.transactions, center: true, sortable: true },
+    { name: "TOTAL AMOUNT", selector: (row) => `₱${row.amount.toLocaleString()}`, center: true, sortable: true },
+  ];
+
+  const refundColumns = [
+    { name: "#", selector: (row) => row.id, center: true, sortable: true, width: "10%" },
+    { name: "DATE", selector: (row) => row.date, center: true, sortable: true, width: "15%" },
+    { name: "PRODUCT", selector: (row) => row.product, sortable: true, width: "18%" },
+    { name: "AMOUNT", selector: (row) => `₱${row.amount}`, center: true, sortable: true, width: "17%" },
+    { name: "REASON", selector: (row) => row.reason, sortable: true, width: "20%" },
+    { name: "CASHIER", selector: (row) => row.cashier, center: true, sortable: true, width: "20%" },
+  ];
 
   return (
     <div className="aSalesRep-page">
       <Sidebar />
       <div className="aSalesRep-report">
         <Header pageTitle="Sales Report" />
+
+        {/* Filter Bar */}
         <div className="aSalesRep-tabs-wrapper">
-          <div className="aSalesRep-tabs">
-            <div className="aSalesRep-filter-item">
-                <span className="aSalesRep-period-text">{currentPeriodText}</span>
-              </div>
+          <div className={`aSalesRep-tabs ${isFilterOpen ? "open" : "collapsed"}`}>
+            <button
+              className="aSalesRep-filter-toggle-btn"
+              onClick={() => setIsFilterOpen(!isFilterOpen)}
+            >
+              <FaFilter />
+              <span className="aSalesRep-period-text">{currentPeriodText}</span>
+            </button>
+
             <div className="aSalesRep-filter-item">
               <span>Period:</span>
               <select
@@ -276,79 +194,270 @@ function SalesReport() {
                   }
                 }}
               >
-                <option value="daily">Today</option>
-                <option value="weekly">This Week</option>
-                <option value="monthly">This Month</option>
-                <option value="yearly">This Year</option>
+                <option value="today">Today</option>
+                <option value="yesterday">Yesterday</option>
                 <option value="custom">Custom</option>
               </select>
             </div>
 
-            <button className="aSalesRep-export-btn" onClick={() => handleSalesReportExport(reportData, reportTotals, activeTab, currentPeriodText)}>
+            <div className="aSalesRep-filter-item">
+              <span>Cashier:</span>
+              <select
+                className="aSalesRep-tab-dropdown"
+                value={selectedCashier}
+                onChange={(e) => setSelectedCashier(e.target.value)}
+              >
+                <option value="all">All Cashiers</option>
+              </select>
+            </div>
+
+            <button className="aSalesRep-export-btn" onClick={() => handleSalesReportExport(data.productBreakdown, data.summary, activeTab, currentPeriodText)}>
               <FaFileExport /> Export
             </button>
           </div>
         </div>
 
-        {/* Totals Cards - Only show when there's data */}
-        {!isLoading && data.length > 0 && (
-          <div className="aSalesRep-total-row">
-            {renderTotals()}
-          </div>
-        )}
+        {/* Scrollable Content Area */}
+        <div className="aSalesRep-scrollable-content">
+          {/* Summary Cards */}
+          <div className="aSalesRep-cards-container">
+            <div className="aSalesRep-stat-card">
+              <div className="aSalesRep-card-icon aSalesRep-icon-green">
+                <FaDollarSign />
+              </div>
+              <div className="aSalesRep-card-content">
+                <div className="aSalesRep-card-label">TOTAL CASH SALES</div>
+                <div className="aSalesRep-card-value">₱{data.summary.totalSales.toLocaleString()}</div>
+              </div>
+            </div>
 
-        {/* Table */}
-        <div className="aSalesRep-table-container">
-          <DataTable
-            columns={columns}
-            data={data}
-            striped
-            highlightOnHover
-            responsive
-            pagination
-            fixedHeader
-            fixedHeaderScrollHeight="60vh"
-            progressPending={isLoading}
-            progressComponent={
-              <div style={{ padding: "24px", textAlign: "center" }}>
-                {error ? (
-                  <span style={{ color: "red" }}>
-                    Unable to load sales report. {error}
-                  </span>
+            <div className="aSalesRep-stat-card">
+              <div className="aSalesRep-card-icon aSalesRep-icon-blue">
+                <FaCashRegister />
+              </div>
+              <div className="aSalesRep-card-content">
+                <div className="aSalesRep-card-label">CASH IN DRAWER</div>
+                <div className="aSalesRep-card-value">₱{data.summary.cashInDrawer.toLocaleString()}</div>
+              </div>
+            </div>
+
+            <div className="aSalesRep-stat-card">
+              <div className="aSalesRep-card-icon aSalesRep-icon-red">
+                <FaBalanceScale />
+              </div>
+              <div className="aSalesRep-card-content">
+                <div className="aSalesRep-card-label">CASH DISCREPANCY</div>
+                <div className="aSalesRep-card-value aSalesRep-negative">
+                  ₱{Math.abs(data.summary.discrepancy).toLocaleString()} {data.summary.discrepancy < 0 ? 'Short' : 'Over'}
+                </div>
+              </div>
+            </div>
+
+            <div className="aSalesRep-stat-card">
+              <div className="aSalesRep-card-icon aSalesRep-icon-purple">
+                <FaReceipt />
+              </div>
+              <div className="aSalesRep-card-content">
+                <div className="aSalesRep-card-label">TOTAL TRANSACTIONS</div>
+                <div className="aSalesRep-card-value">{data.summary.transactions}</div>
+              </div>
+            </div>
+
+            <div className="aSalesRep-stat-card">
+              <div className="aSalesRep-card-icon aSalesRep-icon-orange">
+                <FaUndo />
+              </div>
+              <div className="aSalesRep-card-content">
+                <div className="aSalesRep-card-label">REFUNDS/RETURNS</div>
+                <div className="aSalesRep-card-value">₱{data.summary.refunds.toLocaleString()}</div>
+              </div>
+            </div>
+          </div>
+
+          {/* Side by Side Section */}
+          <div className="aSalesRep-side-by-side-container">
+            {/* Financial Details */}
+            <div className="aSalesRep-table-section">
+              <h3 className="aSalesRep-section-title">Financial Details</h3>
+              
+              {/* Payment Methods - Always Visible */}
+              <div className="aSalesRep-payment-breakdown modern">
+                {[
+                  { label: "Cash", key: "cash" },
+                  { label: "GCash", key: "gcash" },
+                ].map((method, index) => {
+                  const current = data?.summary?.paymentSummary?.[`${method.key}Amount`] ?? 0;
+
+                  return (
+                    <div key={index} className="aSalesRep-payment-card">
+                      <span className="aSalesRep-payment-label">{method.label}</span>
+                      <div className="aSalesRep-payment-amount">
+                        ₱{current.toLocaleString()}
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+
+              {/* Tabs for Cash Drawer and Refunds */}
+              <div className="aSalesRep-tabs-container" style={{ marginTop: '20px' }}>
+                <button
+                  className={`aSalesRep-content-tab ${financialTab === 'cashDrawer' ? 'active' : ''}`}
+                  onClick={() => setFinancialTab('cashDrawer')}
+                >
+                  <FaCashRegister /> Cash Drawer Summary
+                </button>
+                <button
+                  className={`aSalesRep-content-tab ${financialTab === 'refunds' ? 'active' : ''}`}
+                  onClick={() => setFinancialTab('refunds')}
+                >
+                  <FaUndo /> Refunds & Returns
+                </button>
+              </div>
+
+              {financialTab === 'cashDrawer' ? (
+                <div className="aSalesRep-cash-drawer-grid">
+                  <div className="aSalesRep-cash-item">
+                    <span className="aSalesRep-cash-label">Opening Balance:</span>
+                    <span className="aSalesRep-cash-value">₱{data.cashDrawer.opening.toLocaleString()}</span>
+                  </div>
+                  <div className="aSalesRep-cash-item">
+                    <span className="aSalesRep-cash-label">Total Cash Sales:</span>
+                    <span className="aSalesRep-cash-value">₱{data.cashDrawer.cashSales.toLocaleString()}</span>
+                  </div>
+                  <div className="aSalesRep-cash-item">
+                    <span className="aSalesRep-cash-label">Total Refunds:</span>
+                    <span className="aSalesRep-cash-value">₱{data.cashDrawer.refunds.toLocaleString()}</span>
+                  </div>
+                  <div className="aSalesRep-cash-item">
+                    <span className="aSalesRep-cash-label">Expected Cash:</span>
+                    <span className="aSalesRep-cash-value">₱{data.cashDrawer.expected.toLocaleString()}</span>
+                  </div>
+                  <div className="aSalesRep-cash-item">
+                    <span className="aSalesRep-cash-label">Actual Cash Counted:</span>
+                    <span className="aSalesRep-cash-value">₱{data.cashDrawer.actual.toLocaleString()}</span>
+                  </div>
+                  <div className="aSalesRep-cash-item aSalesRep-cash-highlight">
+                    <span className="aSalesRep-cash-label">Discrepancy:</span>
+                    <span className="aSalesRep-cash-value aSalesRep-negative">
+                      ₱{Math.abs(data.cashDrawer.discrepancy).toLocaleString()} {data.cashDrawer.discrepancy < 0 ? 'Short' : 'Over'}
+                    </span>
+                  </div>
+                  <div className="aSalesRep-cash-item">
+                    <span className="aSalesRep-cash-label">Reported By:</span>
+                    <span className="aSalesRep-cash-value">{data.cashDrawer.reportedBy}</span>
+                  </div>
+                  <div className="aSalesRep-cash-item">
+                    <span className="aSalesRep-cash-label">Verified By:</span>
+                    <span className="aSalesRep-cash-value">{data.cashDrawer.verifiedBy}</span>
+                  </div>
+                </div>
+              ) : (
+                <div className="aSalesRep-table-container">
+                  <DataTable
+                    columns={refundColumns}
+                    data={data.refundsList}
+                    striped
+                    highlightOnHover
+                    responsive
+                    pagination
+                    customStyles={{
+                      headCells: {
+                        style: {
+                          backgroundColor: "#4B929D",
+                          color: "#fff",
+                          fontWeight: "600",
+                          fontSize: "14px",
+                          padding: "12px",
+                          textTransform: "uppercase",
+                          textAlign: "center",
+                          letterSpacing: "1px",
+                        },
+                      },
+                      rows: {
+                        style: { minHeight: "55px", padding: "5px" },
+                      },
+                    }}
+                  />
+                </div>
+              )}
+            </div>
+
+            {/* Sales Breakdown */}
+            <div className="aSalesRep-table-section">
+              <h3 className="aSalesRep-section-title">Sales Breakdown</h3>
+              
+              <div className="aSalesRep-tabs-container">
+                <button
+                  className={`aSalesRep-content-tab ${salesBreakdownTab === 'category' ? 'active' : ''}`}
+                  onClick={() => setSalesBreakdownTab('category')}
+                >
+                  By Category
+                </button>
+                <button
+                  className={`aSalesRep-content-tab ${salesBreakdownTab === 'product' ? 'active' : ''}`}
+                  onClick={() => setSalesBreakdownTab('product')}
+                >
+                  By Product
+                </button>
+              </div>
+
+              <div className="aSalesRep-table-container">
+                {salesBreakdownTab === 'category' ? (
+                  <DataTable
+                    columns={categoryColumns}
+                    data={data.categoryBreakdown}
+                    striped
+                    highlightOnHover
+                    responsive
+                    customStyles={{
+                      headCells: {
+                        style: {
+                          backgroundColor: "#4B929D",
+                          color: "#fff",
+                          fontWeight: "600",
+                          fontSize: "14px",
+                          padding: "12px",
+                          textTransform: "uppercase",
+                          textAlign: "center",
+                          letterSpacing: "1px",
+                        },
+                      },
+                      rows: {
+                        style: { minHeight: "55px", padding: "5px" },
+                      },
+                    }}
+                  />
                 ) : (
-                  "Loading Sales Report..."
+                  <DataTable
+                    columns={productColumns}
+                    data={data.productBreakdown}
+                    striped
+                    highlightOnHover
+                    responsive
+                    pagination
+                    customStyles={{
+                      headCells: {
+                        style: {
+                          backgroundColor: "#4B929D",
+                          color: "#fff",
+                          fontWeight: "600",
+                          fontSize: "14px",
+                          padding: "12px",
+                          textTransform: "uppercase",
+                          textAlign: "center",
+                          letterSpacing: "1px",
+                        },
+                      },
+                      rows: {
+                        style: { minHeight: "55px", padding: "5px" },
+                      },
+                    }}
+                  />
                 )}
               </div>
-            }
-            noDataComponent={
-              <div style={{ padding: "24px", textAlign: "center" }}>
-                {error ? (
-                  <span style={{ color: "red" }}>
-                    Unable to load sales report. {error}
-                  </span>
-                ) : (
-                  "No sales data available for this period."
-                )}
-              </div>
-            }
-            customStyles={{
-              headCells: {
-                style: {
-                  backgroundColor: "#4B929D",
-                  color: "#fff",
-                  fontWeight: "600",
-                  fontSize: "14px",
-                  padding: "12px",
-                  textTransform: "uppercase",
-                  textAlign: "center",
-                  letterSpacing: "1px",
-                },
-              },
-              rows: {
-                style: { minHeight: "55px", padding: "5px" },
-              },
-            }}
-          />
+            </div>
+          </div>
         </div>
       </div>
 

@@ -1,40 +1,65 @@
 import "./sharedSpillageModal.css";
+import { FaEdit, FaTrash } from "react-icons/fa";
 
 function SpillageDetailsModal({ show, onClose, spillage, cashiersMap, userRole, onEdit, onDelete }) {
   if (!show || !spillage) return null;
 
   return (
-    <div className="spillage-modal-backdrop" onClick={onClose}>
+    <div className="spillage-modal-overlay" onClick={onClose}>
       <div
-        className="spillage-modal-container"
+        className="logSpillage-details-container"
         onClick={(e) => e.stopPropagation()}
       >
-        <button className="modal-close-x" onClick={onClose}>
-          ×
-        </button>
+        <div className="logSpillage-details-header">
+          <h2>
+            Spillage Details
+            <span className="logSpillage-header-icons">
+              {onEdit && <FaEdit className="logSpillage-icon-edit" onClick={() => onEdit(spillage)} />}
+              {onDelete && <FaTrash className="logSpillage-icon-delete" onClick={() => onDelete(spillage.spillage_id)} />}
+            </span>
+          </h2>
+          <button className="logSpillage-close-button" onClick={onClose}>×</button>
+        </div>
 
-        <h2>Spillage Details</h2>
-        <p><strong>Product:</strong> {spillage.product_name}</p>
-        <p><strong>Type:</strong> {spillage.category}</p>
-        <p><strong>Amount:</strong> {spillage.quantity}</p>
-        <p><strong>Spilled By:</strong> {cashiersMap?.[spillage.cashier_name] || spillage.cashier_name}</p>
-        <p><strong>Logged By:</strong> {spillage.logged_by}</p>
-        <p><strong>Date:</strong> {new Date(spillage.spillage_date).toLocaleDateString()}</p>
-        <p><strong>Reason:</strong> {spillage.reason}</p>
+        <div className="logSpillage-details-grid">
+          <div className="logSpillage-detail-item">
+            <span className="logSpillage-detail-label">Product</span>
+            <span className="logSpillage-detail-value">{spillage.product_name}</span>
+          </div>
 
-        <div className="spillage-modal-actions">
-          <button
-            className="details-edit-btn"
-            onClick={() => onEdit(spillage)}
-          >
-            Edit
-          </button>
-          <button
-            className="btn-delete"
-            onClick={() => onDelete && onDelete(spillage.spillage_id)}
-          >
-            Delete
-          </button>
+          <div className="logSpillage-detail-item">
+            <span className="logSpillage-detail-label">Type</span>
+            <span className="logSpillage-detail-value">{spillage.category}</span>
+          </div>
+
+          <div className="logSpillage-detail-item">
+            <span className="logSpillage-detail-label">Amount</span>
+            <span className="logSpillage-detail-value">{spillage.quantity}</span>
+          </div>
+
+          <div className="logSpillage-detail-item">
+            <span className="logSpillage-detail-label">Spilled By</span>
+            <span className="logSpillage-detail-value">
+              {cashiersMap?.[spillage.cashier_name] || spillage.cashier_name}
+            </span>
+          </div>
+
+          <div className="logSpillage-detail-item">
+            <span className="logSpillage-detail-label">Logged By</span>
+            <span className="logSpillage-detail-value">{spillage.logged_by}</span>
+          </div>
+
+          <div className="logSpillage-detail-item">
+            <span className="logSpillage-detail-label">Date</span>
+            <span className="logSpillage-detail-value">
+              {new Date(spillage.spillage_date).toLocaleDateString()}
+            </span>
+          </div>
+
+          <div className="logSpillage-detail-item logSpillage-full-width">
+            <span className="logSpillage-detail-label">Reason</span>
+            <span className="logSpillage-detail-value">{spillage.reason}</span>
+          </div>
         </div>
       </div>
     </div>

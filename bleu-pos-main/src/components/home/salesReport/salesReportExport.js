@@ -54,9 +54,6 @@ const NoDataModal = ({ onClose }) => {
         </div>
         <h1>No Sales Data</h1>
         <p>There is no sales data available to export.</p>
-        <button onClick={onClose} className="salesRep-export-btn-single">
-          Okay
-        </button>
       </div>
     </div>
   );
@@ -64,7 +61,22 @@ const NoDataModal = ({ onClose }) => {
 
 // Main export handler
 const handleSalesReportExport = (reportData, reportTotals, activeTab, currentPeriodText, exportedBy = "System") => {
-  // Create container for modal
+  // If there's no data, show the No Data modal immediately
+  if (!reportData || !reportData.length) {
+    const noDataContainer = document.createElement("div");
+    document.body.appendChild(noDataContainer);
+    const noDataRoot = ReactDOM.createRoot(noDataContainer);
+
+    const cleanupNoData = () => {
+      noDataRoot.unmount();
+      document.body.removeChild(noDataContainer);
+    };
+
+    noDataRoot.render(<NoDataModal onClose={cleanupNoData} />);
+    return; // stop execution here — don’t open export modal
+  }
+
+  // Otherwise, show export modal
   const modalContainer = document.createElement("div");
   document.body.appendChild(modalContainer);
   const root = ReactDOM.createRoot(modalContainer);
@@ -77,11 +89,6 @@ const handleSalesReportExport = (reportData, reportTotals, activeTab, currentPer
   const handleExportPDF = () => {
     cleanup();
 
-    if (!reportData.length) {
-      showNoDataModal();
-      return;
-    }
-
     const newWindow = window.open("", "_blank");
     newWindow.document.write(`
       <html>
@@ -93,17 +100,14 @@ const handleSalesReportExport = (reportData, reportTotals, activeTab, currentPer
             .export-header { display: flex; align-items: flex-start; margin-bottom: 15px; }
             .export-header img { height: 140px; }
             .header-details { text-align: left; font-size: 13px; margin-left: 15px; }
-
             table { width: 100%; border-collapse: collapse; margin-top: 20px; }
             th, td { border: 1px solid #000; padding: 8px; font-size: 11px; text-align: center; }
             th { background-color: #4B929D !important; color: #fff !important; font-weight: bold; }
-
             .summary { margin-top: 40px; font-size: 12px; text-align: center; }
             .summary h3 { margin-bottom: 10px; }
             .summary-table { border-collapse: collapse; width: 60%; margin: 0 auto; }
             .summary-table th, .summary-table td { border: 1px solid #000; padding: 8px 12px; font-size: 12px; text-align: left; }
             .summary-table th { background: #f2f2f2; text-align: left; width: 50%; }
-
             .approved { margin-top: 40px; text-align: right; }
             .signature { margin-top: 40px; }
           </style>
@@ -160,11 +164,6 @@ const handleSalesReportExport = (reportData, reportTotals, activeTab, currentPer
   const handleExportCSV = () => {
     cleanup();
 
-    if (!reportData.length) {
-      showNoDataModal();
-      return;
-    }
-
     const headers = Object.keys(reportData[0]);
     const rows = reportData.map(obj => headers.map(h => obj[h]));
 
@@ -180,19 +179,7 @@ const handleSalesReportExport = (reportData, reportTotals, activeTab, currentPer
     document.body.removeChild(link);
   };
 
-  const showNoDataModal = () => {
-    const noDataContainer = document.createElement("div");
-    document.body.appendChild(noDataContainer);
-    const noDataRoot = ReactDOM.createRoot(noDataContainer);
-
-    const cleanupNoData = () => {
-      noDataRoot.unmount();
-      document.body.removeChild(noDataContainer);
-    };
-
-    noDataRoot.render(<NoDataModal onClose={cleanupNoData} />);
-  };
-
+  // Render export format modal
   root.render(
     <ExportModal
       onClose={cleanup}

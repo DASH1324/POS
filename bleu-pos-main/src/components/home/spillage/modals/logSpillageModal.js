@@ -268,13 +268,13 @@ function LogSpillageModal({ show, onClose, onSave, loggedByName }) {
       const cashierUsername = selectedCashierObj.Username;
       
       const spillageData = {
-        cashier_name: cashierUsername, // Use username instead of full name
+        cashier_name: cashierUsername,
         spillage_date: date,
         product_name: productName,
         category: productType,
         quantity: parseInt(quantity),
         reason: reason,
-        logged_by: loggedByName // Pass the full employee name from header
+        logged_by: loggedByName
       };
 
       // Save spillage log
@@ -300,11 +300,9 @@ function LogSpillageModal({ show, onClose, onSave, loggedByName }) {
         console.log("Spillage logged and inventory deducted successfully");
       } catch (imsError) {
         console.error("Warning: Spillage saved but IMS deduction failed:", imsError);
-        // Show warning but don't fail the whole operation
         setErrors({
           submit: "Spillage saved, but inventory deduction may have failed. Please verify inventory levels.",
         });
-        // Still call onSave and onClose since spillage was logged
         onSave(savedSpillage);
         onClose();
         return;
@@ -323,24 +321,24 @@ function LogSpillageModal({ show, onClose, onSave, loggedByName }) {
   };
 
   return (
-    <div className="logSpillage-modal-overlay">
-      <div className="logSpillage-modal-container">
-        <div className="logSpillage-modal-header">
-          <h2>Log New Spillage</h2>
-          <span className="logSpillage-close-button" onClick={onClose}>
-            ×
-          </span>
+    <div className="spillage-modal-overlay" onClick={onClose}>
+      <div className="spillage-modal" onClick={(e) => e.stopPropagation()}>
+        <div className="spillage-modal-header">
+          <h3>Log New Spillage</h3>
+          <button className="spillage-close-modal" onClick={onClose}>×</button>
         </div>
 
-        <form className="logSpillage-modal-form" onSubmit={handleSubmit}>
-          <div className="form-row">
-            <label>
-              Cashier Name: <span className="required">*</span>
+        <form className="spillage-modal-content" onSubmit={handleSubmit}>
+          <div className="spillage-form-row">
+            <label className="spillage-form-label">
+              <span className="spillage-label-text">
+                Cashier Name <span className="spillage-required">*</span>
+              </span>
               <select
                 value={cashierName}
                 onChange={(e) => setCashierName(e.target.value)}
                 onFocus={() => handleFocus("cashierName")}
-                className={errors.cashierName ? "error-field" : ""}
+                className={`spillage-input ${errors.cashierName ? "spillage-error-field" : ""}`}
                 disabled={isLoadingCashiers}
               >
                 <option value="">
@@ -357,28 +355,31 @@ function LogSpillageModal({ show, onClose, onSave, loggedByName }) {
                 ))}
               </select>
               {errors.cashierName && (
-                <p className="error-message">{errors.cashierName}</p>
+                <p className="spillage-error-message">{errors.cashierName}</p>
               )}
             </label>
 
-            <label>
-              Date: <span className="required">*</span>
+            <label className="spillage-form-label">
+              <span className="spillage-label-text">
+                Date <span className="spillage-required">*</span>
+              </span>
               <input
                 type="date"
                 value={date}
                 onChange={(e) => setDate(e.target.value)}
                 onFocus={() => handleFocus("date")}
-                className={errors.date ? "error-field" : ""}
+                className={`spillage-input ${errors.date ? "spillage-error-field" : ""}`}
                 max={new Date().toLocaleDateString('en-CA')}  
               />
-
-              {errors.date && <p className="error-message">{errors.date}</p>}
+              {errors.date && <p className="spillage-error-message">{errors.date}</p>}
             </label>
           </div>
 
-          <div className="form-row">
-            <label>
-              Product Type: <span className="required">*</span>
+          <div className="spillage-form-row">
+            <label className="spillage-form-label">
+              <span className="spillage-label-text">
+                Product Type <span className="spillage-required">*</span>
+              </span>
               <select
                 value={productType}
                 onChange={(e) => {
@@ -386,7 +387,7 @@ function LogSpillageModal({ show, onClose, onSave, loggedByName }) {
                   setProductName("");
                 }}
                 onFocus={() => handleFocus("productType")}
-                className={errors.productType ? "error-field" : ""}
+                className={`spillage-input ${errors.productType ? "spillage-error-field" : ""}`}
                 disabled={!date || !cashierName || isLoadingProducts}
               >
                 <option value="">
@@ -405,17 +406,19 @@ function LogSpillageModal({ show, onClose, onSave, loggedByName }) {
                 ))}
               </select>
               {errors.productType && (
-                <p className="error-message">{errors.productType}</p>
+                <p className="spillage-error-message">{errors.productType}</p>
               )}
             </label>
 
-            <label>
-              Product Name: <span className="required">*</span>
+            <label className="spillage-form-label">
+              <span className="spillage-label-text">
+                Product Name <span className="spillage-required">*</span>
+              </span>
               <select
                 value={productName}
                 onChange={(e) => setProductName(e.target.value)}
                 onFocus={() => handleFocus("productName")}
-                className={errors.productName ? "error-field" : ""}
+                className={`spillage-input ${errors.productName ? "spillage-error-field" : ""}`}
                 disabled={!productType || filteredProducts.length === 0}
               >
                 <option value="">
@@ -432,67 +435,71 @@ function LogSpillageModal({ show, onClose, onSave, loggedByName }) {
                 ))}
               </select>
               {errors.productName && (
-                <p className="error-message">{errors.productName}</p>
+                <p className="spillage-error-message">{errors.productName}</p>
               )}
             </label>
           </div>
 
-          <div className="form-row">
-            <label>
-              Quantity: <span className="required">*</span>
+          <div className="spillage-form-row">
+            <label className="spillage-form-label">
+              <span className="spillage-label-text">
+                Quantity <span className="spillage-required">*</span>
+              </span>
               <input
                 type="number"
                 min="1"
                 value={quantity}
                 onChange={(e) => setQuantity(e.target.value)}
                 onFocus={() => handleFocus("quantity")}
-                className={errors.quantity ? "error-field" : ""}
+                className={`spillage-input ${errors.quantity ? "spillage-error-field" : ""}`}
                 placeholder="Enter quantity"
               />
               {errors.quantity && (
-                <p className="error-message">{errors.quantity}</p>
+                <p className="spillage-error-message">{errors.quantity}</p>
               )}
             </label>
           </div>
 
-          <div className="form-row full-width">
-            <label>
-              Reason: <span className="required">*</span>
+          <div className="spillage-form-row spillage-full-width">
+            <label className="spillage-form-label">
+              <span className="spillage-label-text">
+                Reason <span className="spillage-required">*</span>
+              </span>
               <textarea
                 rows="3"
                 value={reason}
                 onChange={(e) => setReason(e.target.value)}
                 onFocus={() => handleFocus("reason")}
-                className={errors.reason ? "error-field" : ""}
+                className={`spillage-input spillage-textarea ${errors.reason ? "spillage-error-field" : ""}`}
                 placeholder="Describe what happened..."
               />
               {errors.reason && (
-                <p className="error-message">{errors.reason}</p>
+                <p className="spillage-error-message">{errors.reason}</p>
               )}
             </label>
           </div>
 
           {errors.submit && (
-            <div className="form-row full-width">
-              <p className="error-message">{errors.submit}</p>
+            <div className="spillage-form-row spillage-full-width">
+              <p className="spillage-error-message">{errors.submit}</p>
             </div>
           )}
 
-          <div className="logSpillage-button-container">
-            <button
-              type="submit"
-              className="logSpillage-submit-button"
-              disabled={isSaving || isLoadingProducts || isLoadingCashiers}
-            >
-              {isSaving ? "Saving..." : "Save"}
-            </button>
+          <div className="spillage-modal-footer">
             <button
               type="button"
-              className="logSpillage-cancel-button"
+              className="spillage-btn-cancel"
               onClick={onClose}
               disabled={isSaving}
             >
               Cancel
+            </button>
+            <button
+              type="submit"
+              className="spillage-btn-confirm"
+              disabled={isSaving || isLoadingProducts || isLoadingCashiers}
+            >
+              {isSaving ? "Saving..." : "Save Spillage"}
             </button>
           </div>
         </form>
@@ -505,7 +512,7 @@ LogSpillageModal.propTypes = {
   show: PropTypes.bool.isRequired,
   onClose: PropTypes.func.isRequired,
   onSave: PropTypes.func.isRequired,
-  loggedByName: PropTypes.string.isRequired, // New prop for logged-in user's full name
+  loggedByName: PropTypes.string.isRequired,
 };
 
 export default LogSpillageModal;

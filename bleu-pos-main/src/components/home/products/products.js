@@ -5,6 +5,10 @@ import Sidebar from "../shared/sidebar";
 import Header from "../shared/header";
 import DataTable from "react-data-table-component";
 import DetailsProductModal from "./modals/detailsProductModal";
+import loadingAnimation from "../../../assets/animation/loading.json";
+import Lottie from "lottie-react";
+import { FaFilter, FaSearch } from "react-icons/fa";
+import '../../confirmAlertCustom.css';
 
 const API_BASE_URL = "http://127.0.0.1:8001";
 const MERCHANDISE_API_URL = "http://127.0.0.1:8002";
@@ -22,6 +26,7 @@ function Products() {
   const [sizeFilter, setSizeFilter] = useState("");
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState(null);
+  const [isFilterOpen, setIsFilterOpen] = useState(false);
 
   const [selectedProduct, setSelectedProduct] = useState(null);
 
@@ -282,78 +287,100 @@ function Products() {
             </div>
           ) : (
             <>
-            
-
-              <div className="productList-tabs">
-                {productTypes.map((type) => (
-                  <button
-                    key={type.productTypeID}
-                    className={`productList-tab ${
-                      activeTab === type.productTypeID ? "productList-tab--active" : ""
-                    }`}
-                    onClick={() => setActiveTab(type.productTypeID)}
-                  >
-                    {type.productTypeName}
-                  </button>
-                  
-                ))}
-                <button
-                  key="merch"
-                  className={`productList-tab ${
-                    activeTab === "merch" ? "productList-tab--active" : ""
-                  }`}
-                  onClick={() => setActiveTab("merch")}
-                >
-                  Merchandise
-                </button>
-              </div>
-              
-
-              <div className="tab-content">
-                <div className="productList-filterBar">
-                  <input
-                    type="text"
-                    placeholder={activeTab === "merch" ? "Search Merchandise..." : "Search Products..."}
-                    value={searchTerm}
-                    onChange={(e) => setSearchTerm(e.target.value)}
-                  />
-
-                  {activeTab !== "merch" && (
-                    <>
-                      <select
-                        value={categoryFilter}
-                        onChange={(e) => setCategoryFilter(e.target.value)}
-                      >
-                        <option value="">All Categories</option>
-                        {uniqueCategories.map((cat) => (
-                          <option key={cat} value={cat}>
-                            {cat}
-                          </option>
-                        ))}
-                      </select>
-
-                      <select
-                        value={sizeFilter}
-                        onChange={(e) => setSizeFilter(e.target.value)}
-                      >
-                        <option value="">All Sizes</option>
-                        {uniqueSizes.map((size) => (
-                          <option key={size} value={size}>
-                            {size}
-                          </option>
-                        ))}
-                      </select>
-                    </>
-                  )}
-
-                  <button 
-                    className="productList-clearBtn" 
-                    onClick={handleClearFilters}
-                  >
-                    Clear Filters
-                  </button>
+              {/* Tabs and Filter Wrapper */}
+              <div className="productList-tabs-filter-wrapper">
+                {/* Tabs - Left Side */}
+                <div className="productList-tabs">
+                  {productTypes.map((type) => (
+                    <button
+                      key={type.productTypeID}
+                      className={`productList-tab ${
+                        activeTab === type.productTypeID ? "productList-tab--active" : ""
+                      }`}
+                      onClick={() => setActiveTab(type.productTypeID)}
+                    >
+                      {type.productTypeName}
+                    </button>
+                  ))}
                 </div>
 
+                {/* Filter Bar - Right Side */}
+                {!isLoading && (
+                  <div className={`productList-filterBar ${isFilterOpen ? "open" : "collapsed"}`}>
+                    <button
+                      className="productList-filter-toggle-btn"
+                      onClick={() => setIsFilterOpen(!isFilterOpen)}
+                    >
+                      <FaFilter />
+                    </button>
+
+                    <div className="productList-filter-item">
+                      <div className="productList-search-wrapper">
+                        <FaSearch className="productList-search-icon" />
+                        <input
+                          type="text"
+                          placeholder={activeTab === "merch" ? "Search Merchandise..." : "Search Products..."}
+                          value={searchTerm}
+                          onChange={(e) => setSearchTerm(e.target.value)}
+                          className="productList-search-input"
+                        />
+                      </div>
+                    </div>
+
+                    {activeTab !== "merch" && (
+                      <>
+                        <div className="productList-filter-item">
+                          <span>Category:</span>
+                          <select
+                            value={categoryFilter}
+                            onChange={(e) => setCategoryFilter(e.target.value)}
+                            className="productList-select"
+                          >
+                            <option value="">All Categories</option>
+                            {uniqueCategories.map((cat) => (
+                              <option key={cat} value={cat}>
+                                {cat}
+                              </option>
+                            ))}
+                          </select>
+                        </div>
+
+                        <div className="productList-filter-item">
+                          <span>Size:</span>
+                          <select
+                            value={sizeFilter}
+                            onChange={(e) => setSizeFilter(e.target.value)}
+                            className="productList-select"
+                          >
+                            <option value="">All Sizes</option>
+                            {uniqueSizes.map((size) => (
+                              <option key={size} value={size}>
+                                {size}
+                              </option>
+                            ))}
+                          </select>
+                        </div>
+                      </>
+                    )}
+
+                    <button 
+                      className="productList-clearBtn" 
+                      onClick={handleClearFilters}
+                    >
+                      Clear Filters
+                    </button>
+                  </div>
+                )}
+              </div>
+
+              {/* Loading State */}
+              {isLoading ? (
+                <div className="loading-container">
+                  <div className="loading-bg">
+                    <Lottie animationData={loadingAnimation} loop={true} className="loading-animation" />
+                  </div>
+                </div>
+              ) : (
                 <div className="productList-tableContainer">
                   <DataTable
                     columns={columns}
@@ -363,7 +390,7 @@ function Products() {
                     responsive
                     pagination
                     paginationPerPage={5} 
-                    paginationRowsPerPageOptions={[5, 10, 15, 20]}
+                    paginationRowsPerPageOptions={[5]}
                     fixedHeader
                     fixedHeaderScrollHeight="60vh"
                     onRowClicked={(row) => setSelectedProduct(row)}
@@ -375,16 +402,6 @@ function Products() {
                           "No merchandise found."
                         ) : (
                           "No products found in this category."
-                        )}
-                      </div>
-                    }
-                    progressPending={isLoading}
-                    progressComponent={
-                      <div style={{ padding: "24px", textAlign: "center" }}>
-                        {error ? (
-                          <span style={{ color: "red" }}>Error: {error}</span>
-                        ) : (
-                          "Loading..."
                         )}
                       </div>
                     }
@@ -405,7 +422,7 @@ function Products() {
                     }}
                   />
                 </div>
-              </div>
+              )}
             </>
           )}
         </div>

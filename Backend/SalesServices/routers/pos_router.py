@@ -1,6 +1,6 @@
 # SalesServices/routers/pos_router.py
 
-from fastapi import APIRouter, HTTPException, status, Depends
+from fastapi import APIRouter, HTTPException, status, Depends, BackgroundTasks
 from fastapi.security import OAuth2PasswordBearer
 from pydantic import BaseModel, Field
 from typing import List, Optional
@@ -45,16 +45,13 @@ class SaleItem(BaseModel):
     addons: List[AddonDetail]
     type: Optional[str] = "product"  
 
-# --- [UPDATE START] ---
-# A new field is added to the Sale model to receive the promotional discount amount.
 class Sale(BaseModel):
     cartItems: List[SaleItem]
     orderType: str
     paymentMethod: str
     appliedDiscounts: List[str]
-    promotionalDiscountAmount: Optional[float] = 0.0 # This field is new
+    promotionalDiscountAmount: Optional[float] = 0.0
     gcashReference: Optional[str] = None
-# --- [UPDATE END] ---
 
 
 # --- Authorization Helper Function ---
@@ -84,7 +81,7 @@ async def trigger_inventory_deduction(url: str, cart_items: List[SaleItem], toke
     }
     headers = {"Authorization": f"Bearer {token}", "Content-Type": "application/json"}
     try:
-        async with httpx.AsyncClient() as client:
+        async with httpx.AsyncClient(timeout=30.0) as client:
             response = await client.post(url, json=payload, headers=headers)
             response.raise_for_status()
             logger.info(f"Successfully requested {inventory_type.upper()} deduction.")
@@ -96,6 +93,18 @@ async def trigger_inventory_deduction(url: str, cart_items: List[SaleItem], toke
             except:
                 error_text = e.response.text
         logger.critical(f"{inventory_type.upper()}-SYNC-FAILURE: Sale processed, but failed to deduct. Error: {error_text}")
+
+# --- Background task to handle inventory deductions ---
+async def process_inventory_deductions_background(products: List[SaleItem], merchandise: List[SaleItem], token: str):
+    """Process inventory deductions in the background after sale is confirmed"""
+    try:
+        if products:
+            await trigger_inventory_deduction(INGREDIENTS_DEDUCT_URL, cart_items=products, token=token, inventory_type="Ingredient")
+            await trigger_inventory_deduction(MATERIALS_DEDUCT_URL, cart_items=products, token=token, inventory_type="Material")
+        if merchandise:
+            await trigger_inventory_deduction(MERCHANDISE_DEDUCT_URL, cart_items=merchandise, token=token, inventory_type="Merchandise")
+    except Exception as e:
+        logger.error(f"Background inventory deduction error: {e}", exc_info=True)
 
 # --- New helper function to separate items by type ---
 def separate_cart_items_by_type(cart_items: List[SaleItem]):
@@ -145,10 +154,10 @@ async def calculate_totals_and_discounts(sale_data: Sale, cursor):
     final_discount = min(total_discount_amount, subtotal)
     return subtotal, final_discount, applied_discounts_details
 
-# --- API Endpoint to Create a Sale ---
 @router_sales.post("/", status_code=status.HTTP_201_CREATED)
 async def create_sale(
     sale: Sale, 
+    background_tasks: BackgroundTasks,
     token: str = Depends(oauth2_scheme),
     current_user: dict = Depends(get_current_active_user)
 ):
@@ -161,36 +170,34 @@ async def create_sale(
         conn.autocommit = False 
         
         async with conn.cursor() as cursor:
-            # --- [UPDATE START] ---
-            # Existing logic for manual discount is preserved.
             subtotal, manual_discount, discount_details = await calculate_totals_and_discounts(sale, cursor)
-            
-            # Get the promotional discount amount from the new payload field.
             promo_discount = Decimal(str(sale.promotionalDiscountAmount or 0.0))
-            # --- [UPDATE END] ---
-
             cashier_name = current_user.get("username", "SystemUser")
 
-            # --- [UPDATE START] ---
-            # The SQL INSERT statement is updated to include the new column.
             sql_sale = """
+                DECLARE @InsertedSales TABLE (SaleID INT);
+                
                 INSERT INTO Sales (
                     OrderType, PaymentMethod, CashierName, 
                     TotalDiscountAmount, PromotionalDiscountAmount, 
                     GCashReferenceNumber, Status
                 ) 
-                OUTPUT INSERTED.SaleID 
-                VALUES (?, ?, ?, ?, ?, ?, 'processing') 
+                OUTPUT INSERTED.SaleID INTO @InsertedSales
+                VALUES (?, ?, ?, ?, ?, ?, 'processing');
+                
+                SELECT SaleID FROM @InsertedSales;
             """
-            # The original `TotalDiscountAmount` will now store the MANUAL discount.
-            # The new `PromotionalDiscountAmount` stores the promotion value.
+            
             await cursor.execute(
                 sql_sale, 
                 sale.orderType, sale.paymentMethod, cashier_name, 
                 manual_discount, promo_discount, 
                 sale.gcashReference
             )
-            # --- [UPDATE END] ---
+            
+            while not cursor.description:
+                if not await cursor.nextset():
+                    break
 
             sale_id_row = await cursor.fetchone()
             if not sale_id_row or not sale_id_row[0]:
@@ -198,8 +205,21 @@ async def create_sale(
             sale_id = sale_id_row[0]
 
             for item in sale.cartItems:
-                sql_item = "INSERT INTO SaleItems (SaleID, ItemName, Quantity, UnitPrice, Category) OUTPUT INSERTED.SaleItemID VALUES (?, ?, ?, ?, ?)"
+                sql_item = """
+                    DECLARE @InsertedItems TABLE (SaleItemID INT);
+                    
+                    INSERT INTO SaleItems (SaleID, ItemName, Quantity, UnitPrice, Category) 
+                    OUTPUT INSERTED.SaleItemID INTO @InsertedItems
+                    VALUES (?, ?, ?, ?, ?);
+                    
+                    SELECT SaleItemID FROM @InsertedItems;
+                """
                 await cursor.execute(sql_item, sale_id, item.name, item.quantity, Decimal(str(item.price)), item.category)
+                
+                while not cursor.description:
+                    if not await cursor.nextset():
+                        break
+                
                 sale_item_id_row = await cursor.fetchone()
                 if not sale_item_id_row or not sale_item_id_row[0]:
                     raise HTTPException(status_code=500, detail=f"Failed to insert sale item: {item.name}")
@@ -221,15 +241,11 @@ async def create_sale(
 
             await conn.commit()
             
+        # Schedule inventory deductions as background task
         products, merchandise = separate_cart_items_by_type(sale.cartItems)
-        if products:
-            await trigger_inventory_deduction(INGREDIENTS_DEDUCT_URL, cart_items=products, token=token, inventory_type="Ingredient")
-            await trigger_inventory_deduction(MATERIALS_DEDUCT_URL, cart_items=products, token=token, inventory_type="Material")
-        if merchandise:
-            await trigger_inventory_deduction(MERCHANDISE_DEDUCT_URL, cart_items=merchandise, token=token, inventory_type="Merchandise")
-            
-        # --- [UPDATE START] ---
-        # The total discount is now the sum of both for the final calculation.
+        background_tasks.add_task(process_inventory_deductions_background, products, merchandise, token)
+        
+        # Return immediately without waiting for inventory deductions
         total_combined_discount = manual_discount + promo_discount
         final_total = subtotal - total_combined_discount
         return {
@@ -238,7 +254,6 @@ async def create_sale(
             "discountAmount": float(total_combined_discount),
             "finalTotal": float(final_total)
         }
-        # --- [UPDATE END] ---
 
     except Exception as e:
         if conn: await conn.rollback()
@@ -249,7 +264,7 @@ async def create_sale(
         if conn:
             conn.autocommit = True 
             await conn.close()
-
+            
 
 @router_sales.get("/status/{status}")
 async def get_orders_by_status(
@@ -264,8 +279,6 @@ async def get_orders_by_status(
     try:
         conn = await get_db_connection()
         async with conn.cursor() as cursor:
-            # --- [UPDATE START] ---
-            # Updated SQL query to fetch the new PromotionalDiscountAmount column.
             sql_sales = """
                 SELECT s.SaleID, s.OrderType, s.PaymentMethod, s.CreatedAt, s.CashierName, 
                        s.TotalDiscountAmount, s.PromotionalDiscountAmount, 
@@ -274,7 +287,6 @@ async def get_orders_by_status(
                 WHERE s.Status = ?
                 ORDER BY s.CreatedAt DESC
             """
-            # --- [UPDATE END] ---
             await cursor.execute(sql_sales, status)
             sales = await cursor.fetchall()
             
@@ -305,8 +317,6 @@ async def get_orders_by_status(
                     
                     order_items.append({'name': item.ItemName, 'quantity': item.Quantity, 'price': float(item.UnitPrice), 'category': item.Category, 'addons': addons_list})
                 
-                # --- [UPDATE START] ---
-                # Retrieve both discount types from the sale record.
                 manual_discount = Decimal(str(sale.TotalDiscountAmount or 0))
                 promo_discount = Decimal(str(sale.PromotionalDiscountAmount or 0))
                 total_combined_discount = manual_discount + promo_discount
@@ -314,7 +324,6 @@ async def get_orders_by_status(
                 full_subtotal = item_subtotal + total_addons_cost
                 final_total = full_subtotal - total_combined_discount
                 
-                # The returned dictionary is updated to send separate fields to the frontend.
                 orders.append({
                     'id': sale_id,
                     'orderType': sale.OrderType,
@@ -327,10 +336,9 @@ async def get_orders_by_status(
                     'subtotal': float(full_subtotal),
                     'addOns': float(total_addons_cost),
                     'promotionalDiscount': float(promo_discount),
-                    'manualDiscount': float(manual_discount), # Renamed 'discount' to 'manualDiscount' for clarity
+                    'manualDiscount': float(manual_discount),
                     'total': float(final_total)
                 })
-                # --- [UPDATE END] ---
             
             return orders
             

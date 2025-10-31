@@ -44,7 +44,7 @@
   display: flex;
   justify-content: space-between;
   align-items: center;
-  padding: 20px 24px;
+  padding: 15px 24px;
   border-bottom: 1px solid #f0f0f0;
 }
 
@@ -54,6 +54,12 @@
   font-weight: 600;
   color: #1a1a1a;
   letter-spacing: -0.01em;
+}
+
+.transHis-modal-header-right {
+  display: flex;
+  align-items: center;
+  gap: 12px;
 }
 
 /* Close Button */
@@ -85,47 +91,83 @@
   display: flex;
   flex-direction: column;
   overflow-y: auto;
-  padding: 24px;
+  padding: 20px 24px;
   gap: 20px;
 }
 
 /* Info Grid */
 .transHis-modal-info-grid {
   display: grid;
-  grid-template-columns: 1fr 1fr;
-  gap: 16px;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 24px;
+  background-color: #fafafa;
+  padding: 20px;
+  border-radius: 8px;
+  border: 1px solid #f0f0f0;
 }
 
 .transHis-modal-info-item {
   display: flex;
   flex-direction: column;
-  gap: 4px;
+  gap: 8px;
 }
 
 .transHis-modal-label {
-  font-weight: 500;
-  font-size: 13px;
-  color: #666;
+  font-weight: 600;
+  font-size: 11px;
+  color: #999;
   text-transform: uppercase;
-  letter-spacing: 0.03em;
+  letter-spacing: 0.05em;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.transHis-modal-icon {
+  color: #4197a2;
+  flex-shrink: 0;
 }
 
 .transHis-modal-value {
   color: #1a1a1a;
   font-size: 15px;
-  font-weight: 500;
+  font-weight: 600;
+}
+
+.transHis-modal-time {
+  font-size: 14px;
+  color: #666;
+  font-weight: 400;
+}
+
+.transHis-modal-subtext {
+  font-size: 13px;
+  color: #999;
+  font-weight: 400;
+  margin-top: 2px;
+}
+
+.transHis-modal-reference {
+  background-color: #fafafa;
+  padding: 12px 16px;
+  border-radius: 8px;
+  border: 1px solid #f0f0f0;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-top: -10px;
 }
 
 /* Status Badge */
 .transHis-modal-status {
   display: inline-block;
-  width: fit-content; /* makes background only as wide as text */
-  padding: 4px 8px; /* smaller padding for tighter fit */
+  width: fit-content;
+  padding: 4px 8px;
   border-radius: 6px;
   font-size: 13px;
   font-weight: 600;
   text-transform: capitalize;
-  white-space: nowrap; /* prevents wrapping for long statuses */
+  white-space: nowrap;
 }
 
 /* STATUS COLORS */
@@ -168,10 +210,13 @@
 
 /* Applied Discounts */
 .transHis-modal-applied-discounts h4 {
+  margin-top: -10px;
   margin-bottom: 10px;
   font-size: 15px;
   font-weight: 600;
   color: #1a1a1a;
+  border-left: 3px solid #4197a2;
+  padding-left: 10px;
 }
 
 .transHis-modal-discount-item {
@@ -187,84 +232,209 @@
   display: inline-flex;
 }
 
+.transHis-modal-discount-item svg {
+  color: #4197a2;
+}
+
 /* Order Items */
+.transHis-modal-order-items {
+  padding: 0;
+}
+
+.transHis-modal-items-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 16px;
+  border-left: 3px solid #4197a2;
+  padding-left: 10px;
+}
+
 .transHis-modal-order-items h4 {
-  margin-bottom: 12px;
-  font-size: 15px;
-  font-weight: 600;
+  margin: 0;
+  font-size: 16px;
+  font-weight: 700;
   color: #1a1a1a;
+}
+
+.transHis-modal-item-count {
+  font-size: 13px;
+  color: #666;
+  font-weight: 500;
+}
+
+.transHis-modal-refund-mode-indicator {
+  font-size: 12px;
+  color: #e74c3c;
+  font-weight: 600;
+  background-color: #ffe8e6;
+  padding: 4px 8px;
+  border-radius: 4px;
 }
 
 .transHis-modal-items-scrollable {
   max-height: 300px;
   overflow-y: auto;
-  padding-right: 8px;
 }
 
 .transHis-modal-item {
-  margin-bottom: 16px;
-  padding-bottom: 16px;
-  border-bottom: 1px solid #f0f0f0;
+  margin-bottom: 8px;
+  background-color: #f0f9fa;
+  padding: 16px;
+  border-radius: 8px;
+  border: 1px solid #d1ebee;
 }
 
 .transHis-modal-item:last-child {
-  border-bottom: none;
+  margin-bottom: 0;
+}
+
+.transHis-modal-item-content {
+  width: 100%;
 }
 
 .transHis-modal-item-header {
   display: flex;
   justify-content: space-between;
-  font-weight: 500;
-  font-size: 15px;
-  margin-bottom: 6px;
-  color: #1a1a1a;
+  align-items: center;
+  gap: 16px;
 }
 
-.transHis-modal-item-name {
+.transHis-modal-item-left {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
   flex: 1;
 }
 
-.transHis-modal-item-price {
+.transHis-modal-item-name {
   font-weight: 600;
-}
-
-.transHis-modal-item-details {
-  display: flex;
-  justify-content: space-between;
-  font-size: 13px;
-  color: #666;
-  margin-bottom: 6px;
+  font-size: 15px;
+  color: #1a1a1a;
 }
 
 .transHis-modal-quantity {
   color: #666;
+  font-size: 13px;
+  font-weight: 500;
 }
 
 .transHis-modal-item-addons {
-  font-size: 13px;
-  color: #666;
-  padding-left: 12px;
-  line-height: 1.6;
+  font-size: 12px;
+  color: #999;
+  margin-top: 2px;
 }
 
-.transHis-modal-item-addons span {
-  display: block;
+.transHis-modal-item-right {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 2px;
 }
+
+.transHis-modal-item-unit-price {
+  font-size: 12px;
+  color: #999;
+  font-weight: 400;
+}
+
+.transHis-modal-item-total-price {
+  font-size: 18px;
+  color: #4197a2;
+  font-weight: 700;
+}
+
+/* Refund Controls */
+.transHis-modal-refund-controls {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-top: 12px;
+  padding-top: 12px;
+  border-top: 1px solid #d1ebee;
+}
+
+.transHis-modal-refund-controls-inline {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-top: 4px; /* small spacing from name/quantity */
+}
+
+.transHis-modal-refund-label {
+  font-size: 13px;
+  font-weight: 600;
+  color: #666;
+}
+
+.transHis-modal-quantity-control {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.transHis-modal-qty-price {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  font-size: 16px;
+  margin: 0 12px; /* optional spacing */
+}
+
+.transHis-modal-qty-price button {
+  width: 32px;
+  height: 32px;
+  border: none;
+  background: #F2F2F2;
+  border-radius: 32px;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 16px;
+  font-weight: 600;
+  color: #333;
+  transition: all 0.2s ease;
+}
+
+.transHis-modal-qty-price button:last-of-type {
+  background: #4B929D;
+  color: white;
+}
+
+.transHis-modal-qty-price span:nth-child(2) {
+  font-weight: 600;
+  min-width: 20px;
+  text-align: center;
+}
+
+.transHis-modal-qty-price .transHis-modal-item-price {
+  font-weight: 600;
+  color: #4197a2;
+  margin-left: 2px;
+  min-width: 80px; 
+  text-align: right;
+}
+
 
 /* Price Breakdown */
 .transHis-modal-price-breakdown {
-  background-color: #fafafa;
+  background-color: #fff;
   border-radius: 8px;
-  padding: 16px;
-  border: 1px solid #f0f0f0;
+  padding: 20px;
+  border: 2px solid #f0f0f0;
 }
 
 .transHis-modal-breakdown-row {
   display: flex;
   justify-content: space-between;
-  margin-bottom: 8px;
+  margin-bottom: 12px;
   font-size: 14px;
   color: #666;
+}
+
+.transHis-modal-breakdown-row:last-child {
+  margin-bottom: 0;
 }
 
 .transHis-modal-breakdown-row.transHis-modal-discount {
@@ -272,12 +442,25 @@
 }
 
 .transHis-modal-breakdown-row.transHis-modal-total {
-  font-weight: 600;
-  font-size: 17px;
-  margin-top: 8px;
-  padding-top: 12px;
-  border-top: 1px solid #e0e0e0;
+  font-weight: 700;
+  font-size: 20px;
+  margin-top: 16px;
+  padding-top: 16px;
+  border-top: 2px solid #e0e0e0;
   color: #1a1a1a;
+}
+
+.transHis-modal-breakdown-row.transHis-modal-total span:last-child {
+  color: #000000;
+}
+
+.transHis-modal-breakdown-row.transHis-modal-refund-total {
+  color: #e74c3c;
+  font-weight: 600;
+  font-size: 16px;
+  margin-top: 8px;
+  padding-top: 8px;
+  border-top: 1px solid #f0f0f0;
 }
 
 /* Issue Section */
@@ -310,6 +493,68 @@
   font-size: 14px;
   color: #856404;
   line-height: 1.5;
+}
+
+/* Action Buttons */
+.transHis-modal-actions {
+  display: flex;
+  gap: 12px;
+  margin-top: 8px;
+}
+
+.transHis-modal-action-btn {
+  flex: 1;
+  padding: 12px 24px;
+  border: none;
+  border-radius: 8px;
+  font-size: 14px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+}
+
+.transHis-modal-cancel-btn,
+.transHis-modal-refund-btn {
+  background-color: #e74c3c;
+  color: white;
+}
+
+.transHis-modal-cancel-btn:hover,
+.transHis-modal-refund-btn:hover {
+  background-color: #c0392b;
+  box-shadow: 0 4px 12px rgba(231, 76, 60, 0.3);
+}
+
+.transHis-modal-partial-refund-btn {
+  background-color: #4197a2;
+  color: white;
+}
+
+.transHis-modal-partial-refund-btn:hover {
+  background-color: #357d87;
+  box-shadow: 0 4px 12px rgba(65, 151, 162, 0.3);
+}
+
+.transHis-modal-cancel-refund-btn {
+  background-color: #f1f1f1;
+  color: #333;
+  border: 1px solid #dcdcdc;
+}
+
+.transHis-modal-cancel-refund-btn:hover {
+  background-color: #e8e8e8;
+  border-color: #c2c2c2;
+}
+
+.transHis-modal-action-btn.disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.transHis-modal-action-btn:active {
+  transform: translateY(0);
 }
 
 /* Animation */

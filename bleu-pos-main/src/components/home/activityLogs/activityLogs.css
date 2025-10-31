@@ -1,0 +1,371 @@
+body {
+    background: #eaf6f8;
+    margin: 0;
+    font-family: 'Segoe UI', sans-serif;
+}
+
+.activityLogs {
+    display: flex;
+    flex-direction: row;
+    min-height: 100vh;
+}
+
+.activityLogs-container {
+    flex: 1;
+    box-sizing: border-box;
+    width: 85%;
+    overflow: hidden; 
+    margin-top: 24px;
+    margin-left: 10px;
+    margin-right: 40px;
+    margin-bottom: 30px;
+}
+
+.activityLogs-content {
+    margin-top: 25px;
+}
+
+/* === FILTER BAR WITH TOGGLE === */
+.activityLogs-filterBar {
+    display: flex;
+    gap: 10px;
+    align-items: center;
+    background-color: #f8fcfd;
+    padding: 12px 20px;
+    border-radius: 12px;
+    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.04);
+    border-left: 4px solid #4B929D;
+    margin-bottom: 24px;
+    margin-left: auto;
+    width: auto;
+    max-width: fit-content;
+    transition: all 0.5s ease-in-out;
+    overflow: hidden;
+}
+
+.activityLogs-filterBar.collapsed {
+    width: auto;
+    padding: 12px 14px;
+}
+
+.activityLogs-filterBar.collapsed .activityLogs-filter-item,
+.activityLogs-filterBar.collapsed .activityLogs-search-input,
+.activityLogs-filterBar.collapsed .activityLogs-clearBtn {
+    display: none;
+}
+
+.activityLogs-filterBar.open {
+    width: auto;
+}
+
+.activityLogs-filter-toggle-btn {
+    background-color: transparent;
+    border: none;
+    font-size: 24px;
+    font-weight: 600;
+    cursor: pointer;
+    color: #4b929d;
+    transition: all 0.3s ease;
+    padding: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    flex-shrink: 0;
+}
+
+/* === FILTER ITEMS === */
+.activityLogs-filter-item {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+
+.activityLogs-filter-item span {
+    font-size: 14px;
+    font-weight: 500;
+    color: #5a6c75;
+}
+
+/* Search Wrapper */
+.activityLogs-search-wrapper {
+    position: relative;
+    width: 220px;
+}
+
+.activityLogs-search-icon {
+    position: absolute;
+    left: 14px;
+    top: 50%;
+    transform: translateY(-50%);
+    color: #6b7280;
+    font-size: 14px;
+}
+
+.activityLogs-search-input {
+    width: 100%;
+    padding: 10px 16px 10px 40px;
+    border: none;
+    border-radius: 8px;
+    background-color: #f8fcfd;
+    font-size: 14px;
+    font-family: inherit;
+    outline: none;
+    transition: all 0.2s ease;
+    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.04);
+}
+
+.activityLogs-search-input:focus {
+    background-color: white;
+    box-shadow: 0 2px 8px rgba(75, 146, 157, 0.2);
+}
+
+.activityLogs-search-input::placeholder {
+    color: #999;
+}
+
+.activityLogs-select {
+    padding: 8px 12px;
+    border-radius: 8px;
+    border: none;
+    background-color: #f8fcfd;
+    font-size: 14px;
+    font-family: inherit;
+    cursor: pointer;
+    min-width: 150px;
+    outline: none;
+    font-weight: 500;
+    color: #333;
+    transition: all 0.2s ease;
+}
+
+.activityLogs-clearBtn {
+    padding: 8px 14px;
+    background-color: #d9534f;
+    color: white;
+    border: none;
+    border-radius: 6px;
+    cursor: pointer;
+    font-weight: 500;
+    font-size: 13px;
+    transition: background-color 0.3s;
+    white-space: nowrap;
+    flex-shrink: 0;
+    width: 110px;
+}
+
+.activityLogs-clearBtn:hover {
+    background-color: #c9302c;
+}
+
+/* Timeline */
+.activityLogs-timeline {
+    background: #ffffff;
+    padding: 20px;
+    border-radius: 12px;
+    position: relative;
+}
+
+.activityLogs-timeline-line {
+    position: absolute;
+    left: 39px;
+    top: 20px;
+    bottom: 52px;
+    width: 2px;
+    background: #e5e7eb;
+    z-index: 1;
+}
+
+.activityLogs-activity-item {
+    position: relative;
+    margin-bottom: 32px;
+}
+
+.activityLogs-activity-header {
+    display: flex;
+    align-items: flex-start;
+    gap: 16px;
+}
+
+/* Icon Circle */
+.activityLogs-icon-circle {
+    position: relative;
+    z-index: 10;
+    width: 40px;
+    height: 40px;
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    flex-shrink: 0;
+}
+
+.activityLogs-icon-white {
+    color: white;
+    font-size: 14px;
+}
+
+.activityLogs-icon-success {
+    color: #10b981;
+    font-size: 12px;
+}
+
+.activityLogs-icon-error {
+    color: #ef4444;
+    font-size: 12px;
+}
+
+/* Activity Content */
+.activityLogs-activity-content {
+    flex: 1;
+}
+
+.activityLogs-activity-title-row {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    margin-bottom: 12px;
+}
+
+.activityLogs-timestamp {
+    font-size: 13px;
+    color: #6b7280;
+}
+
+.activityLogs-activity-title {
+    font-size: 15px;
+    font-weight: 500;
+    color: #1f2937;
+    margin: 0;
+}
+
+/* Event Item */
+.activityLogs-event-item {
+    display: flex;
+    align-items: flex-start;
+    gap: 12px;
+    margin-bottom: 12px;
+    margin-left: 24px;
+}
+
+.activityLogs-event-dot {
+    width: 12px;
+    height: 12px;
+    border-radius: 50%;
+    border: 2px solid #d1d5db;
+    background: white;
+    flex-shrink: 0;
+    margin-top: 4px;
+}
+
+.activityLogs-event-content {
+    flex: 1;
+}
+
+.activityLogs-event-timestamp {
+    font-size: 12px;
+    color: #9ca3af;
+    margin-bottom: 4px;
+}
+
+.activityLogs-event-message {
+    font-size: 13px;
+    padding: 12px;
+    border-radius: 6px;
+}
+
+.activityLogs-event-success {
+    background: #f0fdf4;
+    border-left: 4px solid #10b981;
+    color: #065f46;
+}
+
+.activityLogs-event-error {
+    background: #fef2f2;
+    border-left: 4px solid #ef4444;
+    color: #991b1b;
+}
+
+/* Sub Event Item */
+.activityLogs-subevent-item {
+    display: flex;
+    align-items: flex-start;
+    gap: 12px;
+    margin-bottom: 8px;
+    margin-left: 48px;
+}
+
+.activityLogs-subevent-dot {
+    width: 10px;
+    height: 10px;
+    border-radius: 50%;
+    flex-shrink: 0;
+    margin-top: 5px;
+}
+
+.activityLogs-subevent-success {
+    background: #10b981;
+}
+
+.activityLogs-subevent-error {
+    background: #ef4444;
+}
+
+.activityLogs-subevent-content {
+    flex: 1;
+}
+
+.activityLogs-subevent-timestamp {
+    font-size: 12px;
+    color: #9ca3af;
+    margin-bottom: 4px;
+}
+
+.activityLogs-subevent-message {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    font-size: 13px;
+    color: #374151;
+}
+
+.activityLogs-subevent-message svg {
+    flex-shrink: 0;
+}
+
+/* === RESPONSIVE DESIGN === */
+@media (max-width: 1024px) {
+    .activityLogs-filterBar {
+        flex-direction: column;
+        align-items: stretch;
+        gap: 12px;
+    }
+
+    .activityLogs-filterBar.collapsed {
+        width: 60px;
+    }
+
+    .activityLogs-search-input,
+    .activityLogs-select {
+        width: 100%;
+        min-width: unset;
+    }
+
+    .activityLogs-clearBtn {
+        width: 100%;
+        justify-content: center;
+    }
+}
+
+@media (max-width: 768px) {
+    .activityLogs-container {
+        width: 95%;
+        margin: 20px 10px;
+    }
+
+    .activityLogs-filterBar {
+        padding: 12px 16px;
+        gap: 12px;
+        margin-left: 0;
+        margin-right: 0;
+    }
+}

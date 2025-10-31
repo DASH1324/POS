@@ -3,10 +3,16 @@ import { useNavigate } from "react-router-dom";
 import "./discounts.css";
 import Sidebar from "../shared/sidebar";
 import Header from "../shared/header";
-import { FaEdit, FaPlus, FaTrash } from "react-icons/fa";
+import { FaEdit, FaPlus, FaTrash, FaFilter, FaSearch } from "react-icons/fa";
+import { HiOutlineExclamation } from "react-icons/hi";
 import DataTable from "react-data-table-component";
 import DiscountModal from "./discountModal";
 import PromotionModal from "./promotionModal";
+import DiscountDetailsModal from "./discountDetailsModal";
+import PromotionDetailsModal from "./promotionDetailsModal";
+import loadingAnimation from "../../../assets/animation/loading.json";
+import Lottie from "lottie-react";
+import '../../confirmAlertCustom.css';
 
 const getAuthToken = () => {
   return localStorage.getItem("authToken");
@@ -44,7 +50,6 @@ const apiFetch = async (endpoint, method = "GET", body = null) => {
       .json()
       .catch(() => ({ detail: response.statusText }));
     
-    // Attempt to parse validation error details for a more specific message
     if (response.status === 422 && Array.isArray(errorData.detail)) {
       const messages = errorData.detail.map(err => `${err.loc.slice(-1)[0]}: ${err.msg}`).join('; ');
       throw new Error(`Validation Error: ${messages}`);
@@ -71,6 +76,7 @@ function Discounts() {
   const [searchTerm, setSearchTerm] = useState("");
   const [applicationFilter, setApplicationFilter] = useState("");
   const [statusFilter, setStatusFilter] = useState("");
+  const [isFilterOpen, setIsFilterOpen] = useState(false);
 
   const [discounts, setDiscounts] = useState([]);
   const [promotions, setPromotions] = useState([]);
@@ -90,6 +96,15 @@ function Discounts() {
   const [showPromotionModal, setShowPromotionModal] = useState(false);
   const [editingPromotionId, setEditingPromotionId] = useState(null);
   const [isSavingPromotion, setIsSavingPromotion] = useState(false);
+
+  const [isDiscountDetailsOpen, setIsDiscountDetailsOpen] = useState(false);
+  const [isPromotionDetailsOpen, setIsPromotionDetailsOpen] = useState(false);
+  const [selectedDiscount, setSelectedDiscount] = useState(null);
+  const [selectedPromotion, setSelectedPromotion] = useState(null);
+
+  const [deleteTarget, setDeleteTarget] = useState(null);
+  const [isDeleting, setIsDeleting] = useState(false);
+  const [deleteError, setDeleteError] = useState(null);
 
   const [userRole, setUserRole] = useState("");
 
@@ -433,11 +448,9 @@ function Discounts() {
     }
   };
 
-  // --- FIX APPLIED HERE ---
   const handleSavePromotion = async () => {
     if (userRole === "manager") return;
 
-    // --- 1. Client-side validation ---
     if (!promotionForm.promotionName.trim()) {
       alert("Please enter a promotion name.");
       return;
@@ -447,7 +460,6 @@ function Discounts() {
       return;
     }
     
-    // --- 2. Build the payload dynamically ---
     let payload = {
         promotionName: promotionForm.promotionName,
         description: promotionForm.description,
@@ -468,7 +480,7 @@ function Discounts() {
         payload.getQuantity = promotionForm.getQuantity;
         payload.bogoDiscountType = promotionForm.bogoDiscountType;
         payload.bogoDiscountValue = promotionForm.bogoDiscountValue;
-    } else { // For 'percentage' or 'fixed'
+    } else {
         payload.applicationType = promotionForm.applicationType;
         payload.promotionValue = promotionForm.promotionValue;
 
@@ -486,7 +498,7 @@ function Discounts() {
             }
             payload.selectedCategories = promotionForm.selectedCategories;
             payload.selectedProducts = [];
-        } else { // all_products
+        } else {
             payload.selectedProducts = [];
             payload.selectedCategories = [];
         }
@@ -503,7 +515,6 @@ function Discounts() {
     const method = isEditing ? "PUT" : "POST";
 
     try {
-      // --- 3. Send the clean payload ---
       await apiFetch(endpoint, method, payload);
       alert(`Promotion '${promotionForm.promotionName}' saved successfully.`);
       setShowPromotionModal(false);
@@ -515,34 +526,14 @@ function Discounts() {
     }
   };
 
-  const handleDeleteDiscount = async (discountId) => {
-    if (userRole === "manager") return;
-
-    if (!window.confirm("Are you sure you want to delete this discount?")) {
-      return;
-    }
-    try {
-      await apiFetch(`/discounts/${discountId}`, "DELETE");
-      alert("Discount deleted successfully.");
-      fetchDiscounts();
-    } catch (error) {
-      alert(`Error deleting discount: ${error.message}`);
-    }
+  const confirmDeleteDiscount = (discount) => {
+    setDeleteTarget({ type: "discount", id: discount.id, name: discount.name });
+    setDeleteError(null);
   };
 
-  const handleDeletePromotion = async (promotionId) => {
-    if (userRole === "manager") return;
-
-    if (!window.confirm("Are you sure you want to delete this promotion?")) {
-      return;
-    }
-    try {
-      await apiFetch(`/promotions/${promotionId}`, "DELETE");
-      alert("Promotion deleted successfully.");
-      fetchPromotions();
-    } catch (error) {
-      alert(`Error deleting promotion: ${error.message}`);
-    }
+  const confirmDeletePromotion = (promotion) => {
+    setDeleteTarget({ type: "promotion", id: promotion.id, name: promotion.name });
+    setDeleteError(null);
   };
 
   let discountColumns = [
@@ -550,33 +541,33 @@ function Discounts() {
       name: "NAME",
       selector: (row) => row.name,
       sortable: true,
-      width: "15%",
+      width: "18%",
       center: true,
     },
     {
       name: "DISCOUNT",
       selector: (row) => row.discount,
       sortable: true,
-      width: "10%",
+      width: "16%",
       center: true,
     },
     {
       name: "MIN SPEND",
       selector: (row) => `₱${row.minSpend.toFixed(2)}`,
       sortable: true,
-      width: "12%",
+      width: "16%",
       center: true,
     },
     {
       name: "APPLICATION",
       selector: (row) => row.application,
-      width: "15%",
+      width: "16%",
       center: true,
     },
     {
       name: "VALIDITY",
       selector: (row) => `${row.validFrom} - ${row.validTo}`,
-      width: "20%",
+      width: "18%",
       center: true,
     },
     {
@@ -590,72 +581,43 @@ function Discounts() {
           {row.status.toUpperCase()}
         </span>
       ),
-      width: "10%",
+      width: "16%",
       center: true,
     },
   ];
-
-  if (userRole !== "manager") {
-    discountColumns.push({
-      name: "ACTIONS",
-      cell: (row) => (
-        <div className="mngDiscountPromo-action-buttons">
-          <button
-            className="mngDiscountPromo-edit-btn"
-            onClick={() => handleDiscountModalOpen(row)}
-            title="Edit"
-          >
-            <FaEdit />
-          </button>
-          <button
-            className="mngDiscountPromo-delete-btn"
-            onClick={() => handleDeleteDiscount(row.id)}
-            title="Delete"
-          >
-            <FaTrash />
-          </button>
-        </div>
-      ),
-      ignoreRowClick: true,
-      allowOverflow: true,
-      button: true,
-      width: "18%",
-      center: true,
-    });
-  }
 
   let promotionColumns = [
     {
       name: "NAME",
       selector: (row) => row.name,
       sortable: true,
-      width: "15%",
-      center: true,
+      width: "18%",
+      left: true,
     },
     {
       name: "TYPE",
       selector: (row) => row.type,
       sortable: true,
-      width: "12%",
+      width: "16%",
       center: true,
     },
     {
       name: "VALUE",
       selector: (row) => row.value,
       sortable: true,
-      width: "10%",
+      width: "16%",
       center: true,
     },
     {
       name: "PRODUCTS",
       selector: (row) => row.products,
-      width: "18%",
+      width: "16%",
       center: true,
     },
     {
       name: "VALIDITY",
       selector: (row) => `${row.validFrom} - ${row.validTo}`,
-      width: "20%",
+      width: "18%",
       center: true,
     },
     {
@@ -669,39 +631,10 @@ function Discounts() {
           {row.status.toUpperCase()}
         </span>
       ),
-      width: "10%",
+      width: "16%",
       center: true,
     },
   ];
-
-  if (userRole !== "manager") {
-    promotionColumns.push({
-      name: "ACTIONS",
-      cell: (row) => (
-        <div className="mngDiscountPromo-action-buttons">
-          <button
-            className="mngDiscountPromo-edit-btn"
-            onClick={() => handlePromotionModalOpen(row)}
-            title="Edit"
-          >
-            <FaEdit />
-          </button>
-          <button
-            className="mngDiscountPromo-delete-btn"
-            onClick={() => handleDeletePromotion(row.id)}
-            title="Delete"
-          >
-            <FaTrash />
-          </button>
-        </div>
-      ),
-      ignoreRowClick: true,
-      allowOverflow: true,
-      button: true,
-      width: "15%",
-      center: true,
-    });
-  }
 
   if (authError) {
     return (
@@ -749,195 +682,209 @@ function Discounts() {
       <div className="mngDiscountPromo">
         <Header pageTitle="Discount & Promotion Management" />
         <div className="mngDiscountPromo-content">
-          <div className="mngDiscountPromo-tabs">
-            <button
-              className={`mngDiscountPromo-tab ${
-                activeTab === "discounts" ? "mngDiscountPromo-tab-active" : ""
-              }`}
-              onClick={() => setActiveTab("discounts")}
-            >
-              Discounts
-            </button>
-            <button
-              className={`mngDiscountPromo-tab ${
-                activeTab === "promotions" ? "mngDiscountPromo-tab-active" : ""
-              }`}
-              onClick={() => setActiveTab("promotions")}
-            >
-              Promotions
-            </button>
+          {/* Tabs and Filter Wrapper */}
+          <div className="mngDiscountPromo-tabs-filter-wrapper">
+            {/* Tabs */}
+            <div className="mngDiscountPromo-tabs">
+              <button
+                className={`mngDiscountPromo-tab ${
+                  activeTab === "discounts" ? "mngDiscountPromo-tab-active" : ""
+                }`}
+                onClick={() => setActiveTab("discounts")}
+              >
+                Discounts
+              </button>
+              <button
+                className={`mngDiscountPromo-tab ${
+                  activeTab === "promotions" ? "mngDiscountPromo-tab-active" : ""
+                }`}
+                onClick={() => setActiveTab("promotions")}
+              >
+                Promotions
+              </button>
+            </div>
+
+            {/* Filter and Add Button Wrapper */}
+            {!loading && (
+              <div className="mngDiscountPromo-filter-wrapper">
+                {/* Filter Bar with Toggle */}
+                <div className={`mngDiscountPromo-filter-bar ${isFilterOpen ? "open" : "collapsed"}`}>
+                  <button
+                    className="mngDiscountPromo-filter-toggle-btn"
+                    onClick={() => setIsFilterOpen(!isFilterOpen)}
+                  >
+                    <FaFilter />
+                  </button>
+
+                  {/* Search */}
+                  <div className="mngDiscountPromo-filter-item">
+                    <div className="mngDiscountPromo-search-wrapper">
+                      <FaSearch className="mngDiscountPromo-search-icon" />
+                      <input
+                        type="text"
+                        placeholder={activeTab === "discounts" ? "Search Discount Name..." : "Search Promotion Name..."}
+                        value={searchTerm}
+                        onChange={(e) => setSearchTerm(e.target.value)}
+                        className="mngDiscountPromo-search-input"
+                      />
+                    </div>
+                  </div>
+
+                  {/* Application Filter (only for discounts) */}
+                  {activeTab === "discounts" && (
+                    <div className="mngDiscountPromo-filter-item">
+                      <span>Application:</span>
+                      <select
+                        value={applicationFilter}
+                        onChange={(e) => setApplicationFilter(e.target.value)}
+                        className="mngDiscountPromo-select"
+                      >
+                        <option value="">All Applications</option>
+                        {uniqueApplications.map((app) => (
+                          <option key={app} value={app}>
+                            {app}
+                          </option>
+                        ))}
+                      </select>
+                    </div>
+                  )}
+
+                  {/* Status Filter */}
+                  <div className="mngDiscountPromo-filter-item">
+                    <span>Status:</span>
+                    <select
+                      value={statusFilter}
+                      onChange={(e) => setStatusFilter(e.target.value)}
+                      className="mngDiscountPromo-select"
+                    >
+                      <option value="">All Status</option>
+                      {uniqueStatuses.map((status) => (
+                        <option key={status} value={status}>
+                          {status.charAt(0).toUpperCase() + status.slice(1).toLowerCase()}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+
+                  {/* Clear Filters Button */}
+                  <button
+                    className="mngDiscountPromo-clear-btn"
+                    onClick={handleClearFilters}
+                  >
+                    Clear Filters
+                  </button>
+                </div>
+
+                {/* Add Button (Outside Filter Bar) */}
+                {userRole !== "manager" && (
+                  <button
+                  className="mngDiscountPromo-add-btn"
+                  onClick={() =>
+                    activeTab === "discounts" ? handleDiscountModalOpen() : handlePromotionModalOpen()
+                  }
+                >
+                  <FaPlus /> {activeTab === "discounts" ? "Add Discount" : "Add Promotion"}
+                </button>
+                )}
+              </div>
+            )}
           </div>
 
-          {activeTab === "discounts" && (
+          {/* Loading State */}
+          {loading ? (
+            <div className="loading-container">
+              <div className="loading-bg">
+                <Lottie animationData={loadingAnimation} loop={true} className="loading-animation" />
+              </div>
+            </div>
+          ) : (
             <>
-              <div className="mngDiscountPromo-filter-bar">
-                <input
-                  type="text"
-                  placeholder="Search Discount Name..."
-                  value={searchTerm}
-                  onChange={(e) => setSearchTerm(e.target.value)}
-                />
-                <select
-                  value={applicationFilter}
-                  onChange={(e) => setApplicationFilter(e.target.value)}
-                >
-                  <option value="">All Applications</option>
-                  {uniqueApplications.map((app) => (
-                    <option key={app} value={app}>
-                      {app}
-                    </option>
-                  ))}
-                </select>
-                <select
-                  value={statusFilter}
-                  onChange={(e) => setStatusFilter(e.target.value)}
-                >
-                  <option value="">All Status</option>
-                  {uniqueStatuses.map((status) => (
-                    <option key={status} value={status}>
-                      {status}
-                    </option>
-                  ))}
-                </select>
-                <button
-                  className="mngDiscountPromo-clear-btn"
-                  onClick={handleClearFilters}
-                >
-                  Clear Filters
-                </button>
-                {userRole !== "manager" && (
-                  <button
-                    className="mngDiscountPromo-add-btn"
-                    onClick={() => handleDiscountModalOpen()}
-                  >
-                    <FaPlus /> Add Discount
-                  </button>
-                )}
-              </div>
+              {activeTab === "discounts" && (
+                <div className="mngDiscountPromo-table-container">
+                  <DataTable
+                    columns={discountColumns}
+                    data={filteredDiscounts}
+                    striped
+                    highlightOnHover
+                    responsive
+                    pagination
+                    paginationRowsPerPageOptions={[10]}
+                    fixedHeader
+                    fixedHeaderScrollHeight="60vh"
+                    pointerOnHover
+                    onRowClicked={(row) => {
+                      setSelectedDiscount(row);
+                      setIsDiscountDetailsOpen(true);
+                    }}
+                    noDataComponent={
+                      <div style={{ padding: "24px" }}>No discounts found.</div>
+                    }
+                    customStyles={{
+                      headCells: {
+                        style: {
+                          backgroundColor: "#4B929D",
+                          color: "#fff",
+                          fontWeight: "600",
+                          fontSize: "14px",
+                          padding: "12px",
+                          textTransform: "uppercase",
+                          textAlign: "center",
+                          letterSpacing: "1px",
+                        },
+                      },
+                      rows: {
+                        style: {
+                          minHeight: "55px",
+                          padding: "5px",
+                        },
+                      },
+                    }}
+                  />
+                </div>
+              )}
 
-              <div className="mngDiscountPromo-table-container">
-                <DataTable
-                  columns={discountColumns}
-                  data={filteredDiscounts}
-                  striped
-                  highlightOnHover
-                  responsive
-                  pagination
-                  fixedHeader
-                  fixedHeaderScrollHeight="60vh"
-                  pointerOnHover
-                  progressPending={loading}
-                  progressComponent={
-                    <div style={{ padding: "24px", textAlign: "center" }}>
-                      Loading discounts...
-                    </div>
-                  }
-                  noDataComponent={
-                    <div style={{ padding: "24px" }}>No discounts found.</div>
-                  }
-                  customStyles={{
-                    headCells: {
-                      style: {
-                        backgroundColor: "#4B929D",
-                        color: "#fff",
-                        fontWeight: "600",
-                        fontSize: "14px",
-                        padding: "12px",
-                        textTransform: "uppercase",
-                        textAlign: "center",
-                        letterSpacing: "1px",
+              {activeTab === "promotions" && (
+                <div className="mngDiscountPromo-table-container">
+                  <DataTable
+                    columns={promotionColumns}
+                    data={filteredPromotions}
+                    striped
+                    highlightOnHover
+                    responsive
+                    pagination
+                    fixedHeader
+                    fixedHeaderScrollHeight="60vh"
+                    pointerOnHover
+                    onRowClicked={(row) => {
+                      setSelectedPromotion(row);
+                      setIsPromotionDetailsOpen(true);
+                    }}
+                    noDataComponent={
+                      <div style={{ padding: "24px" }}>No promotions found.</div>
+                    }
+                    customStyles={{
+                      headCells: {
+                        style: {
+                          backgroundColor: "#4B929D",
+                          color: "#fff",
+                          fontWeight: "600",
+                          fontSize: "14px",
+                          padding: "12px",
+                          textTransform: "uppercase",
+                          textAlign: "center",
+                          letterSpacing: "1px",
+                        },
                       },
-                    },
-                    rows: {
-                      style: {
-                        minHeight: "55px",
-                        padding: "5px",
+                      rows: {
+                        style: {
+                          minHeight: "55px",
+                          padding: "5px",
+                        },
                       },
-                    },
-                  }}
-                />
-              </div>
-            </>
-          )}
-
-          {activeTab === "promotions" && (
-            <>
-              <div className="mngDiscountPromo-filter-bar">
-                <input
-                  type="text"
-                  placeholder="Search Promotion Name..."
-                  value={searchTerm}
-                  onChange={(e) => setSearchTerm(e.target.value)}
-                />
-                <select
-                  value={statusFilter}
-                  onChange={(e) => setStatusFilter(e.target.value)}
-                >
-                  <option value="">All Status</option>
-                  {uniqueStatuses.map((status) => (
-                    <option key={status} value={status}>
-                      {status}
-                    </option>
-                  ))}
-                </select>
-                <button
-                  className="mngDiscountPromo-clear-btn"
-                  onClick={handleClearFilters}
-                >
-                  Clear Filters
-                </button>
-                {userRole !== "manager" && (
-                  <button
-                    className="mngDiscountPromo-add-btn"
-                    onClick={() => handlePromotionModalOpen()}
-                  >
-                    <FaPlus /> Add Promotion
-                  </button>
-                )}
-              </div>
-
-              <div className="mngDiscountPromo-table-container">
-                <DataTable
-                  columns={promotionColumns}
-                  data={filteredPromotions}
-                  striped
-                  highlightOnHover
-                  responsive
-                  pagination
-                  fixedHeader
-                  fixedHeaderScrollHeight="60vh"
-                  pointerOnHover
-                  progressPending={loading}
-                  progressComponent={
-                    <div style={{ padding: "24px", textAlign: "center" }}>
-                      Loading promotions...
-                    </div>
-                  }
-                  noDataComponent={
-                    <div style={{ padding: "24px" }}>No promotions found.</div>
-                  }
-                  customStyles={{
-                    headCells: {
-                      style: {
-                        backgroundColor: "#4B929D",
-                        color: "#fff",
-                        fontWeight: "600",
-                        fontSize: "14px",
-                        padding: "12px",
-                        textTransform: "uppercase",
-                        textAlign: "center",
-                        letterSpacing: "1px",
-                      },
-                    },
-                    rows: {
-                      style: {
-                        minHeight: "55px",
-                        padding: "5px",
-                      },
-                    },
-                  }}
-                />
-              </div>
+                    }}
+                  />
+                </div>
+              )}
             </>
           )}
 
@@ -975,8 +922,87 @@ function Discounts() {
               />
             </>
           )}
+
+          {/* Always show details modals to allow viewing */}
+          <DiscountDetailsModal
+            show={isDiscountDetailsOpen}
+            onClose={() => setIsDiscountDetailsOpen(false)}
+            discount={selectedDiscount}
+            userRole={userRole}
+            onEdit={(discount) => {
+              setIsDiscountDetailsOpen(false);
+              handleDiscountModalOpen(discount);
+            }}
+            onDelete={(discount) => {
+              setIsDiscountDetailsOpen(false);
+              confirmDeleteDiscount(discount);
+            }}
+          />
+
+          <PromotionDetailsModal
+            show={isPromotionDetailsOpen}
+            onClose={() => setIsPromotionDetailsOpen(false)}
+            promotion={selectedPromotion}
+            userRole={userRole}
+            onEdit={(promotion) => {
+              setIsPromotionDetailsOpen(false);
+              handlePromotionModalOpen(promotion);
+            }}
+            onDelete={(promotion) => {
+              setIsPromotionDetailsOpen(false);
+              confirmDeletePromotion(promotion);
+            }}
+          />
         </div>
       </div>
+      {deleteTarget && (
+      <div className="mngDiscountPromo-delete-overlay" onClick={() => !isDeleting && setDeleteTarget(null)}>
+        <div className="mngDiscountPromo-delete-modal" onClick={(e) => e.stopPropagation()}>
+          <div className="mngDiscountPromo-delete-close" onClick={() => !isDeleting && setDeleteTarget(null)}>
+            &times;
+          </div>
+          <div className="mngDiscountPromo-delete-icon alert-danger">
+            <HiOutlineExclamation />
+          </div>
+          <h1>Confirm Delete</h1>
+          <p>
+            Are you sure you want to delete this?
+          </p>
+
+          {deleteError && <div className="mngDiscountPromo-delete-error">{deleteError}</div>}
+
+          <div className="mngDiscountPromo-delete-button-group">
+            <button
+              onClick={async () => {
+                if (!deleteTarget) return;
+                setIsDeleting(true);
+                setDeleteError(null);
+                try {
+                  if (deleteTarget.type === "discount") {
+                    await apiFetch(`/discounts/${deleteTarget.id}`, "DELETE");
+                    fetchDiscounts();
+                  } else {
+                    await apiFetch(`/promotions/${deleteTarget.id}`, "DELETE");
+                    fetchPromotions();
+                  }
+                  setDeleteTarget(null);
+                } catch (error) {
+                  setDeleteError(error.message);
+                } finally {
+                  setIsDeleting(false);
+                }
+              }}
+              disabled={isDeleting}
+            >
+              {isDeleting ? "Deleting..." : "Delete"}
+            </button>
+            <button onClick={() => !isDeleting && setDeleteTarget(null)} disabled={isDeleting}>
+              Cancel
+            </button>
+          </div>
+        </div>
+      </div>
+    )}
     </div>
   );
 }

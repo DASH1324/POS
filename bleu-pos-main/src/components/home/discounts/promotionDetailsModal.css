@@ -1,0 +1,200 @@
+/* Details Modal */
+.promotionDetails-container {
+  background: #fff;
+  padding: 30px;
+  border-radius: 12px;
+  width: 540px;
+  max-width: 90%;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.15);
+  position: relative;
+  overflow: hidden;
+  animation: fadeInScale 0.25s ease-out;
+}
+
+.promotionDetails-container::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 3px;
+  background: #4197a2;
+  z-index: 10;
+}
+
+@keyframes fadeInScale {
+  from {
+    opacity: 0;
+    transform: scale(0.95);
+  }
+  to {
+    opacity: 1;
+    transform: scale(1);
+  }
+}
+
+.promotionDetails-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 20px;
+  border-bottom: 1px solid #eee;
+  padding-bottom: 8px;
+}
+
+.promotionDetails-header h2 {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  font-size: 1.5rem;
+  font-weight: 600;
+  color: #1a1a1a;
+  margin: 0;
+}
+
+.promotionDetails-header-icons {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-left: 8px;
+}
+
+.promotionDetails-header-icons svg {
+  font-size: 20px;
+  cursor: pointer;
+  opacity: 0.85;
+  transition: color 0.2s ease, opacity 0.2s ease, transform 0.2s ease;
+}
+
+.promotionDetails-icon-edit {
+  color: #007bff;
+}
+
+.promotionDetails-icon-edit:hover {
+  color: #0056b3;
+  opacity: 1;
+  transform: scale(1.1);
+}
+
+.promotionDetails-icon-delete {
+  color: #d9534f;
+}
+
+.promotionDetails-icon-delete:hover {
+  color: #c9302c;
+  opacity: 1;
+  transform: scale(1.1);
+}
+
+.promotionDetails-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 20px 24px;
+  margin-bottom: 24px;
+}
+
+.promotionDetails-item {
+  display: flex;
+  flex-direction: column;
+}
+
+.promotionDetails-label {
+  font-size: 13px;
+  color: #666;
+  margin-bottom: 4px;
+  font-weight: 400;
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+}
+
+.promotionDetails-value {
+  font-size: 15px;
+  color: #1a1a1a;
+  font-weight: 500;
+}
+
+.promotionDetails-item.promotionDetails-full-width {
+  grid-column: 1 / -1;
+}
+
+.promotionDetails-status-badge {
+  padding: 4px 12px;
+  border-radius: 12px;
+  font-size: 12px;
+  font-weight: 600;
+  text-transform: uppercase;
+  width: fit-content;
+}
+
+.promotionDetails-status-badge.active {
+  background-color: #d4edda;
+  color: #28a745;
+  border: 1px solid #c3e6cb;
+}
+
+.promotionDetails-status-badge.inactive {
+  background-color: #f8d7da;
+  color: #721c24;
+  border: 1px solid #f5c6cb;
+}
+
+.promotionDetails-status-badge.expired {
+  background-color: #fff3cd;
+  color: #856404;
+  border: 1px solid #ffeaa7;
+}
+
+/* Close button for Promotion Details Modal */
+.promotionDetails-close-button {
+  position: absolute;
+  top: 12px;
+  right: 12px;
+  width: 32px;
+  height: 32px;
+  background: none;
+  border: none;
+  font-size: 20px;
+  color: #999;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: color 0.2s ease, transform 0.2s ease;
+  z-index: 20;
+}
+
+.promotionDetails-close-button:hover {
+  color: #333;
+  transform: scale(1.1);
+}
+
+.promotion-modal-overlay {
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  background-color: rgba(0, 0, 0, 0.4);
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  z-index: 1100;
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto', sans-serif;
+}
+
+/* Responsive Design */
+@media (max-width: 768px) {
+  .promotionDetails-container {
+    width: 95%;
+    padding: 24px;
+  }
+
+  .promotionDetails-grid {
+    grid-template-columns: 1fr;
+    gap: 16px;
+  }
+
+  .promotionDetails-header h2 {
+    font-size: 1.3rem;
+  }
+}

@@ -1,0 +1,196 @@
+/* Details Modal */
+.discountDetails-container {
+  background: #fff;
+  padding: 30px;
+  border-radius: 12px;
+  width: 540px;
+  max-width: 90%;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.15);
+  position: relative;
+  overflow: hidden;
+  animation: fadeInScale 0.25s ease-out;
+}
+
+.discountDetails-container::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 3px;
+  background: #4197a2;
+  z-index: 10;
+}
+
+@keyframes fadeInScale {
+  from {
+    opacity: 0;
+    transform: scale(0.95);
+  }
+  to {
+    opacity: 1;
+    transform: scale(1);
+  }
+}
+
+.discountDetails-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 20px;
+  border-bottom: 1px solid #eee;
+  padding-bottom: 8px;
+}
+
+.discountDetails-header h2 {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  font-size: 1.5rem;
+  font-weight: 600;
+  color: #1a1a1a;
+  margin: 0;
+}
+
+.discountDetails-header-icons {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-left: 8px;
+}
+
+.discountDetails-header-icons svg {
+  font-size: 20px;
+  cursor: pointer;
+  opacity: 0.85;
+  transition: color 0.2s ease, opacity 0.2s ease, transform 0.2s ease;
+}
+
+.discountDetails-icon-edit {
+  color: #007bff;
+}
+
+.discountDetails-icon-edit:hover {
+  color: #0056b3;
+  opacity: 1;
+  transform: scale(1.1);
+}
+
+.discountDetails-icon-delete {
+  color: #d9534f;
+}
+
+.discountDetails-icon-delete:hover {
+  color: #c9302c;
+  opacity: 1;
+  transform: scale(1.1);
+}
+
+.discountDetails-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 20px 24px;
+  margin-bottom: 24px;
+}
+
+.discountDetails-item {
+  display: flex;
+  flex-direction: column;
+}
+
+.discountDetails-label {
+  font-size: 13px;
+  color: #666;
+  margin-bottom: 4px;
+  font-weight: 400;
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+}
+
+.discountDetails-value {
+  font-size: 15px;
+  color: #1a1a1a;
+  font-weight: 500;
+}
+
+.discountDetails-status-badge {
+  padding: 4px 12px;
+  border-radius: 12px;
+  font-size: 12px;
+  font-weight: 600;
+  text-transform: uppercase;
+  width: fit-content;
+}
+
+.discountDetails-status-badge.active {
+  background-color: #d4edda;
+  color: #28a745;
+  border: 1px solid #c3e6cb;
+}
+
+.discountDetails-status-badge.inactive {
+  background-color: #f8d7da;
+  color: #721c24;
+  border: 1px solid #f5c6cb;
+}
+
+.discountDetails-status-badge.expired {
+  background-color: #fff3cd;
+  color: #856404;
+  border: 1px solid #ffeaa7;
+}
+
+/* Close button for Discount Details Modal */
+.discountDetails-close-button {
+  position: absolute;
+  top: 12px;
+  right: 12px;
+  width: 32px;
+  height: 32px;
+  background: none;
+  border: none;
+  font-size: 20px;
+  color: #999;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: color 0.2s ease, transform 0.2s ease;
+  z-index: 20;
+}
+
+.discountDetails-close-button:hover {
+  color: #333;
+  transform: scale(1.1);
+}
+
+.discount-modal-overlay {
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  background-color: rgba(0, 0, 0, 0.4);
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  z-index: 1100;
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto', sans-serif;
+}
+
+/* Responsive Design */
+@media (max-width: 768px) {
+  .discountDetails-container {
+    width: 95%;
+    padding: 24px;
+  }
+
+  .discountDetails-grid {
+    grid-template-columns: 1fr;
+    gap: 16px;
+  }
+
+  .discountDetails-header h2 {
+    font-size: 1.3rem;
+  }
+}

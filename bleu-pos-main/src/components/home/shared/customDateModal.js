@@ -83,7 +83,7 @@ function CustomDateModal({ show, onClose, onApply, initialStart, initialEnd }) {
 
         <div className="customDateModal-footer">
           <button className="customDateModal-btn-confirm" onClick={handleApply}>
-            Apply Range
+            Apply Date Range
           </button>
         </div>
       </div>

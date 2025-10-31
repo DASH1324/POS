@@ -1,5 +1,3 @@
-# routers/discount.py
-
 from fastapi import APIRouter, Depends, HTTPException, status
 from fastapi.security import OAuth2PasswordBearer
 from pydantic import BaseModel, Field
@@ -52,7 +50,7 @@ async def auto_expire_discounts(conn):
             sql_expire = """
                 UPDATE discounts 
                 SET status = 'expired', updated_at = GETDATE()
-                WHERE valid_to < ? AND status != 'expired'
+                WHERE valid_to < ? AND status != 'expired' AND isDeleted = 0
             """
             await cursor.execute(sql_expire, today)
             await conn.commit()
@@ -121,8 +119,8 @@ async def create_discount(discount_data: DiscountCreate, token: str = Depends(oa
         conn.autocommit = False
         async with conn.cursor() as cursor:
             sql_insert = """
-                INSERT INTO discounts (name, status, application_type, discount_type, discount_value, minimum_spend, valid_from, valid_to)
-                OUTPUT INSERTED.id VALUES (?, ?, ?, ?, ?, ?, ?, ?);
+                INSERT INTO discounts (name, status, application_type, discount_type, discount_value, minimum_spend, valid_from, valid_to, isDeleted)
+                OUTPUT INSERTED.id VALUES (?, ?, ?, ?, ?, ?, ?, ?, 0);
             """
             await cursor.execute(sql_insert, discount_data.discountName, discount_data.status, discount_data.applicationType,
                                  discount_data.discountType, discount_data.discountValue, discount_data.minSpend,
@@ -153,7 +151,7 @@ async def get_all_discounts(token: str = Depends(oauth2_scheme)):
         await auto_expire_discounts(conn)
         
         async with conn.cursor() as cursor:
-            await cursor.execute("SELECT id, name, status, application_type, discount_type, discount_value, minimum_spend, valid_from, valid_to FROM discounts ORDER BY id DESC")
+            await cursor.execute("SELECT id, name, status, application_type, discount_type, discount_value, minimum_spend, valid_from, valid_to FROM discounts WHERE isDeleted = 0 ORDER BY id DESC")
             discounts_raw = await cursor.fetchall()
             discounts_map = {row.id: {"data": dict(zip([c[0] for c in cursor.description], row)), "products": [], "categories": []} for row in discounts_raw}
             
@@ -203,7 +201,7 @@ async def get_discount(discount_id: int, token: str = Depends(oauth2_scheme)):
         await auto_expire_discounts(conn)
         
         async with conn.cursor() as cursor:
-            await cursor.execute("SELECT * FROM discounts WHERE id=?", discount_id)
+            await cursor.execute("SELECT * FROM discounts WHERE id=? AND isDeleted = 0", discount_id)
             d = await cursor.fetchone()
             if not d: raise HTTPException(status_code=404, detail="Discount not found")
             
@@ -232,7 +230,7 @@ async def update_discount(discount_id: int, discount_data: DiscountUpdate, token
         async with conn.cursor() as cursor:
             sql_update = """
                 UPDATE discounts SET name=?, status=?, application_type=?, discount_type=?, discount_value=?, minimum_spend=?, valid_from=?, valid_to=?, updated_at=GETDATE()
-                WHERE id=?
+                WHERE id=? AND isDeleted = 0
             """
             await cursor.execute(sql_update, discount_data.discountName, discount_data.status, discount_data.applicationType,
                                  discount_data.discountType, discount_data.discountValue, discount_data.minSpend,
@@ -264,9 +262,8 @@ async def delete_discount(discount_id: int, token: str = Depends(oauth2_scheme))
     try:
         conn.autocommit = False
         async with conn.cursor() as cursor:
-            await cursor.execute("DELETE FROM discount_applicable_products WHERE discount_id=?", discount_id)
-            await cursor.execute("DELETE FROM discount_applicable_categories WHERE discount_id=?", discount_id)
-            await cursor.execute("DELETE FROM discounts WHERE id=?", discount_id)
+            # Soft delete: set isDeleted to 1
+            await cursor.execute("UPDATE discounts SET isDeleted = 1, updated_at = GETDATE() WHERE id = ? AND isDeleted = 0", discount_id)
             if cursor.rowcount == 0: raise HTTPException(status_code=404, detail="Discount not found")
             await conn.commit()
             return {"message": "Discount deleted successfully."}

@@ -156,6 +156,19 @@
 
 /* No data modal variant */
 .salesRep-export-nodata {
-  width: 380px;
-  padding: 35px;
+  width: 440px;
+  padding: 40px;
+}
+
+.salesRep-export-nodata h1 {
+  font-size: 22px;
+  font-weight: 700;
+  color: #1a1a1a;
+  margin-bottom: 8px;
+}
+
+.salesRep-export-nodata p {
+  font-size: 16px;
+  color: #666;
+  margin-bottom: 10px;
 }

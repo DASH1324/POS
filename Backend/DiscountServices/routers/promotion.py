@@ -49,7 +49,7 @@ async def auto_expire_promotions(conn):
             sql_expire = """
                 UPDATE promotions 
                 SET status = 'expired', updated_at = GETDATE()
-                WHERE valid_to < ? AND status != 'expired'
+                WHERE valid_to < ? AND status != 'expired' AND isDeleted = 0
             """
             await cursor.execute(sql_expire, today)
             await conn.commit()
@@ -142,9 +142,9 @@ async def create_promotion(promotion_data: PromotionCreate, token: str = Depends
             sql_insert = """
                 INSERT INTO promotions 
                 (name, description, application_type, promotion_type, promotion_value, buy_quantity, get_quantity, 
-                 bogo_discount_type, bogo_discount_value, min_quantity, valid_from, valid_to, status)
+                 bogo_discount_type, bogo_discount_value, min_quantity, valid_from, valid_to, status, isDeleted)
                 OUTPUT INSERTED.id 
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?);
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0);
             """
             await cursor.execute(sql_insert, 
                 promotion_data.promotionName,
@@ -200,6 +200,7 @@ async def get_all_promotions(token: str = Depends(oauth2_scheme)):
                 SELECT id, name, application_type, promotion_type, promotion_value, buy_quantity, get_quantity,
                        bogo_discount_type, bogo_discount_value, valid_from, valid_to, status 
                 FROM promotions 
+                WHERE isDeleted = 0
                 ORDER BY id DESC
             """)
             promotions_raw = await cursor.fetchall()
@@ -275,7 +276,7 @@ async def get_promotion(promotion_id: int, token: str = Depends(oauth2_scheme)):
         await auto_expire_promotions(conn)
         
         async with conn.cursor() as cursor:
-            await cursor.execute("SELECT * FROM promotions WHERE id=?", promotion_id)
+            await cursor.execute("SELECT * FROM promotions WHERE id=? AND isDeleted = 0", promotion_id)
             p = await cursor.fetchone()
             if not p:
                 raise HTTPException(status_code=404, detail="Promotion not found")
@@ -343,7 +344,7 @@ async def update_promotion(promotion_id: int, promotion_data: PromotionUpdate, t
                 SET name=?, description=?, application_type=?, promotion_type=?, promotion_value=?, buy_quantity=?, get_quantity=?,
                     bogo_discount_type=?, bogo_discount_value=?, min_quantity=?, valid_from=?, valid_to=?, 
                     status=?, updated_at=GETDATE()
-                WHERE id=?
+                WHERE id=? AND isDeleted = 0
             """
             await cursor.execute(sql_update,
                 promotion_data.promotionName,
@@ -391,9 +392,8 @@ async def delete_promotion(promotion_id: int, token: str = Depends(oauth2_scheme
     try:
         conn.autocommit = False
         async with conn.cursor() as cursor:
-            await cursor.execute("DELETE FROM promotion_applicable_products WHERE promotion_id=?", promotion_id)
-            await cursor.execute("DELETE FROM promotion_applicable_categories WHERE promotion_id=?", promotion_id)
-            await cursor.execute("DELETE FROM promotions WHERE id=?", promotion_id)
+            # Soft delete: set isDeleted to 1
+            await cursor.execute("UPDATE promotions SET isDeleted = 1, updated_at = GETDATE() WHERE id = ? AND isDeleted = 0", promotion_id)
             
             if cursor.rowcount == 0:
                 raise HTTPException(status_code=404, detail="Promotion not found")

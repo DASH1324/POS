@@ -1,6 +1,3 @@
-
-/* ==================== DISCOUNT MODAL ==================== */
-
 .mngDiscounts-modal::before {
   content: '';
   position: absolute;
@@ -233,9 +230,8 @@
 .mngDiscounts-modal-footer {
   display: flex;
   gap: 10px;
-  padding: 16px 24px;
   border-top: 1px solid #f0f0f0;
-  background-color: #fafafa;
+  background-color: #ffffff;
 }
 
 .mngDiscounts-modal-footer button {

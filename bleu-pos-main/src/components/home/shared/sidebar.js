@@ -7,8 +7,7 @@ import logo from '../../../assets/logo.png';
 import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
 import {
   faBars, faHome, faChartBar, faFileAlt, faTags, faBoxes,
-  faReceipt, faWarning,
-  faAreaChart
+  faReceipt, faWarning, faClockRotateLeft
 } from '@fortawesome/free-solid-svg-icons';
 
 function SidebarComponent() {
@@ -56,13 +55,6 @@ function SidebarComponent() {
                 Dashboard
               </MenuItem>
               <MenuItem
-                icon={<FontAwesomeIcon icon={faChartBar} />}
-                component={<Link to="/home/salesMonitoring" />}
-                active={location.pathname === '/home/salesMonitoring'}
-              >
-                Sales Monitoring
-              </MenuItem>
-              <MenuItem
                 icon={<FontAwesomeIcon icon={faFileAlt} />}
                 component={<Link to="/home/transactionHistory" />}
                 active={location.pathname === '/home/transactionHistory'}
@@ -83,16 +75,20 @@ function SidebarComponent() {
               >
                 Discounts
               </MenuItem>
-              
-                <MenuItem
-                  icon={<FontAwesomeIcon icon={faWarning} />}
-                  component={<Link to="/home/spillage" />}
-                  active={location.pathname === '/home/spillage'}
-                >
-                  Spillage
-                </MenuItem>
-
-              {!collapsed && <div className="section-title">REPORTS</div>}
+              <MenuItem
+                icon={<FontAwesomeIcon icon={faWarning} />}
+                component={<Link to="/home/spillage" />}
+                active={location.pathname === '/home/spillage'}
+              >
+                Spillage
+              </MenuItem>
+              <MenuItem
+                icon={<FontAwesomeIcon icon={faChartBar} />}
+                component={<Link to="/home/salesMonitoring" />}
+                active={location.pathname === '/home/salesMonitoring'}
+              >
+                Sales Monitoring
+              </MenuItem>
               <MenuItem
                 icon={<FontAwesomeIcon icon={faReceipt} />}
                 component={<Link to="/home/salesReport" />}
@@ -101,11 +97,11 @@ function SidebarComponent() {
                 Sales Report
               </MenuItem>
               <MenuItem
-                icon={<FontAwesomeIcon icon={faAreaChart} />}
-                component={<Link to="/home/transactionReport" />}
-                active={location.pathname === '/home/transactionReport'}
+                icon={<FontAwesomeIcon icon={faClockRotateLeft} />}
+                component={<Link to="/home/activityLogs" />}
+                active={location.pathname === '/home/activityLogs'}
               >
-                Transaction Report
+                Activity Logs
               </MenuItem>
             </Menu>
           </div>
