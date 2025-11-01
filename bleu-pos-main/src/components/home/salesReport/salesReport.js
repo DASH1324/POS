@@ -17,6 +17,8 @@ import Lottie from "lottie-react";
 import loadingAnimation from "../../../assets/animation/loading.json";
 import '../../confirmAlertCustom.css';
 
+const CASHIERS_API_URL = "http://127.0.0.1:4000/users/cashiers";
+
 // Helper function to format dates for the API (YYYY-MM-DD)
 const formatDateForAPI = (date) => {
   const year = date.getFullYear();
@@ -38,7 +40,6 @@ const getPeriodText = (tab, customStart = null, customEnd = null) => {
     }
     case "custom": {
       if (customStart && customEnd) {
-        // Adjust for timezone display issues if necessary
         const startDate = new Date(customStart + 'T00:00:00');
         const endDate = new Date(customEnd + 'T00:00:00');
         const start = startDate.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
@@ -56,25 +57,74 @@ function SalesReport() {
   // --- STATE MANAGEMENT ---
   const [activeTab, setActiveTab] = useState("today");
   const [selectedCashier, setSelectedCashier] = useState("all");
+  const [cashiersList, setCashiersList] = useState([]);
   const [selectedBranch, setSelectedBranch] = useState("main");
   const [isCustomModalOpen, setIsCustomModalOpen] = useState(false);
   const [isFilterOpen, setIsFilterOpen] = useState(false);
-  const [isLoading, setIsLoading] = useState(true); // Start with loading true
+  const [isLoading, setIsLoading] = useState(true);
+  const [isCashiersLoading, setIsCashiersLoading] = useState(true);
   const [error, setError] = useState(null);
   const [currentPeriodText, setCurrentPeriodText] = useState(getPeriodText("today"));
   const [customRange, setCustomRange] = useState({ start: null, end: null });
-  const [reportData, setReportData] = useState(null); // State to hold API data
+  const [reportData, setReportData] = useState(null);
   const [salesBreakdownTab, setSalesBreakdownTab] = useState('category');
   const [financialTab, setFinancialTab] = useState('cashDrawer');
+
+  // --- FETCH CASHIERS LIST ---
+  useEffect(() => {
+    const fetchCashiers = async () => {
+      try {
+        const token = localStorage.getItem('authToken');
+        if (!token) {
+          throw new Error("Authentication token not found. Please log in.");
+        }
+
+        const response = await fetch(CASHIERS_API_URL, {
+          method: 'GET',
+          headers: {
+            'Authorization': `Bearer ${token}`
+          }
+        });
+
+        if (!response.ok) {
+          throw new Error(`Failed to fetch cashiers: ${response.status}`);
+        }
+
+        const data = await response.json();
+        console.log("Cashiers API Response:", data);
+        
+        // Normalize the data to handle both Username and username
+        const normalizedData = data.map(cashier => ({
+          ...cashier,
+          username: cashier.Username || cashier.username,
+          fullName: cashier.FullName || cashier.fullName
+        }));
+        
+        setCashiersList(normalizedData);
+      } catch (err) {
+        console.error("Error fetching cashiers:", err);
+      } finally {
+        setIsCashiersLoading(false);
+      }
+    };
+
+    fetchCashiers();
+  }, []);
 
   // --- API DATA FETCHING ---
   useEffect(() => {
     const fetchSalesReport = async () => {
       setIsLoading(true);
       setError(null);
-      setReportData(null); // Clear previous data
+      setReportData(null);
 
       const requestBody = { reportType: activeTab };
+      
+      // Add cashier filter if not "all"
+      if (selectedCashier && selectedCashier !== "all") {
+        requestBody.cashierName = selectedCashier;
+      }
+      
       if (activeTab === 'custom') {
         if (!customRange.start || !customRange.end) {
           setIsLoading(false);
@@ -85,14 +135,16 @@ function SalesReport() {
         requestBody.endDate = customRange.end;
       }
       
+      console.log("=== SALES REPORT REQUEST ===");
+      console.log("Request Body:", requestBody);
+      
       try {
-        // Assumes the auth token is stored in localStorage after login
         const token = localStorage.getItem('authToken');
         if (!token) {
             throw new Error("Authentication token not found. Please log in.");
         }
 
-        const response = await fetch('http://127.0.0.1:9000/auth/sales_metrics/report', { // Adjust URL if no proxy
+        const response = await fetch('http://127.0.0.1:9000/auth/sales_metrics/report', {
             method: 'POST',
             headers: {
                 'Content-Type': 'application/json',
@@ -107,8 +159,17 @@ function SalesReport() {
         }
 
         const data = await response.json();
+        
+        console.log("=== SALES REPORT RESPONSE ===");
+        console.log("Full Response:", data);
+        console.log("Summary:", data.summary);
+        console.log("Cash Drawer:", data.cashDrawer);
+        console.log("Payment Summary:", data.paymentSummary);
+        console.log("============================");
+        
         setReportData(data);
       } catch (err) {
+        console.error("Error fetching sales report:", err);
         setError(err.message);
       } finally {
         setIsLoading(false);
@@ -116,7 +177,7 @@ function SalesReport() {
     };
 
     fetchSalesReport();
-  }, [activeTab, customRange]); // Re-fetch data when the period changes
+  }, [activeTab, customRange, selectedCashier]); // Re-fetch when cashier changes
 
   // Update the period display text when the active tab or custom range changes
   useEffect(() => {
@@ -128,31 +189,30 @@ function SalesReport() {
     const startStr = formatDateForAPI(new Date(startDate));
     const endStr = formatDateForAPI(new Date(endDate));
     setCustomRange({ start: startStr, end: endStr });
-    setActiveTab("custom"); // This will trigger the useEffect to fetch data
+    setActiveTab("custom");
     setIsCustomModalOpen(false);
   };
 
   // --- DATA TABLE COLUMN DEFINITIONS ---
   const categoryColumns = [
     { name: "CATEGORY", selector: (row) => row.category, sortable: true },
-    { name: "QUANTITY SOLD", selector: (row) => row.quantity, center: true, sortable: true },
-    { name: "SALES AMOUNT", selector: (row) => `₱${row.sales.toLocaleString()}`, center: true, sortable: true },
-    // { name: "% OF TOTAL", selector: (row) => `${row.percentage}%`, center: true, sortable: true },
+    { name: "QUANTITY SOLD", selector: (row) => row.quantity || 0, center: true, sortable: true },
+    { name: "SALES AMOUNT", selector: (row) => `₱${formatCurrency(row.sales)}`, center: true, sortable: true },
   ];
 
   const productColumns = [
     { name: "PRODUCT", selector: (row) => row.product, sortable: true },
     { name: "CATEGORY", selector: (row) => row.category, center: true, sortable: true },
-    { name: "UNITS SOLD", selector: (row) => row.units, center: true, sortable: true },
-    { name: "TOTAL SALES", selector: (row) => `₱${row.total.toLocaleString()}`, center: true, sortable: true },
+    { name: "UNITS SOLD", selector: (row) => row.units || 0, center: true, sortable: true },
+    { name: "TOTAL SALES", selector: (row) => `₱${formatCurrency(row.total)}`, center: true, sortable: true },
   ];
   
   const refundColumns = [
     { name: "#", selector: (row) => row.id, center: true, sortable: true, width: "10%" },
     { name: "DATE", selector: (row) => row.date, center: true, sortable: true, width: "15%" },
     { name: "PRODUCT", selector: (row) => row.product, sortable: true, width: "18%" },
-    { name: "AMOUNT", selector: (row) => `₱${row.amount}`, center: true, sortable: true, width: "17%" },
-    { name: "REASON", selector: (row) => row.reason, sortable: true, width: "20%" },
+    { name: "AMOUNT", selector: (row) => `₱${formatCurrency(row.amount)}`, center: true, sortable: true, width: "17%" },
+    { name: "REASON", selector: (row) => row.reason || "N/A", sortable: true, width: "20%" },
     { name: "CASHIER", selector: (row) => row.cashier, center: true, sortable: true, width: "20%" },
   ];
   
@@ -167,6 +227,11 @@ function SalesReport() {
     rows: { style: { minHeight: "55px", padding: "5px" } },
   };
 
+  // Helper function to safely format currency
+  const formatCurrency = (value) => {
+    const num = parseFloat(value || 0);
+    return num.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+  };
 
   return (
     <div className="aSalesRep-page">
@@ -205,16 +270,23 @@ function SalesReport() {
               </select>
             </div>
 
-            {/* Note: Cashier/Branch filters are UI-only for now. Backend needs updating to use them. */}
             <div className="aSalesRep-filter-item">
               <span>Cashier:</span>
               <select
                 className="aSalesRep-tab-dropdown"
                 value={selectedCashier}
                 onChange={(e) => setSelectedCashier(e.target.value)}
-                disabled // Disabled until backend supports this filter
+                disabled={isCashiersLoading}
               >
-                <option value="all">All Cashiers</option>
+                <option key="all-cashiers" value="all">All Cashiers</option>
+                {cashiersList.map((cashier, index) => (
+                  <option 
+                    key={`cashier-${cashier.username || cashier.name || cashier}-${index}`} 
+                    value={cashier.username || cashier.name || cashier}
+                  >
+                    {cashier.username || cashier.name || cashier}
+                  </option>
+                ))}
               </select>
             </div>
 
@@ -242,7 +314,7 @@ function SalesReport() {
                   <div className="aSalesRep-card-icon aSalesRep-icon-green"><FaDollarSign /></div>
                   <div className="aSalesRep-card-content">
                     <div className="aSalesRep-card-label">TOTAL CASH SALES</div>
-                    <div className="aSalesRep-card-value">₱{reportData.summary?.totalSales?.toLocaleString() ?? '0.00'}</div>
+                    <div className="aSalesRep-card-value">₱{formatCurrency(reportData.summary?.totalSales)}</div>
                   </div>
                 </div>
 
@@ -250,7 +322,7 @@ function SalesReport() {
                   <div className="aSalesRep-card-icon aSalesRep-icon-blue"><FaCashRegister /></div>
                   <div className="aSalesRep-card-content">
                     <div className="aSalesRep-card-label">CASH IN DRAWER</div>
-                    <div className="aSalesRep-card-value">₱{reportData.summary?.cashInDrawer?.toLocaleString() ?? '0.00'}</div>
+                    <div className="aSalesRep-card-value">₱{formatCurrency(reportData.summary?.cashInDrawer)}</div>
                   </div>
                 </div>
 
@@ -258,8 +330,8 @@ function SalesReport() {
                   <div className="aSalesRep-card-icon aSalesRep-icon-red"><FaBalanceScale /></div>
                   <div className="aSalesRep-card-content">
                     <div className="aSalesRep-card-label">CASH DISCREPANCY</div>
-                    <div className={`aSalesRep-card-value ${reportData.summary?.discrepancy < 0 ? 'aSalesRep-negative' : ''}`}>
-                      ₱{Math.abs(reportData.summary?.discrepancy ?? 0).toLocaleString()} {reportData.summary?.discrepancy < 0 ? 'Short' : 'Over'}
+                    <div className={`aSalesRep-card-value ${(reportData.summary?.discrepancy || 0) < 0 ? 'aSalesRep-negative' : ''}`}>
+                      ₱{formatCurrency(Math.abs(reportData.summary?.discrepancy || 0))} {(reportData.summary?.discrepancy || 0) < 0 ? 'Short' : 'Over'}
                     </div>
                   </div>
                 </div>
@@ -276,7 +348,7 @@ function SalesReport() {
                   <div className="aSalesRep-card-icon aSalesRep-icon-orange"><FaUndo /></div>
                   <div className="aSalesRep-card-content">
                     <div className="aSalesRep-card-label">REFUNDS/RETURNS</div>
-                    <div className="aSalesRep-card-value">₱{reportData.summary?.refunds?.toLocaleString() ?? '0.00'}</div>
+                    <div className="aSalesRep-card-value">₱{formatCurrency(reportData.summary?.refunds)}</div>
                   </div>
                 </div>
               </div>
@@ -290,11 +362,11 @@ function SalesReport() {
                   <div className="aSalesRep-payment-breakdown modern">
                       <div className="aSalesRep-payment-card">
                         <span className="aSalesRep-payment-label">Cash</span>
-                        <div className="aSalesRep-payment-amount">₱{reportData.paymentSummary?.cashAmount?.toLocaleString() ?? '0.00'}</div>
+                        <div className="aSalesRep-payment-amount">₱{formatCurrency(reportData.paymentSummary?.cashAmount)}</div>
                       </div>
                       <div className="aSalesRep-payment-card">
                         <span className="aSalesRep-payment-label">GCash</span>
-                        <div className="aSalesRep-payment-amount">₱{reportData.paymentSummary?.gcashAmount?.toLocaleString() ?? '0.00'}</div>
+                        <div className="aSalesRep-payment-amount">₱{formatCurrency(reportData.paymentSummary?.gcashAmount)}</div>
                       </div>
                   </div>
 
@@ -305,19 +377,40 @@ function SalesReport() {
 
                   {financialTab === 'cashDrawer' ? (
                     <div className="aSalesRep-cash-drawer-grid">
-                      <div className="aSalesRep-cash-item"><span className="aSalesRep-cash-label">Opening Balance:</span><span className="aSalesRep-cash-value">₱{reportData.cashDrawer?.opening?.toLocaleString() ?? '0.00'}</span></div>
-                      <div className="aSalesRep-cash-item"><span className="aSalesRep-cash-label">Total Cash Sales:</span><span className="aSalesRep-cash-value">₱{reportData.cashDrawer?.cashSales?.toLocaleString() ?? '0.00'}</span></div>
-                      <div className="aSalesRep-cash-item"><span className="aSalesRep-cash-label">Total Refunds:</span><span className="aSalesRep-cash-value">₱{reportData.cashDrawer?.refunds?.toLocaleString() ?? '0.00'}</span></div>
-                      <div className="aSalesRep-cash-item"><span className="aSalesRep-cash-label">Expected Cash:</span><span className="aSalesRep-cash-value">₱{reportData.cashDrawer?.expected?.toLocaleString() ?? '0.00'}</span></div>
-                      <div className="aSalesRep-cash-item"><span className="aSalesRep-cash-label">Actual Cash Counted:</span><span className="aSalesRep-cash-value">₱{reportData.cashDrawer?.actual?.toLocaleString() ?? '0.00'}</span></div>
+                      <div className="aSalesRep-cash-item">
+                        <span className="aSalesRep-cash-label">Opening Balance:</span>
+                        <span className="aSalesRep-cash-value">₱{formatCurrency(reportData.cashDrawer?.opening)}</span>
+                      </div>
+                      <div className="aSalesRep-cash-item">
+                        <span className="aSalesRep-cash-label">Total Cash Sales:</span>
+                        <span className="aSalesRep-cash-value">₱{formatCurrency(reportData.cashDrawer?.cashSales)}</span>
+                      </div>
+                      <div className="aSalesRep-cash-item">
+                        <span className="aSalesRep-cash-label">Total Refunds:</span>
+                        <span className="aSalesRep-cash-value">₱{formatCurrency(reportData.cashDrawer?.refunds)}</span>
+                      </div>
+                      <div className="aSalesRep-cash-item">
+                        <span className="aSalesRep-cash-label">Expected Cash:</span>
+                        <span className="aSalesRep-cash-value">₱{formatCurrency(reportData.cashDrawer?.expected)}</span>
+                      </div>
+                      <div className="aSalesRep-cash-item">
+                        <span className="aSalesRep-cash-label">Actual Cash Counted:</span>
+                        <span className="aSalesRep-cash-value">₱{formatCurrency(reportData.cashDrawer?.actual)}</span>
+                      </div>
                       <div className="aSalesRep-cash-item aSalesRep-cash-highlight">
                         <span className="aSalesRep-cash-label">Discrepancy:</span>
-                        <span className={`aSalesRep-cash-value ${reportData.cashDrawer?.discrepancy < 0 ? 'aSalesRep-negative' : ''}`}>
-                          ₱{Math.abs(reportData.cashDrawer?.discrepancy ?? 0).toLocaleString()} {reportData.cashDrawer?.discrepancy < 0 ? 'Short' : 'Over'}
+                        <span className={`aSalesRep-cash-value ${(reportData.cashDrawer?.discrepancy || 0) < 0 ? 'aSalesRep-negative' : ''}`}>
+                          ₱{formatCurrency(Math.abs(reportData.cashDrawer?.discrepancy || 0))} {(reportData.cashDrawer?.discrepancy || 0) < 0 ? 'Short' : 'Over'}
                         </span>
                       </div>
-                      <div className="aSalesRep-cash-item"><span className="aSalesRep-cash-label">Reported By:</span><span className="aSalesRep-cash-value">{reportData.cashDrawer?.reportedBy ?? 'N/A'}</span></div>
-                      <div className="aSalesRep-cash-item"><span className="aSalesRep-cash-label">Verified By:</span><span className="aSalesRep-cash-value">{reportData.cashDrawer?.verifiedBy ?? 'N/A'}</span></div>
+                      <div className="aSalesRep-cash-item">
+                        <span className="aSalesRep-cash-label">Reported By:</span>
+                        <span className="aSalesRep-cash-value">{reportData.cashDrawer?.reportedBy ?? 'N/A'}</span>
+                      </div>
+                      <div className="aSalesRep-cash-item">
+                        <span className="aSalesRep-cash-label">Verified By:</span>
+                        <span className="aSalesRep-cash-value">{reportData.cashDrawer?.verifiedBy ?? 'N/A'}</span>
+                      </div>
                     </div>
                   ) : (
                     <div className="aSalesRep-table-container">

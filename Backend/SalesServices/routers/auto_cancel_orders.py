@@ -1,6 +1,3 @@
-# FILE: routers/auto_cancel_orders.py
-# Add this new router file to your POS service
-
 from fastapi import APIRouter, HTTPException
 from datetime import datetime, timedelta
 import logging

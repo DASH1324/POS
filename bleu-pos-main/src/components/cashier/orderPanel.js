@@ -5,6 +5,7 @@ import qr from '../../assets/qr.png';
 import { toast } from 'react-toastify';
 
 const AUTH_API_BASE_URL = 'http://127.0.0.1:4000';
+const SALES_API_BASE_URL = 'http://127.0.0.1:9000';
 
 function OrderPanel({ order, onClose, isOpen, isStore, onUpdateStatus }) {
   const [showPinModal, setShowPinModal] = useState(false);
@@ -15,20 +16,44 @@ function OrderPanel({ order, onClose, isOpen, isStore, onUpdateStatus }) {
   const [showRefundExpiredModal, setShowRefundExpiredModal] = useState(false);
   const [isProcessing, setIsProcessing] = useState(false);
   const [isRefundAvailable, setIsRefundAvailable] = useState(true);
+  const [refundData, setRefundData] = useState(null);
+  const [loadingRefunds, setLoadingRefunds] = useState(false);
 
-  // Function to display add-ons for an item
-  const displayAddOns = (addons) => {
-    if (!addons || addons.length === 0) return null;
-    return (
-      <div className="orderpanel-item-addons">
-        {addons.map((addon, addonIdx) => (
-          <div key={addonIdx} className="orderpanel-addon">
-            + {addon.addon_name || addon.addonName || addon.name} (₱{(addon.price || 0).toFixed(2)})
-          </div>
-        ))}
-      </div>
-    );
-  };
+  // Fetch refund data when order changes
+  useEffect(() => {
+    const fetchRefundData = async () => {
+      if (!order || !isStore || (order.status.toUpperCase() !== 'REFUNDED' && order.status.toUpperCase() !== 'COMPLETED')) {
+        setRefundData(null);
+        return;
+      }
+
+      setLoadingRefunds(true);
+      try {
+        const token = localStorage.getItem('authToken');
+        const response = await fetch(
+          `${SALES_API_BASE_URL}/auth/purchase_orders/${order.id}/refunds`,
+          {
+            headers: { 'Authorization': `Bearer ${token}` }
+          }
+        );
+
+        if (response.ok) {
+          const data = await response.json();
+          if (data.refunds && data.refunds.length > 0) {
+            setRefundData(data);
+          } else {
+            setRefundData(null);
+          }
+        }
+      } catch (error) {
+        console.error('Error fetching refund data:', error);
+      } finally {
+        setLoadingRefunds(false);
+      }
+    };
+
+    fetchRefundData();
+  }, [order, isStore]);
 
   // Check if refund is still available (within 30 minutes)
   useEffect(() => {
@@ -37,7 +62,6 @@ function OrderPanel({ order, onClose, isOpen, isStore, onUpdateStatus }) {
     }
 
     const checkRefundAvailability = () => {
-      // Use updatedAt if available, otherwise fall back to date
       const completionTime = dayjs(order.updatedAt || order.date);
       const now = dayjs();
       const minutesPassed = now.diff(completionTime, 'minute');
@@ -50,22 +74,45 @@ function OrderPanel({ order, onClose, isOpen, isStore, onUpdateStatus }) {
     };
 
     checkRefundAvailability();
-    const interval = setInterval(checkRefundAvailability, 60000); // Check every minute
+    const interval = setInterval(checkRefundAvailability, 60000);
 
     return () => clearInterval(interval);
   }, [order, isStore]);
 
   if (!order) return null;
 
+  // Helper function to get refunded quantity for an item
+  const getRefundedQuantity = (itemName) => {
+    if (!refundData) return 0;
+    
+    let totalRefunded = 0;
+    refundData.refunds.forEach(refund => {
+      refund.items.forEach(refundedItem => {
+        if (refundedItem.item_name === itemName) {
+          totalRefunded += refundedItem.quantity;
+        }
+      });
+    });
+    return totalRefunded;
+  };
+
+  // Calculate total refund amount
+  const getTotalRefundAmount = () => {
+    if (!refundData) return 0;
+    return refundData.refunds.reduce((sum, refund) => sum + refund.total_amount, 0);
+  };
+
   const subtotal = order.subtotal || 0;
   const addOnsCost = order.addOns || 0;
   const promotionalDiscount = order.promotionalDiscount || 0;
   const manualDiscount = order.manualDiscount || 0;
   const appliedDiscountNames = order.appliedDiscounts || [];
+  const totalRefundAmount = getTotalRefundAmount();
   
-  // Get auth token from memory or context
+  // Calculate net total after refunds
+  const netTotal = order.total - totalRefundAmount;
+  
   const getAuthToken = () => {
-    // Try multiple possible token locations
     const token = localStorage.getItem('authToken') || 
                   localStorage.getItem('token') || 
                   sessionStorage.getItem('authToken') ||
@@ -73,7 +120,6 @@ function OrderPanel({ order, onClose, isOpen, isStore, onUpdateStatus }) {
     return token || '';
   };
 
-  // Unified cancel handler for both store and online orders
   const handleCancelOrder = () => {
     setEnteredPin("");
     setPinError("");
@@ -81,7 +127,6 @@ function OrderPanel({ order, onClose, isOpen, isStore, onUpdateStatus }) {
   };
 
   const handleStoreRefund = () => {
-    // Check if refund window has expired
     if (!isRefundAvailable) {
       setShowRefundExpiredModal(true);
       return;
@@ -119,7 +164,6 @@ function OrderPanel({ order, onClose, isOpen, isStore, onUpdateStatus }) {
     try {
       const token = getAuthToken();
       
-      // Step 1: Verify PIN and get manager username
       const pinResponse = await fetch(`${AUTH_API_BASE_URL}/users/verify-pin`, {
         method: 'POST',
         headers: {
@@ -139,15 +183,14 @@ function OrderPanel({ order, onClose, isOpen, isStore, onUpdateStatus }) {
       const pinData = await pinResponse.json();
       const managerUsername = pinData.managerUsername;
 
-      // Step 2: Process refund with actual manager username
-      const response = await fetch(`http://127.0.0.1:9000/auth/purchase_orders/${order.id}/refund`, {
+      const response = await fetch(`${SALES_API_BASE_URL}/auth/purchase_orders/${order.id}/refund`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
           'Authorization': `Bearer ${token}`
         },
         body: JSON.stringify({
-          managerUsername: managerUsername,  // Use actual username from PIN verification
+          managerUsername: managerUsername,
           refundReason: "Customer requested refund"
         })
       });
@@ -167,7 +210,6 @@ function OrderPanel({ order, onClose, isOpen, isStore, onUpdateStatus }) {
           const errorData = await response.json();
           errorMessage = errorData.detail || errorMessage;
           
-          // Check if error is about refund window expiration
           if (errorMessage.includes("30 minutes") || errorMessage.includes("expired")) {
             setShowRefundModal(false);
             setShowRefundExpiredModal(true);
@@ -202,8 +244,6 @@ function OrderPanel({ order, onClose, isOpen, isStore, onUpdateStatus }) {
     let printAction = null;
     let refundAction = null;
 
-    console.log('Order Type:', order.orderType, 'Normalized:', type, 'Status:', status);
-
     if (isStore) {
         if (status === 'PROCESSING') {
             mainAction = (
@@ -217,9 +257,7 @@ function OrderPanel({ order, onClose, isOpen, isStore, onUpdateStatus }) {
             );
         }
     } else {
-        // Online orders
         if (status === 'PENDING') {
-            // Show Accept Order button for all online orders regardless of type
             mainAction = (
                 <button 
                     className="orderpanel-btn orderpanel-btn-complete" 
@@ -240,10 +278,7 @@ function OrderPanel({ order, onClose, isOpen, isStore, onUpdateStatus }) {
                 </button>
             );
         } else if (status === 'WAITING FOR PICK UP') {
-            if (type === 'delivery') {
-            mainAction = null;                    
-            } else {
-                // Pick-up type
+            if (type !== 'delivery') {
                 mainAction = (
                     <button 
                         className="orderpanel-btn orderpanel-btn-complete" 
@@ -254,13 +289,9 @@ function OrderPanel({ order, onClose, isOpen, isStore, onUpdateStatus }) {
                     </button>
                 );
             }
-        } else if (status === 'DELIVERING') {
-              mainAction = null;
-            
         }
     }
 
-    // Cancel button logic - NOW BOTH REQUIRE PIN
     if (isStore) {
         if (status === 'PROCESSING') {
             cancelAction = (
@@ -274,7 +305,6 @@ function OrderPanel({ order, onClose, isOpen, isStore, onUpdateStatus }) {
             );
         }
     } else {
-        // Online orders - NOW REQUIRES PIN
         if (status === 'PENDING') {
             cancelAction = (
                 <button 
@@ -298,15 +328,19 @@ function OrderPanel({ order, onClose, isOpen, isStore, onUpdateStatus }) {
                  Print Receipt
              </button>
         );
-        refundAction = (
-             <button 
-                 className={`orderpanel-btn orderpanel-btn-refund ${!isRefundAvailable ? 'orderpanel-btn-disabled' : ''}`}
-                 onClick={handleStoreRefund}
-                 disabled={isProcessing}
-             >
-                 {isProcessing ? "Processing..." : "Refund Order"}
-             </button>
-        );
+        
+        // Only show refund button if no refunds have been processed yet
+        if (!refundData || refundData.refunds.length === 0) {
+          refundAction = (
+               <button 
+                   className={`orderpanel-btn orderpanel-btn-refund ${!isRefundAvailable ? 'orderpanel-btn-disabled' : ''}`}
+                   onClick={handleStoreRefund}
+                   disabled={isProcessing || !isRefundAvailable}
+               >
+                   {isProcessing ? "Processing..." : "Refund Order"}
+               </button>
+          );
+        }
     }
 
     if (status === 'REFUNDED') {
@@ -352,27 +386,43 @@ function OrderPanel({ order, onClose, isOpen, isStore, onUpdateStatus }) {
         </div>
 
         <div className="orderpanel-items-section">
-          {order.orderItems.map((item, idx) => (
-            <div key={idx} className="orderpanel-item">
-              <div className="orderpanel-item-details">
-                <div className="orderpanel-item-name">
-                  {item.name}
-                  {item.addons && item.addons.length > 0 && (
-                    <div className="orderpanel-item-addons">
-                      {item.addons.map((addon, addonIdx) => (
-                        <div key={addonIdx} className="orderpanel-addon">
-                          + {addon.addon_name || addon.addonName || addon.name} (₱{(addon.price || 0).toFixed(2)})
-                        </div>
-                      ))}
-                    </div>
-                  )}
+          {order.orderItems.map((item, idx) => {
+            const refundedQty = getRefundedQuantity(item.name);
+            const isFullyRefunded = refundedQty >= item.quantity;
+            
+            return (
+              <div key={idx} className="orderpanel-item">
+                <div className="orderpanel-item-details">
+                  <div className="orderpanel-item-name">
+                    <span className={isFullyRefunded ? 'orderpanel-refunded-text' : ''}>
+                      {item.name}
+                    </span>
+                    {refundedQty > 0 && (
+                      <div className="orderpanel-refund-indicator">
+                        Refunded: {refundedQty}
+                      </div>
+                    )}
+                    {item.addons && item.addons.length > 0 && (
+                      <div className="orderpanel-item-addons">
+                        {item.addons.map((addon, addonIdx) => (
+                          <div key={addonIdx} className={`orderpanel-addon ${isFullyRefunded ? 'orderpanel-refunded-text' : ''}`}>
+                            + {addon.addon_name || addon.addonName || addon.name} (₱{(addon.price || 0).toFixed(2)})
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                  {isStore && <div className="orderpanel-item-price">₱{item.price.toFixed(2)}</div>}
                 </div>
-                {isStore && <div className="orderpanel-item-price">₱{item.price.toFixed(2)}</div>}
+                <div className={`orderpanel-item-qty ${isFullyRefunded ? 'orderpanel-refunded-text' : ''}`}>
+                  {item.quantity}
+                </div>
+                <div className={`orderpanel-item-subtotal ${isFullyRefunded ? 'orderpanel-refunded-text' : ''}`}>
+                  ₱{(item.price * item.quantity).toFixed(2)}
+                </div>
               </div>
-              <div className="orderpanel-item-qty">{item.quantity}</div>
-              <div className="orderpanel-item-subtotal">₱{(item.price * item.quantity).toFixed(2)}</div>
-            </div>
-          ))}
+            );
+          })}
         </div>
 
         <div className="orderpanel-summary">
@@ -408,9 +458,21 @@ function OrderPanel({ order, onClose, isOpen, isStore, onUpdateStatus }) {
                     </div>
                 )}
 
+                {/* Show refund line if there are refunds */}
+                {totalRefundAmount > 0 && (
+                    <div className="orderpanel-calc-row orderpanel-refund-row">
+                        <span className="orderpanel-calc-label">Refund:</span>
+                        <span className="orderpanel-calc-value orderpanel-refund-amount">
+                          - ₱{totalRefundAmount.toFixed(2)}
+                        </span>
+                    </div>
+                )}
+
                 <div className="orderpanel-calc-row orderpanel-total-row">
                     <span className="orderpanel-calc-label">Total:</span>
-                    <span className="orderpanel-calc-value">₱{order.total.toFixed(2)}</span>
+                    <span className="orderpanel-calc-value">
+                      ₱{totalRefundAmount > 0 ? netTotal.toFixed(2) : order.total.toFixed(2)}
+                    </span>
                 </div>
             </div>
         </div>
@@ -419,7 +481,7 @@ function OrderPanel({ order, onClose, isOpen, isStore, onUpdateStatus }) {
             {renderActionButtons()}
         </div>
 
-        {/* PIN Modal for Cancellation - NOW USED FOR BOTH STORE AND ONLINE */} 
+        {/* PIN Modal for Cancellation */}
         {showPinModal && (
           <div className="orderpanel-modal-overlay" onClick={() => setShowPinModal(false)}>
             <div className="orderpanel-modal-content" onClick={(e) => e.stopPropagation()}>
@@ -632,9 +694,17 @@ function OrderPanel({ order, onClose, isOpen, isStore, onUpdateStatus }) {
                         <span>-₱{manualDiscount.toFixed(2)}</span>
                       </div>
                     )}
+                    
+                    {totalRefundAmount > 0 && (
+                      <div className="orderpanel-receipt-line">
+                        <span>REFUND:</span>
+                        <span>-₱{totalRefundAmount.toFixed(2)}</span>
+                      </div>
+                    )}
+                    
                     <div className="orderpanel-receipt-line orderpanel-receipt-total">
                       <strong>TOTAL:</strong>
-                      <strong>₱{order.total.toFixed(2)}</strong>
+                      <strong>₱{totalRefundAmount > 0 ? netTotal.toFixed(2) : order.total.toFixed(2)}</strong>
                     </div>
                     <div className="orderpanel-receipt-divider">================================</div>
                   </div>

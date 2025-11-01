@@ -762,3 +762,49 @@
   margin-top: 10px;
   text-align: center;
 }
+
+/* Add these styles to your existing orderPanel.css file */
+
+/* Refunded text styling */
+.orderpanel-refunded-text {
+  text-decoration: line-through;
+  color: #999;
+  opacity: 0.7;
+}
+
+/* Refund indicator below item name */
+.orderpanel-refund-indicator {
+  font-size: 12px;
+  color: #dc3545;
+  font-weight: 600;
+  margin-top: 4px;
+  font-style: italic;
+}
+
+/* Refund row in summary */
+.orderpanel-refund-row {
+  color: #dc3545;
+  font-weight: 600;
+}
+
+.orderpanel-refund-amount {
+  color: #dc3545 !important;
+}
+
+/* Style for partially refunded items */
+.orderpanel-item.partial-refund {
+  border-left: 3px solid #ffc107;
+  padding-left: 8px;
+}
+
+/* Ensure refunded items have proper spacing */
+.orderpanel-item-name .orderpanel-refund-indicator {
+  display: block;
+  margin-top: 4px;
+}
+
+/* Receipt styling for refund line */
+.orderpanel-receipt-line.refund-line {
+  color: #dc3545;
+  font-weight: 600;
+}

@@ -20,7 +20,7 @@ import Menu from './components/cashier/menu';
 import Orders from './components/cashier/orders';
 import OrderPanel from './components/cashier/orderPanel';
 import CashierSales from './components/cashier/cashierSales';
-import CashierSpillage from './components/cashier/cashierSpillage';
+// import CashierSpillage from './components/cashier/cashierSpillage';
 
 import ActivityLogs from './components/home/activityLogs/activityLogs';
 
@@ -208,7 +208,7 @@ function App() {
           <Route path="/cashier/orders" element={<Orders />} />
           <Route path="/cashier/orderPanel" element={<OrderPanel />} />
           <Route path="/cashier/cashierSales" element={<CashierSales />} />
-          <Route path="/cashier/cashierSpillage" element={<CashierSpillage />} />
+          {/* <Route path="/cashier/cashierSpillage" element={<CashierSpillage />} /> */}
           <Route path="/home/activityLogs" element={<ActivityLogs />} />
 
         </Routes>

@@ -1,5 +1,3 @@
-# SalesServices/routers/pos_router.py
-
 from fastapi import APIRouter, HTTPException, status, Depends, BackgroundTasks
 from fastapi.security import OAuth2PasswordBearer
 from pydantic import BaseModel, Field

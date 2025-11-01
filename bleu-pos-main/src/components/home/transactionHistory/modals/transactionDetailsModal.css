@@ -591,3 +591,402 @@
 .transHis-modal-content::-webkit-scrollbar-thumb:hover {
   background: #aaa;
 }
+
+/* Add these styles to your transactionDetailsModal.css */
+
+/* Refunded item styles */
+.transHis-modal-item.fully-refunded {
+  opacity: 0.6;
+  background-color: #f5f5f5;
+}
+
+.refund-badge {
+  display: inline-block;
+  margin-left: 10px;
+  padding: 2px 8px;
+  background-color: #ff6b6b;
+  color: white;
+  border-radius: 4px;
+  font-size: 10px;
+  font-weight: 600;
+  text-transform: uppercase;
+}
+
+.refunded-qty {
+  color: #ff6b6b;
+  font-style: italic;
+  margin-left: 5px;
+}
+
+.struck-through {
+  text-decoration: line-through;
+  color: #999;
+}
+
+.transHis-modal-refund-amount {
+  display: block;
+  color: #ff6b6b;
+  font-size: 12px;
+  font-weight: 600;
+  margin-top: 2px;
+}
+
+/* Price breakdown refund row */
+.transHis-modal-refund-row {
+  color: #ff6b6b;
+  font-weight: 600;
+}
+
+.transHis-modal-refund-row span {
+  color: #ff6b6b;
+}
+
+/* Refund info section */
+.transHis-modal-refund-info {
+  margin-top: 20px;
+  padding: 15px;
+  background-color: #fff3cd;
+  border-left: 4px solid #ffc107;
+  border-radius: 4px;
+}
+
+.transHis-modal-refund-info h4 {
+  margin: 0 0 10px 0;
+  color: #856404;
+  font-size: 14px;
+  font-weight: 600;
+}
+
+.transHis-modal-refund-details {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.refund-detail-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  font-size: 13px;
+}
+
+.refund-detail-row span:first-child {
+  color: #856404;
+  font-weight: 500;
+}
+
+.refund-type-badge {
+  display: inline-block;
+  padding: 3px 10px;
+  background-color: #ffc107;
+  color: #856404;
+  border-radius: 12px;
+  font-size: 11px;
+  font-weight: 600;
+  text-transform: uppercase;
+}
+
+/* Status badge for partially refunded */
+.transHis-modal-status.partially-refunded {
+  background-color: #ff9800;
+  color: white;
+  padding: 6px 12px;
+  border-radius: 20px;
+  font-size: 12px;
+  font-weight: 600;
+}
+
+/* Disable refund buttons when all items are refunded */
+.transHis-modal-action-btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+  background-color: #cccccc;
+}
+
+.transHis-modal-action-btn:disabled:hover {
+  background-color: #cccccc;
+  transform: none;
+}
+
+/* Refund mode qty controls disabled state */
+.transHis-modal-qty-price button:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
+/* Adjusted subtotal highlight */
+.transHis-modal-breakdown-row:has(span:contains("Adjusted")) {
+  font-weight: 600;
+  color: #2c3e50;
+}
+
+/* Add these styles to your transactionDetailsModal.css */
+
+/* ===================================
+   REFUND BADGE STYLES
+   =================================== */
+
+/* Inline refund badge next to item name */
+.transHis-modal-item-name-container {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.refund-badge-inline {
+  display: inline-block;
+  padding: 3px 10px;
+  background-color: #ff6b6b;
+  color: white;
+  border-radius: 4px;
+  font-size: 10px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  line-height: 1;
+}
+
+/* Refunded quantity text */
+.refunded-qty {
+  color: #ff6b6b;
+  font-style: italic;
+  font-weight: 600;
+  margin-left: 5px;
+  font-size: 13px;
+}
+
+/* ===================================
+   REFUNDED ITEM STYLES
+   =================================== */
+
+/* Fully refunded items - dimmed */
+.transHis-modal-item.fully-refunded {
+  opacity: 0.65;
+  background-color: #f8f9fa;
+  border-left: 3px solid #ff6b6b;
+}
+
+.transHis-modal-item.fully-refunded .transHis-modal-item-name {
+  color: #6c757d;
+}
+
+/* Strikethrough for refunded prices */
+.struck-through {
+  text-decoration: line-through;
+  color: #999;
+  opacity: 0.7;
+}
+
+/* Refund amount display (red negative amount) */
+.transHis-modal-refund-amount {
+  display: block;
+  color: #ff6b6b;
+  font-size: 13px;
+  font-weight: 700;
+  margin-top: 4px;
+  letter-spacing: 0.3px;
+}
+
+/* ===================================
+   PRICE BREAKDOWN REFUND STYLES
+   =================================== */
+
+/* Refund row in price breakdown */
+.transHis-modal-refund-row {
+  background-color: #fff5f5;
+  padding: 10px 15px;
+  margin: 5px -15px;
+  border-left: 4px solid #ff6b6b;
+}
+
+.transHis-modal-refund-row span {
+  color: #ff6b6b;
+  font-weight: 700;
+}
+
+/* Refund total in refund mode */
+.transHis-modal-refund-total {
+  background-color: #e3f2fd;
+  padding: 12px 15px;
+  margin: 10px -15px 0;
+  border-left: 4px solid #2196f3;
+  font-size: 16px;
+  font-weight: 700;
+}
+
+.transHis-modal-refund-total span {
+  color: #1976d2;
+}
+
+/* ===================================
+   REFUND INFO SECTION
+   =================================== */
+
+.transHis-modal-refund-info {
+  margin-top: 20px;
+  padding: 18px;
+  background: linear-gradient(135deg, #fff3cd 0%, #ffeeba 100%);
+  border-left: 5px solid #ffc107;
+  border-radius: 8px;
+  box-shadow: 0 2px 8px rgba(255, 193, 7, 0.15);
+}
+
+.transHis-modal-refund-info h4 {
+  margin: 0 0 12px 0;
+  color: #856404;
+  font-size: 15px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+.transHis-modal-refund-details {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.refund-detail-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  font-size: 14px;
+  padding: 5px 0;
+}
+
+.refund-detail-row span:first-child {
+  color: #856404;
+  font-weight: 600;
+}
+
+.refund-detail-row span:last-child {
+  color: #533f03;
+  font-weight: 500;
+}
+
+/* Refund type badge */
+.refund-type-badge {
+  display: inline-block;
+  padding: 5px 14px;
+  background-color: #ffc107;
+  color: #533f03;
+  border-radius: 20px;
+  font-size: 12px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+}
+
+/* ===================================
+   STATUS BADGES
+   =================================== */
+
+/* Partially refunded status badge */
+.transHis-modal-status.partially-refunded {
+  background: linear-gradient(135deg, #ff9800 0%, #f57c00 100%);
+  color: white;
+  padding: 8px 16px;
+  border-radius: 20px;
+  font-size: 12px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  box-shadow: 0 2px 6px rgba(255, 152, 0, 0.3);
+}
+
+/* Refunded status badge */
+.transHis-modal-status.refunded {
+  background: linear-gradient(135deg, #f44336 0%, #d32f2f 100%);
+  color: white;
+  box-shadow: 0 2px 6px rgba(244, 67, 54, 0.3);
+}
+
+/* ===================================
+   BUTTON STATES
+   =================================== */
+
+/* Disabled refund buttons */
+.transHis-modal-action-btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+  background-color: #cccccc;
+  color: #666;
+  transform: none !important;
+  box-shadow: none !important;
+}
+
+.transHis-modal-action-btn:disabled:hover {
+  background-color: #cccccc;
+  transform: none;
+  box-shadow: none;
+}
+
+/* Refund mode quantity controls disabled state */
+.transHis-modal-qty-price button:disabled {
+  opacity: 0.3;
+  cursor: not-allowed;
+  background-color: #e0e0e0;
+}
+
+/* ===================================
+   RESPONSIVE ADJUSTMENTS
+   =================================== */
+
+@media (max-width: 768px) {
+  .transHis-modal-item-name-container {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 5px;
+  }
+  
+  .refund-badge-inline {
+    font-size: 9px;
+    padding: 2px 8px;
+  }
+  
+  .transHis-modal-refund-info {
+    padding: 12px;
+  }
+  
+  .refund-detail-row {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 5px;
+  }
+}
+
+/* ===================================
+   ANIMATIONS
+   =================================== */
+
+@keyframes fadeIn {
+  from {
+    opacity: 0;
+    transform: translateY(-10px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.transHis-modal-refund-info,
+.transHis-modal-refund-row,
+.refund-badge-inline {
+  animation: fadeIn 0.3s ease-out;
+}
+
+/* ===================================
+   HOVER EFFECTS
+   =================================== */
+
+.transHis-modal-item.fully-refunded:hover {
+  background-color: #f1f3f5;
+}
+
+.refund-type-badge:hover {
+  transform: scale(1.05);
+  transition: transform 0.2s ease;
+}

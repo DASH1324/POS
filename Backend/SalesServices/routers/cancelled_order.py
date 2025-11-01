@@ -1,5 +1,3 @@
-# FILE: cancelled_orders.py - FINAL UPDATE TO CORRECTLY FETCH REFUNDED ORDERS
-
 from fastapi import APIRouter, HTTPException, status, Depends
 from fastapi.security import OAuth2PasswordBearer
 from pydantic import BaseModel
@@ -98,7 +96,6 @@ async def get_cancelled_and_refunded_orders_by_date(
         conn = await get_db_connection()
         async with conn.cursor() as cursor:
 
-            # UPDATED: Removed the JOIN to CancelledOrders and now using s.UpdatedAt for date filtering.
             base_sql = """
                 SELECT
                     s.SaleID, s.OrderType, s.PaymentMethod, s.CreatedAt, s.CashierName,
@@ -121,7 +118,7 @@ async def get_cancelled_and_refunded_orders_by_date(
             product_type_condition = get_product_type_condition(request.productType)
             base_sql += product_type_condition
 
-            # UPDATED: Ordering by the update timestamp from the Sales table.
+            # Ordering by the update timestamp from the Sales table.
             final_sql = base_sql + " ORDER BY s.UpdatedAt DESC;"
 
             await cursor.execute(final_sql, *params)

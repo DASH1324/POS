@@ -29,7 +29,9 @@ const getAuthToken = () => {
 };
 
 const API_URL = "http://127.0.0.1:9000/auth/transaction_history/all";
+const STATISTICS_API_URL = "http://127.0.0.1:9000/auth/transaction_history/statistics";
 const CASHIERS_API_URL = "http://127.0.0.1:4000/users/cashiers";
+const PARTIAL_REFUND_API_URL = "http://127.0.0.1:9000/auth/purchase_orders";
 
 // Helper function for displaying date ranges
 const getPeriodText = (dateRange, customStart, customEnd) => {
@@ -96,6 +98,7 @@ const transformApiData = (apiTransaction) => {
     discountsAndPromotions: apiTransaction.discountsAndPromotions,
     cashierName: apiTransaction.cashierName,
     GCashReferenceNumber: apiTransaction.GCashReferenceNumber,
+    refundInfo: apiTransaction.refundInfo,
   };
 };
 
@@ -120,6 +123,24 @@ function TransactionHistory() {
   const [cashiersMap, setCashiersMap] = useState({});
   const [isFilterOpen, setIsFilterOpen] = useState(false);
   const [currentPeriodText, setCurrentPeriodText] = useState(getPeriodText('today', '', ''));
+  const [loadingOrderDetails, setLoadingOrderDetails] = useState(false);
+  
+  // New state for statistics from backend
+  const [statistics, setStatistics] = useState({
+    total_transactions: 0,
+    completed_transactions: 0,
+    cancelled_transactions: 0,
+    refunded_transactions: 0,
+    transactions_with_discount: 0,
+    total_sales: 0,
+    total_items_sold: 0,
+    refund_summary: {
+      totalRefundAmount: 0,
+      totalRefundedItems: 0,
+      fullRefunds: 0,
+      partialRefunds: 0
+    }
+  });
 
   const handleAuthError = () => {
     localStorage.removeItem("authToken");
@@ -145,6 +166,38 @@ function TransactionHistory() {
       console.error("Error fetching cashiers:", error);
     }
   };
+
+  const fetchStatistics = useCallback(async (token, startDate, endDate, orderType) => {
+    try {
+      const params = new URLSearchParams();
+      if (startDate) params.append('start_date', startDate);
+      if (endDate) params.append('end_date', endDate);
+      if (orderType) params.append('order_type_filter', orderType);
+
+      const response = await fetch(`${STATISTICS_API_URL}?${params.toString()}`, {
+        method: "GET",
+        headers: {
+          Authorization: `Bearer ${token}`,
+          "Content-Type": "application/json",
+        },
+      });
+
+      if (response.status === 401) {
+        handleAuthError();
+        return;
+      }
+
+      if (!response.ok) {
+        throw new Error(`Failed to fetch statistics: ${response.status}`);
+      }
+
+      const data = await response.json();
+      setStatistics(data);
+    } catch (err) {
+      console.error("Failed to fetch statistics:", err);
+      // Don't show error to user, just use default values
+    }
+  }, [navigate]);
 
   const fetchTransactions = useCallback(async (token) => {
     if (!token) {
@@ -197,6 +250,18 @@ function TransactionHistory() {
     fetchTransactions(token);
   }, [navigate, fetchTransactions]);
 
+  // Fetch statistics whenever filters change
+  useEffect(() => {
+    const token = getAuthToken();
+    if (!token) return;
+
+    const [start, end] = getDateRange();
+    const startDate = start ? start.toISOString().split('T')[0] : null;
+    const endDate = end ? end.toISOString().split('T')[0] : null;
+
+    fetchStatistics(token, startDate, endDate, activeTab);
+  }, [dateRange, customStart, customEnd, activeTab, fetchStatistics]);
+
   useEffect(() => {
     setCurrentPeriodText(getPeriodText(dateRange, customStart, customEnd));
   }, [dateRange, customStart, customEnd]);
@@ -215,8 +280,144 @@ function TransactionHistory() {
     const token = getAuthToken();
     if (token) {
       fetchTransactions(token);
+      const [start, end] = getDateRange();
+      const startDate = start ? start.toISOString().split('T')[0] : null;
+      const endDate = end ? end.toISOString().split('T')[0] : null;
+      fetchStatistics(token, startDate, endDate, activeTab);
     } else {
       navigate("/");
+    }
+  };
+
+  // Handle full refund (original functionality)
+  const handleFullRefund = async (transaction) => {
+    try {
+      const token = localStorage.getItem("authToken");
+      
+      // MODIFIED: Get username from local storage instead of prompt
+      const managerUsername = localStorage.getItem("username");
+      if (!managerUsername) {
+        alert("Authorization failed. Username not found. Please log in again.");
+        return;
+      }
+      
+      const refundReason = prompt("Enter refund reason (optional):") || "Customer requested refund";
+      
+      const orderId = transaction.id;
+      
+      const response = await fetch(
+        `${PARTIAL_REFUND_API_URL}/${orderId}/refund`,
+        {
+          method: "POST",
+          headers: {
+            "Authorization": `Bearer ${token}`,
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({
+            managerUsername,
+            refundReason
+          })
+        }
+      );
+      
+      if (!response.ok) {
+        const errorData = await response.json();
+        throw new Error(errorData.detail || "Failed to process full refund");
+      }
+      
+      const result = await response.json();
+      
+      alert(
+        `${result.message}\n\n` +
+        `Order ID: ${result.order_id}\n` +
+        `Refunded By: ${result.refunded_by}\n` +
+        `Reason: ${result.refund_reason}`
+      );
+      
+      handleRefresh();
+      closeModal();
+      
+    } catch (error) {
+      console.error("Full refund error:", error);
+      alert(`Error processing full refund: ${error.message}`);
+    }
+  };
+
+  // Handle partial refund (new functionality)
+  const handlePartialRefund = async (transaction, itemsToRefund) => {
+    try {
+      const token = localStorage.getItem("authToken");
+      
+      console.log("=== PARTIAL REFUND DEBUG ===");
+      console.log("Transaction:", transaction);
+      console.log("Items to refund:", itemsToRefund);
+      
+      // MODIFIED: Get username from local storage instead of prompt
+      const managerUsername = localStorage.getItem("username");
+      if (!managerUsername) {
+        alert("Authorization failed. Username not found. Please log in again.");
+        return;
+      }
+      
+      const refundReason = prompt("Enter refund reason (optional):") || "Customer requested partial refund";
+      
+      const refundItems = itemsToRefund.map(item => {
+        const payload = {
+          saleItemId: parseInt(item.saleItemId),
+          refundQuantity: parseInt(item.refundQuantity),
+          itemName: String(item.name),
+          originalQuantity: parseInt(item.quantity),
+          unitPrice: parseFloat(item.price)
+        };
+        console.log("Mapped item payload:", payload);
+        return payload;
+      });
+      
+      const requestBody = {
+        managerUsername: String(managerUsername),
+        refundReason: String(refundReason),
+        items: refundItems
+      };
+      
+      console.log("Request body:", JSON.stringify(requestBody, null, 2));
+      
+      const response = await fetch(
+        `${PARTIAL_REFUND_API_URL}/${transaction.id}/partial-refund`,
+        {
+          method: "POST",
+          headers: {
+            "Authorization": `Bearer ${token}`,
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify(requestBody)
+        }
+      );
+      
+      console.log("Response status:", response.status);
+      
+      if (!response.ok) {
+        const errorData = await response.json();
+        console.error("Error response:", errorData);
+        throw new Error(errorData.detail || "Failed to process partial refund");
+      }
+      
+      const result = await response.json();
+      
+      alert(
+        `${result.message}\n\n` +
+        `Refund Type: ${result.refund_type}\n` +
+        `Total Refund Amount: ₱${result.total_refund_amount.toFixed(2)}\n\n` +
+        `Refunded Items:\n${result.refunded_items.map(item => 
+          `- ${item.item_name} (x${item.quantity}): ₱${item.amount.toFixed(2)}`
+        ).join('\n')}`
+      );
+      
+      handleRefresh();
+      closeModal();
+      
+    } catch (error) {
+      console.error("Partial refund error:", error);
+      alert(`Error processing partial refund: ${error.message}`);
     }
   };
 
@@ -303,22 +504,14 @@ function TransactionHistory() {
     return [...new Set(currentTabTransactions.map((t) => t.paymentMethod).filter(Boolean))];
   }, [transactions, activeTab]);
 
+  // Use statistics from backend for summary cards
   const summary = useMemo(() => {
+    // Calculate from filtered transactions for display purposes
     const totalSales = filteredTransactions
       .filter(t => t.status.toLowerCase() === 'completed')
       .reduce((sum, t) => sum + parseFloat(t.total || 0), 0);
     
     const totalTransactions = filteredTransactions.length;
-    
-    // *** START OF CHANGE ***
-    // Updated the filter to include 'refunded' to correctly calculate the total.
-    const totalRefunds = filteredTransactions
-      .filter(t => {
-        const status = t.status.toLowerCase();
-        return status === 'refund' || status === 'return' || status === 'refunded';
-      })
-      .reduce((sum, t) => sum + parseFloat(t.total || 0), 0);
-    // *** END OF CHANGE ***
     
     const cashSales = filteredTransactions
       .filter(t => t.status.toLowerCase() === 'completed' && t.paymentMethod === 'Cash')
@@ -328,16 +521,82 @@ function TransactionHistory() {
       .filter(t => t.status.toLowerCase() === 'completed' && t.paymentMethod === 'GCASH')
       .reduce((sum, t) => sum + parseFloat(t.total || 0), 0);
     
+    // Use backend statistics for refunds
+    const totalRefunds = statistics.refund_summary?.totalRefundAmount || 0;
+    
     return { totalSales, totalTransactions, totalRefunds, cashSales, digitalSales };
-  }, [filteredTransactions]);
+  }, [filteredTransactions, statistics]);
 
   const formatCurrency = (amount) => {
     return `₱${parseFloat(amount).toFixed(2)}`;
   };
 
-  const handleRowClick = (row) => {
-    setSelectedTransaction(row);
-    setIsModalOpen(true);
+  const handleRowClick = async (row) => {
+    console.log("=== SELECTED TRANSACTION ===");
+    console.log("Full transaction:", row);
+    console.log("Transaction items:", row.items);
+    if (row.items && row.items.length > 0) {
+      console.log("First item structure:", row.items[0]);
+    }
+    
+    setLoadingOrderDetails(true);
+    try {
+      const token = getAuthToken();
+      const orderId = row.id;
+      
+      const response = await fetch(
+        `${PARTIAL_REFUND_API_URL}/all`,
+        {
+          method: "GET",
+          headers: {
+            "Authorization": `Bearer ${token}`,
+            "Content-Type": "application/json",
+          },
+        }
+      );
+      
+      if (response.ok) {
+        const allOrders = await response.json();
+        const detailedOrder = allOrders.find(order => order.id === orderId);
+        
+        if (detailedOrder && detailedOrder.orderItems) {
+          console.log("=== DETAILED ORDER WITH SALE ITEM IDS ===");
+          console.log("Detailed order:", detailedOrder);
+          console.log("Order items with IDs:", detailedOrder.orderItems);
+          
+          const enhancedTransaction = {
+            ...row,
+            items: detailedOrder.orderItems.map(orderItem => ({
+              id: orderItem.id,
+              saleItemId: orderItem.id,
+              name: orderItem.name,
+              quantity: orderItem.quantity,
+              price: orderItem.price,
+              category: orderItem.category,
+              addons: orderItem.addons || [],
+              refundedQuantity: row.items.find(i => i.name === orderItem.name)?.refundedQuantity || 0,
+              refundAmount: row.items.find(i => i.name === orderItem.name)?.refundAmount || 0,
+              isFullyRefunded: row.items.find(i => i.name === orderItem.name)?.isFullyRefunded || false
+            }))
+          };
+          
+          console.log("Enhanced transaction:", enhancedTransaction);
+          setSelectedTransaction(enhancedTransaction);
+        } else {
+          console.warn("Could not find detailed order, using original transaction");
+          setSelectedTransaction(row);
+        }
+      } else {
+        console.error("Failed to fetch order details");
+        setSelectedTransaction(row);
+      }
+    } catch (error) {
+      console.error("Error fetching order details:", error);
+      setSelectedTransaction(row);
+    } finally {
+      setLoadingOrderDetails(false);
+      setIsModalOpen(true);
+    }
   };
 
   const closeModal = () => {
@@ -357,7 +616,7 @@ function TransactionHistory() {
   };
 
   const columns = [
-    { name: "ORDER", selector: (row) => row.id, cell: (row) => <div style={{ fontWeight: "600" }}>{row.id}</div>, sortable: true, width: "9%", left: true },
+    { name: "ORDER", selector: (row) => row.id, cell: (row) => <div style={{ fontWeight: "600" }}>{row.id}</div>, sortable: true, width: "7%", left: true },
     {
       name: "DATE & TIME", selector: (row) => new Date(row.date),
       cell: (row) => {
@@ -368,20 +627,21 @@ function TransactionHistory() {
             <div style={{ fontSize: "12px", color: "#666" }}>{date.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', hour12: true })}</div>
           </div>
         );
-      }, sortable: true, width: "11%",
+      }, sortable: true, width: "10%",
     },
-    { name: "CASHIER", selector: (row) => cashiersMap[row.cashierName] || row.cashierName || "—", width: "9%", center: true },
-    { name: "ORDER TYPE", selector: (row) => row.orderType || "—", width: "8%", center: true },
-    { name: "ITEMS", selector: (row) => row.items?.map(item => item.name).join(', ') || "—", width: "15%", center: true },
-    { name: "QTY", selector: (row) => row.items?.reduce((sum, item) => sum + (item.quantity || 0), 0) || 0, sortable: true, width: "6%", center: true },
-    { name: "SUBTOTAL", selector: (row) => row.subtotal, cell: (row) => <div style={{ fontWeight: "600" }}>₱{parseFloat(row.subtotal).toFixed(2)}</div>, sortable: true, width: "8%", center: true },
-    { name: "DISCOUNT", selector: (row) => row.discount, cell: (row) => <div>₱{parseFloat(row.discount || 0).toFixed(2)}</div>, sortable: true, width: "8%", center: true },
-    { name: "PAYMENT", selector: (row) => row.paymentMethod || "N/A", width: "8%", center: true },
-    { name: "TOTAL", selector: (row) => row.total, cell: (row) => <div style={{ fontWeight: "600" }}>₱{parseFloat(row.total).toFixed(2)}</div>, sortable: true, width: "8%", center: true },
+    { name: "CASHIER", selector: (row) => cashiersMap[row.cashierName] || row.cashierName || "—", width: "8%", center: true },
+    { name: "ORDER TYPE", selector: (row) => row.orderType || "—", width: "7%", center: true },
+    { name: "ITEMS", selector: (row) => row.items?.map(item => item.name).join(', ') || "—", width: "13%", center: true },
+    { name: "QTY", selector: (row) => row.items?.reduce((sum, item) => sum + (item.quantity || 0), 0) || 0, sortable: true, width: "5%", center: true },
+    { name: "SUBTOTAL", selector: (row) => row.subtotal, cell: (row) => <div style={{ fontWeight: "600" }}>₱{parseFloat(row.subtotal).toFixed(2)}</div>, sortable: true, width: "7%", center: true },
+    { name: "REFUND", selector: (row) => row.refundInfo?.totalRefundAmount || 0, cell: (row) => <div style={{ color: row.refundInfo?.totalRefundAmount > 0 ? "#dc3545" : "#666" }}>₱{parseFloat(row.refundInfo?.totalRefundAmount || 0).toFixed(2)}</div>, sortable: true, width: "7%", center: true },
+    { name: "DISCOUNT", selector: (row) => row.discount, cell: (row) => <div>₱{parseFloat(row.discount || 0).toFixed(2)}</div>, sortable: true, width: "7%", center: true },
+    { name: "PAYMENT", selector: (row) => row.paymentMethod || "N/A", width: "7%", center: true },
+    { name: "TOTAL", selector: (row) => row.total, cell: (row) => <div style={{ fontWeight: "600" }}>₱{parseFloat(row.total).toFixed(2)}</div>, sortable: true, width: "7%", center: true },
     {
       name: "STATUS", selector: (row) => row.status,
       cell: (row) => <span className={`transHis-status-badge ${row.status.toLowerCase()}`}>{row.status.toUpperCase()}</span>,
-      sortable: true, width: "10%", center: true,
+      sortable: true, width: "8%", center: true,
     },
   ];
 
@@ -474,6 +734,22 @@ function TransactionHistory() {
                 </div>
               )}
               <div className="transHis-table-container">
+                {loadingOrderDetails && (
+                  <div style={{
+                    position: 'fixed',
+                    top: 0,
+                    left: 0,
+                    right: 0,
+                    bottom: 0,
+                    background: 'rgba(0,0,0,0.5)',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    zIndex: 9999
+                  }}>
+                    <div style={{ color: 'white', fontSize: '18px' }}>Loading order details...</div>
+                  </div>
+                )}
                 <DataTable
                   columns={columns} data={filteredTransactions} striped highlightOnHover responsive pagination paginationPerPage={7} paginationRowsPerPageOptions={[7]}
                   fixedHeader fixedHeaderScrollHeight="60vh" onRowClicked={handleRowClick} pointerOnHover noDataComponent={<div style={{ padding: "24px" }}>No {activeTab.toLowerCase()} transactions found.</div>}
@@ -482,7 +758,16 @@ function TransactionHistory() {
                     rows: { style: { minHeight: "55px", padding: "5px"}},
                   }}
                 />
-                {selectedTransaction && (<TransHisModal show={isModalOpen} onClose={closeModal} transaction={selectedTransaction} />)}
+                {selectedTransaction && (
+                  <TransHisModal 
+                    show={isModalOpen} 
+                    onClose={closeModal} 
+                    transaction={selectedTransaction}
+                    onRefundOrder={handleFullRefund}
+                    onPartialRefund={handlePartialRefund}
+                    cashiersMap={cashiersMap}
+                  />
+                )}
               </div>
               <CustomDateModal show={isCustomModalOpen} onClose={() => setIsCustomModalOpen(false)} onApply={handleCustomDateApply} initialStart={customStart} initialEnd={customEnd} />
             </>

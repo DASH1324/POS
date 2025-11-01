@@ -1,4 +1,4 @@
-# FILE: top_products.py - UPDATED WITH by_date ENDPOINT
+# FILE: top_products.py - COMPLETE WITH REFUND DEDUCTIONS
 
 from fastapi import APIRouter, HTTPException, status, Depends
 from pydantic import BaseModel
@@ -44,7 +44,6 @@ class TopProductsRequest(BaseModel):
     orderType: Optional[str] = "All"
     productType: Optional[str] = "All"
 
-# NEW: Pydantic model for date-based requests
 class TopProductsByDateRequest(BaseModel):
     cashierName: str
     date: date
@@ -73,7 +72,6 @@ async def get_top_products_today(
     request: TopProductsRequest,
     current_user: dict = Depends(get_current_active_user)
 ):
-    # This endpoint remains unchanged
     allowed_roles = ["cashier"]
     if current_user.get("userRole") not in allowed_roles:
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Permission denied.")
@@ -82,30 +80,64 @@ async def get_top_products_today(
     try:
         conn = await get_db_connection()
         async with conn.cursor() as cursor:
+            # Build the query with refund deduction
             base_sql = """
-                SELECT TOP 10 si.ItemName, SUM(si.Quantity) AS TotalQuantitySold
-                FROM Sales AS s JOIN SaleItems AS si ON s.SaleID = si.SaleID
-                WHERE s.Status = 'completed' AND s.CashierName = ? AND CAST(s.CreatedAt AS DATE) = CAST(GETDATE() AS DATE)
+                WITH SaleItemsWithRefunds AS (
+                    SELECT 
+                        si.SaleItemID,
+                        si.ItemName,
+                        si.Quantity AS OriginalQuantity,
+                        ISNULL(SUM(ri.RefundedQuantity), 0) AS RefundedQuantity,
+                        si.Quantity - ISNULL(SUM(ri.RefundedQuantity), 0) AS NetQuantity
+                    FROM Sales AS s 
+                    JOIN SaleItems AS si ON s.SaleID = si.SaleID
+                    LEFT JOIN RefundedItems ri ON si.SaleItemID = ri.SaleItemID
+                    WHERE s.Status = 'completed' 
+                        AND s.CashierName = ? 
+                        AND CAST(s.CreatedAt AS DATE) = CAST(GETDATE() AS DATE)
             """
+            
             params = [request.cashierName]
+            
+            # Add order type filter
             if request.orderType == "Store":
                 base_sql += " AND s.OrderType IN ('Dine in', 'Take out')"
             elif request.orderType == "Online":
                 base_sql += " AND s.OrderType IN ('Pick up', 'Delivery')"
+            
+            # Add product type filter
             product_type_condition = get_product_type_condition(request.productType)
             base_sql += product_type_condition
-            final_sql = base_sql + " GROUP BY si.ItemName ORDER BY TotalQuantitySold DESC;"
+            
+            # Complete the CTE and add aggregation
+            final_sql = base_sql + """
+                    GROUP BY si.SaleItemID, si.ItemName, si.Quantity
+                )
+                SELECT TOP 10 
+                    ItemName,
+                    SUM(NetQuantity) AS TotalQuantitySold
+                FROM SaleItemsWithRefunds
+                WHERE NetQuantity > 0  -- Only include items with positive net quantity
+                GROUP BY ItemName
+                ORDER BY TotalQuantitySold DESC;
+            """
+            
             await cursor.execute(final_sql, *params)
             rows = await cursor.fetchall()
-            return [TopProductItem(name=row.ItemName, sales=row.TotalQuantitySold) for row in rows]
+            
+            return [
+                TopProductItem(name=row.ItemName, sales=row.TotalQuantitySold) 
+                for row in rows
+            ]
+            
     except Exception as e:
         logger.error(f"Error fetching top products for {request.cashierName}: {e}", exc_info=True)
         raise HTTPException(status_code=500, detail="Failed to fetch top selling products.")
     finally:
-        if conn: await conn.close()
+        if conn:
+            await conn.close()
 
-# --- [NEW ENDPOINT START] ---
-# This new endpoint handles requests for a specific date, fixing the 404 error.
+# --- API Endpoint to Get Top Selling Products by Date for a Cashier ---
 @router_top_products.post(
     "/by_date",
     response_model=List[TopProductItem],
@@ -125,34 +157,44 @@ async def get_top_products_by_date(
         async with conn.cursor() as cursor:
             
             base_sql = """
-                SELECT
-                    TOP 10
-                    si.ItemName,
-                    SUM(si.Quantity) AS TotalQuantitySold
-                FROM Sales AS s
-                JOIN SaleItems AS si ON s.SaleID = si.SaleID
-                WHERE 
-                    s.Status = 'completed'
-                    AND s.CashierName = ?
-                    AND CAST(s.CreatedAt AS DATE) = ?
+                WITH SaleItemsWithRefunds AS (
+                    SELECT 
+                        si.SaleItemID,
+                        si.ItemName,
+                        si.Quantity AS OriginalQuantity,
+                        ISNULL(SUM(ri.RefundedQuantity), 0) AS RefundedQuantity,
+                        si.Quantity - ISNULL(SUM(ri.RefundedQuantity), 0) AS NetQuantity
+                    FROM Sales AS s 
+                    JOIN SaleItems AS si ON s.SaleID = si.SaleID
+                    LEFT JOIN RefundedItems ri ON si.SaleItemID = ri.SaleItemID
+                    WHERE s.Status = 'completed'
+                        AND s.CashierName = ?
+                        AND CAST(s.CreatedAt AS DATE) = ?
             """
             
-            # Use the date from the request payload
             params = [request.cashierName, request.date]
             
+            # Add order type filter
             if request.orderType == "Store":
                 base_sql += " AND s.OrderType IN ('Dine in', 'Take out')"
             elif request.orderType == "Online":
                 base_sql += " AND s.OrderType IN ('Pick up', 'Delivery')"
             
+            # Add product type filter
             product_type_condition = get_product_type_condition(request.productType)
             base_sql += product_type_condition
             
+            # Complete the CTE and add aggregation
             final_sql = base_sql + """
-                GROUP BY
-                    si.ItemName
-                ORDER BY
-                    TotalQuantitySold DESC;
+                    GROUP BY si.SaleItemID, si.ItemName, si.Quantity
+                )
+                SELECT TOP 10 
+                    ItemName,
+                    SUM(NetQuantity) AS TotalQuantitySold
+                FROM SaleItemsWithRefunds
+                WHERE NetQuantity > 0  -- Only include items with positive net quantity
+                GROUP BY ItemName
+                ORDER BY TotalQuantitySold DESC;
             """
             
             await cursor.execute(final_sql, *params)
