@@ -313,7 +313,14 @@ async def get_orders_by_status(
                         total_addons_cost += addon_cost
                         addons_list.append({'name': addon.AddonName, 'price': float(addon.Price), 'quantity': addon.Quantity})
                     
-                    order_items.append({'name': item.ItemName, 'quantity': item.Quantity, 'price': float(item.UnitPrice), 'category': item.Category, 'addons': addons_list})
+                    order_items.append({
+                        'saleItemId': item.SaleItemID,  # Named as saleItemId
+                        'name': item.ItemName, 
+                        'quantity': item.Quantity, 
+                        'price': float(item.UnitPrice), 
+                        'category': item.Category, 
+                        'addons': addons_list
+                    })
                 
                 manual_discount = Decimal(str(sale.TotalDiscountAmount or 0))
                 promo_discount = Decimal(str(sale.PromotionalDiscountAmount or 0))

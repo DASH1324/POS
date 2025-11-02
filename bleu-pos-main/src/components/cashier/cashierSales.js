@@ -294,8 +294,9 @@ function CashierSales({ shiftLabel = "Morning Shift", shiftTime = "6:00AM – 2:
 
   const today = new Date();
   const formattedDate = date || today.toLocaleDateString('en-US', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' });
-  const todayString = today.toISOString().split('T')[0];
-
+const todayString = new Date(today.getTime() - (today.getTimezoneOffset() * 60000))
+  .toISOString()
+  .split('T')[0];
   const salesMetrics = [
     { title: 'Total Sales', key: 'totalSales', format: 'currency', icon: faCashRegister, isLoading: isSalesLoading, error: salesError },
     { title: 'Cash Sales', key: 'cashSales', format: 'currency', icon: faMoneyBillWave, isLoading: isSalesLoading, error: salesError },

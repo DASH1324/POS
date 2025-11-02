@@ -306,7 +306,7 @@ function TransactionHistory() {
       const orderId = transaction.id;
       
       const response = await fetch(
-        `${PARTIAL_REFUND_API_URL}/${orderId}/refund`,
+        `${PARTIAL_REFUND_API_URL}/${orderId}/refund-today`,
         {
           method: "POST",
           headers: {
@@ -344,65 +344,70 @@ function TransactionHistory() {
   };
 
   // Handle partial refund (new functionality)
-  const handlePartialRefund = async (transaction, itemsToRefund) => {
-    try {
-      const token = localStorage.getItem("authToken");
-      
-      console.log("=== PARTIAL REFUND DEBUG ===");
-      console.log("Transaction:", transaction);
-      console.log("Items to refund:", itemsToRefund);
-      
-      // MODIFIED: Get username from local storage instead of prompt
-      const managerUsername = localStorage.getItem("username");
-      if (!managerUsername) {
-        alert("Authorization failed. Username not found. Please log in again.");
-        return;
-      }
-      
-      const refundReason = prompt("Enter refund reason (optional):") || "Customer requested partial refund";
-      
-      const refundItems = itemsToRefund.map(item => {
-        const payload = {
-          saleItemId: parseInt(item.saleItemId),
-          refundQuantity: parseInt(item.refundQuantity),
-          itemName: String(item.name),
-          originalQuantity: parseInt(item.quantity),
-          unitPrice: parseFloat(item.price)
-        };
-        console.log("Mapped item payload:", payload);
-        return payload;
-      });
-      
-      const requestBody = {
-        managerUsername: String(managerUsername),
-        refundReason: String(refundReason),
-        items: refundItems
+  // Handle partial refund (new functionality)
+const handlePartialRefund = async (transaction, itemsToRefund) => {
+  try {
+    const token = localStorage.getItem("authToken");
+    
+    console.log("=== PARTIAL REFUND DEBUG ===");
+    console.log("Transaction:", transaction);
+    console.log("Items to refund:", itemsToRefund);
+    
+    // Get username from local storage
+    const managerUsername = localStorage.getItem("username");
+    if (!managerUsername) {
+      alert("Authorization failed. Username not found. Please log in again.");
+      return;
+    }
+    
+    const refundReason = prompt("Enter refund reason (optional):") || "Customer requested partial refund";
+    
+    const refundItems = itemsToRefund.map(item => {
+      const payload = {
+        saleItemId: parseInt(item.saleItemId),
+        refundQuantity: parseInt(item.refundQuantity),
+        itemName: String(item.name),
+        originalQuantity: parseInt(item.quantity),
+        unitPrice: parseFloat(item.price)
       };
-      
-      console.log("Request body:", JSON.stringify(requestBody, null, 2));
-      
-      const response = await fetch(
-        `${PARTIAL_REFUND_API_URL}/${transaction.id}/partial-refund`,
-        {
-          method: "POST",
-          headers: {
-            "Authorization": `Bearer ${token}`,
-            "Content-Type": "application/json",
-          },
-          body: JSON.stringify(requestBody)
-        }
-      );
-      
-      console.log("Response status:", response.status);
-      
-      if (!response.ok) {
-        const errorData = await response.json();
-        console.error("Error response:", errorData);
-        throw new Error(errorData.detail || "Failed to process partial refund");
+      console.log("Mapped item payload:", payload);
+      return payload;
+    });
+    
+    const requestBody = {
+      managerUsername: String(managerUsername),
+      refundReason: String(refundReason),
+      items: refundItems
+    };
+    
+    console.log("Request body:", JSON.stringify(requestBody, null, 2));
+    
+    const response = await fetch(
+      `${PARTIAL_REFUND_API_URL}/${transaction.id}/partial-refund-today`,
+      {
+        method: "POST",
+        headers: {
+          "Authorization": `Bearer ${token}`,
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify(requestBody)
       }
-      
-      const result = await response.json();
-      
+    );
+    
+    console.log("Response status:", response.status);
+    
+    if (!response.ok) {
+      const errorData = await response.json();
+      console.error("Error response:", errorData);
+      throw new Error(errorData.detail || "Failed to process partial refund");
+    }
+    
+    const result = await response.json();
+    console.log("Response data:", result);
+    
+    // Handle both response formats (detailed and simple)
+    if (result.total_refund_amount !== undefined && result.refunded_items) {
+      // Detailed response format
       alert(
         `${result.message}\n\n` +
         `Refund Type: ${result.refund_type}\n` +
@@ -411,15 +416,30 @@ function TransactionHistory() {
           `- ${item.item_name} (x${item.quantity}): ₱${item.amount.toFixed(2)}`
         ).join('\n')}`
       );
+    } else {
+      // Simple response format
+      const totalRefundAmount = refundItems.reduce((sum, item) => 
+        sum + (item.unitPrice * item.refundQuantity), 0
+      );
       
-      handleRefresh();
-      closeModal();
-      
-    } catch (error) {
-      console.error("Partial refund error:", error);
-      alert(`Error processing partial refund: ${error.message}`);
+      alert(
+        `${result.message}\n\n` +
+        `Order ID: ${result.order_id}\n` +
+        `Total Refund Amount: ₱${totalRefundAmount.toFixed(2)}\n\n` +
+        `Refunded Items:\n${refundItems.map(item => 
+          `- ${item.itemName} (x${item.refundQuantity}): ₱${(item.unitPrice * item.refundQuantity).toFixed(2)}`
+        ).join('\n')}`
+      );
     }
-  };
+    
+    handleRefresh();
+    closeModal();
+    
+  } catch (error) {
+    console.error("Partial refund error:", error);
+    alert(`Error processing partial refund: ${error.message}`);
+  }
+};
 
   const getDateRange = useCallback(() => {
     const now = new Date();

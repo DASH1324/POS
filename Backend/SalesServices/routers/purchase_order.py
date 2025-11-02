@@ -1227,6 +1227,229 @@ async def partial_refund_order(
             await conn.close()
 
 
+# partial refund endpoint for manager
+
+@router_purchase_order.post(
+    "/{order_id}/partial-refund-today",
+    status_code=status.HTTP_200_OK,
+    summary="Process a partial refund (today only) for specific items"
+)
+async def partial_refund_order_today(
+    order_id: str,
+    request: PartialRefundOrderRequest,
+    current_user: dict = Depends(get_current_active_user)
+):
+    """
+    Process a partial refund for specific items in a completed order.
+    Only allows refunding orders that have status 'completed' or are already partially refunded.
+    Refunds must be processed on the SAME CALENDAR DAY as order completion.
+    """
+    allowed_roles = ["cashier", "manager"]
+    if current_user.get("userRole") not in allowed_roles:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="You do not have permission to process refunds.")
+    
+    try:
+        parsed_id = int(order_id.split('-')[-1])
+    except (ValueError, IndexError):
+        raise HTTPException(status_code=400, detail="Invalid order ID format.")
+    
+    conn = None
+    try:
+        conn = await get_db_connection()
+        conn.autocommit = False
+        
+        async with conn.cursor() as cursor:
+            await cursor.execute(
+                "SELECT Status, UpdatedAt, CreatedAt FROM Sales WHERE SaleID = ?", parsed_id
+            )
+            order_result = await cursor.fetchone()
+            
+            if not order_result:
+                raise HTTPException(status_code=404, detail=f"Order '{order_id}' not found.")
+            
+            if order_result.Status.lower() not in ['completed', 'refunded']:
+                raise HTTPException(
+                    status_code=400,
+                    detail=f"Only completed or partially refunded orders can be refunded. Current status: {order_result.Status}"
+                )
+            
+            # --- MODIFIED TIME CONSTRAINT ---
+            # Check if the order was completed today
+            completion_time = order_result.UpdatedAt or order_result.CreatedAt
+            if completion_time:
+                if completion_time.date() != datetime.now().date():
+                    raise HTTPException(
+                        status_code=400,
+                        detail="Refund window expired. Orders can only be refunded on the same day they were completed."
+                    )
+            # --- END MODIFICATION ---
+
+            # (The rest of the logic remains the same as the original partial_refund_order function)
+            sale_item_ids = [item.saleItemId for item in request.items]
+            placeholders = ','.join(['?' for _ in sale_item_ids])
+            
+            await cursor.execute(
+                f"SELECT SaleItemID, Quantity, UnitPrice FROM SaleItems WHERE SaleID = ? AND SaleItemID IN ({placeholders})",
+                parsed_id, *sale_item_ids
+            )
+            valid_items = await cursor.fetchall()
+            
+            if len(valid_items) != len(request.items):
+                raise HTTPException(status_code=400, detail="One or more items do not belong to this order.")
+            
+            await cursor.execute(f"""
+                SELECT ri.SaleItemID, SUM(ri.RefundedQuantity) as TotalRefunded
+                FROM RefundedOrders ro JOIN RefundedItems ri ON ro.RefundID = ri.RefundID
+                WHERE ro.SaleID = ? AND ri.SaleItemID IN ({placeholders}) GROUP BY ri.SaleItemID
+            """, parsed_id, *sale_item_ids)
+            already_refunded = {row.SaleItemID: row.TotalRefunded for row in await cursor.fetchall()}
+            
+            total_refund_amount = Decimal('0.0')
+            refund_details = []
+            
+            for req_item in request.items:
+                db_item = next((item for item in valid_items if item.SaleItemID == req_item.saleItemId), None)
+                remaining_qty = db_item.Quantity - already_refunded.get(req_item.saleItemId, 0)
+                
+                if req_item.refundQuantity > remaining_qty:
+                    raise HTTPException(f"Cannot refund {req_item.refundQuantity} of {req_item.itemName}. Only {remaining_qty} remaining.")
+                
+                await cursor.execute("SELECT SUM(a.Price * sia.Quantity) as AddonTotal FROM SaleItemAddons sia JOIN Addons a ON sia.AddonID = a.AddonID WHERE sia.SaleItemID = ?", req_item.saleItemId)
+                addon_total = (await cursor.fetchone()).AddonTotal or Decimal('0.0')
+                
+                total_unit_cost = db_item.UnitPrice + (addon_total / db_item.Quantity if db_item.Quantity > 0 else Decimal('0.0'))
+                item_refund_amount = total_unit_cost * Decimal(req_item.refundQuantity)
+                total_refund_amount += item_refund_amount
+                
+                refund_details.append({'sale_item_id': req_item.saleItemId, 'refund_quantity': req_item.refundQuantity, 'refund_amount': item_refund_amount})
+            
+            await cursor.execute("""
+                INSERT INTO RefundedOrders (SaleID, ManagerUsername, RefundReason, RefundedAt, RefundType, RefundAmount)
+                OUTPUT INSERTED.RefundID
+                VALUES (?, ?, ?, GETDATE(), 'partial', ?)
+            """, parsed_id, request.managerUsername, request.refundReason, total_refund_amount)
+            refund_id = (await cursor.fetchone())[0]
+            
+            for detail in refund_details:
+                await cursor.execute("INSERT INTO RefundedItems (RefundID, SaleItemID, RefundedQuantity, RefundAmount) VALUES (?, ?, ?, ?)", refund_id, detail['sale_item_id'], detail['refund_quantity'], detail['refund_amount'])
+
+            await cursor.execute("UPDATE Sales SET IsPartiallyRefunded = 1, UpdatedAt = GETDATE() WHERE SaleID = ?", parsed_id)
+            await conn.commit()
+            
+            logger.info(f"Partial refund (today) processed for order {order_id} by {request.managerUsername}.")
+            return {"message": "Partial refund processed successfully.", "order_id": order_id}
+
+    finally:
+        if conn:
+            conn.autocommit = True
+            await conn.close()
+
+# refund endpoint for manager 
+@router_purchase_order.post(
+    "/{order_id}/refund-today",
+    status_code=status.HTTP_200_OK,
+    summary="Process a full refund (today only) for a completed order"
+)
+async def refund_order_today(
+    order_id: str,
+    request: RefundOrderRequest,
+    current_user: dict = Depends(get_current_active_user)
+):
+    """
+    Process a full refund for a completed order.
+    Only allows refunding orders that have status 'completed'.
+    Refunds must be processed on the SAME CALENDAR DAY as order completion.
+    Requires manager authorization.
+    """
+    allowed_roles = ["cashier", "manager"]
+    if current_user.get("userRole") not in allowed_roles:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="You do not have permission to process refunds."
+        )
+    
+    try:
+        parsed_id = int(order_id.split('-')[-1])
+    except (ValueError, IndexError):
+        raise HTTPException(status_code=400, detail="Invalid order ID format.")
+    
+    conn = None
+    try:
+        conn = await get_db_connection()
+        conn.autocommit = False
+        
+        async with conn.cursor() as cursor:
+            await cursor.execute(
+                "SELECT Status, CashierName, TotalDiscountAmount, UpdatedAt, CreatedAt FROM Sales WHERE SaleID = ?", 
+                parsed_id
+            )
+            order_result = await cursor.fetchone()
+            
+            if not order_result:
+                raise HTTPException(status_code=404, detail=f"Order '{order_id}' not found.")
+            
+            if order_result.Status.lower() != 'completed':
+                raise HTTPException(
+                    status_code=400,
+                    detail=f"Only completed orders can be refunded. Current status: {order_result.Status}"
+                )
+            
+            # --- MODIFIED TIME CONSTRAINT ---
+            # Check if the order was completed today
+            completion_time = order_result.UpdatedAt or order_result.CreatedAt
+            if completion_time:
+                if completion_time.date() != datetime.now().date():
+                    raise HTTPException(
+                        status_code=400,
+                        detail="Refund window expired. Orders can only be refunded on the same day they were completed."
+                    )
+            # --- END MODIFICATION ---
+
+            await cursor.execute("""
+                SELECT si.SaleItemID, si.ItemName, si.Quantity, si.UnitPrice,
+                       COALESCE((SELECT SUM(a.Price * sia.Quantity) FROM SaleItemAddons sia JOIN Addons a ON sia.AddonID = a.AddonID WHERE sia.SaleItemID = si.SaleItemID), 0) as AddonTotal
+                FROM SaleItems si WHERE si.SaleID = ?
+            """, parsed_id)
+            order_items = await cursor.fetchall()
+            
+            if not order_items:
+                raise HTTPException(status_code=400, detail="No items found for this order.")
+
+            total_refund_amount = sum((item.UnitPrice * item.Quantity) + item.AddonTotal for item in order_items)
+            total_refund_amount -= (order_result.TotalDiscountAmount or Decimal('0.0'))
+            
+            try:
+                await cursor.execute("UPDATE Sales SET Status = 'refunded', UpdatedAt = GETDATE() WHERE SaleID = ?", parsed_id)
+                
+                await cursor.execute("""
+                    INSERT INTO RefundedOrders (SaleID, ManagerUsername, RefundReason, RefundedAt, RefundType, RefundAmount)
+                    OUTPUT INSERTED.RefundID
+                    VALUES (?, ?, ?, GETDATE(), 'full', ?)
+                """, parsed_id, request.managerUsername, request.refundReason, total_refund_amount)
+                refund_id = (await cursor.fetchone())[0]
+
+                for item in order_items:
+                    item_total = (item.UnitPrice * item.Quantity) + item.AddonTotal
+                    await cursor.execute("""
+                        INSERT INTO RefundedItems (RefundID, SaleItemID, RefundedQuantity, RefundAmount, CreatedAt)
+                        VALUES (?, ?, ?, ?, GETDATE())
+                    """, refund_id, item.SaleItemID, item.Quantity, item_total)
+                
+                await conn.commit()
+                
+                logger.info(f"Full refund (today) processed for order {order_id} by {request.managerUsername}.")
+                
+                return {"message": "Order has been successfully refunded (full refund).", "order_id": order_id}
+                
+            except Exception as db_exc:
+                await conn.rollback()
+                logger.error(f"DB error during full refund (today) for order {order_id}: {db_exc}", exc_info=True)
+                raise HTTPException(status_code=500, detail="Failed to process refund in database.")
+    finally:
+        if conn:
+            conn.autocommit = True
+            await conn.close()
+
 
 # Add endpoint to get refund history for an order
 @router_purchase_order.get(

@@ -100,10 +100,16 @@ async def get_cancelled_and_refunded_orders_by_date(
                 SELECT
                     s.SaleID, s.OrderType, s.PaymentMethod, s.CreatedAt, s.CashierName,
                     s.TotalDiscountAmount, s.Status, s.GCashReferenceNumber, s.UpdatedAt,
-                    si.SaleItemID, si.ItemName, si.Quantity, si.UnitPrice, si.Category
+                    s.IsPartiallyRefunded,
+                    si.SaleItemID, si.ItemName, si.Quantity, si.UnitPrice, si.Category,
+                    ISNULL(ri.RefundedQuantity, 0) AS RefundedQuantity
                 FROM Sales AS s
                 LEFT JOIN SaleItems AS si ON s.SaleID = si.SaleID
-                WHERE s.Status IN ('cancelled', 'refunded')
+                LEFT JOIN RefundedItems AS ri ON si.SaleItemID = ri.SaleItemID
+                WHERE (
+                    s.Status IN ('cancelled', 'refunded')
+                    OR (s.Status = 'completed' AND s.IsPartiallyRefunded = 1)
+                )
                 AND s.CashierName = ?
                 AND CAST(s.UpdatedAt AS DATE) = ?
             """
@@ -144,10 +150,25 @@ async def get_cancelled_and_refunded_orders_by_date(
                         "items": 0,
                         "orderItems": [],
                         "_totalDiscount": row.TotalDiscountAmount,
+                        "_isPartiallyRefunded": row.IsPartiallyRefunded,
                     }
 
+                # For cancelled or fully refunded orders, show all items
+                # For partially refunded orders, only show items that were actually refunded
+                should_include_item = False
+                item_quantity = 0
+                
                 if row.SaleItemID:
-                    item_quantity = row.Quantity or 0
+                    if row.Status in ('cancelled', 'refunded'):
+                        # Show all items with original quantity
+                        should_include_item = True
+                        item_quantity = row.Quantity or 0
+                    elif row.Status == 'completed' and row.IsPartiallyRefunded and row.RefundedQuantity > 0:
+                        # Only show items that were actually refunded, with refunded quantity
+                        should_include_item = True
+                        item_quantity = row.RefundedQuantity
+
+                if should_include_item:
                     item_price = row.UnitPrice or Decimal('0.0')
                     orders_dict[sale_id]["items"] += item_quantity
                     item_total = item_price * item_quantity
@@ -174,6 +195,14 @@ async def get_cancelled_and_refunded_orders_by_date(
 
                     item_subtotals[sale_id] += item_total + addons_total_price
 
+                    # Determine status label for display
+                    if row.Status == 'refunded':
+                        status_label = 'Refund'
+                    elif row.Status == 'cancelled':
+                        status_label = 'Cancelled'
+                    else:  # Partially refunded (completed + IsPartiallyRefunded)
+                        status_label = 'Partial Refund'
+
                     orders_dict[sale_id]["orderItems"].append(
                         ProcessingSaleItem(
                             name=row.ItemName,
@@ -186,11 +215,19 @@ async def get_cancelled_and_refunded_orders_by_date(
 
             response_list = []
             for sale_id, order_data in orders_dict.items():
-                subtotal = item_subtotals.get(sale_id, Decimal('0.0'))
-                total_discount = order_data.pop("_totalDiscount", Decimal('0.0'))
-                final_total = subtotal - total_discount
-                order_data["total"] = float(final_total)
-                response_list.append(ProcessingOrder(**order_data))
+                # Only include orders that have at least one item
+                if len(order_data["orderItems"]) > 0:
+                    subtotal = item_subtotals.get(sale_id, Decimal('0.0'))
+                    total_discount = order_data.pop("_totalDiscount", Decimal('0.0'))
+                    is_partially_refunded = order_data.pop("_isPartiallyRefunded", False)
+                    final_total = subtotal - total_discount
+                    order_data["total"] = float(final_total)
+                    
+                    # Override status for display purposes
+                    if is_partially_refunded and order_data["status"] == "completed":
+                        order_data["status"] = "partial_refund"
+                    
+                    response_list.append(ProcessingOrder(**order_data))
 
             return response_list
 

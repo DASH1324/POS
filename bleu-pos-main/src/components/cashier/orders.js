@@ -74,30 +74,35 @@ function Orders() {
           const data = await storeResponse.value.json();
           const orders = Array.isArray(data) ? data : [];
           const mappedOrders = orders.map(order => {
-            return {
-              id: order.id, 
-              customerName: 'In-Store', 
-              date: new Date(order.date), 
-              orderType: order.orderType,
-              paymentMethod: order.paymentMethod || 'N/A', 
-              total: order.total, 
-              status: order.status ? order.status.toUpperCase() : 'UNKNOWN',
-              items: order.orderItems ? order.orderItems.reduce((acc, item) => acc + item.quantity, 0) : 0,
-              orderItems: order.orderItems ? order.orderItems.map(item => ({
-                ...item, 
-                size: item.size || 'Standard', 
-                addons: item.addons || []
-              })) : [],
-              source: 'store',
-              subtotal: order.subtotal || 0,
-              promotionalDiscount: order.promotionalDiscount || 0,
-              manualDiscount: order.manualDiscount || 0,
-              appliedDiscounts: order.appliedDiscounts || [],
-              addOns: order.addOns || order.appliedAddOns || order.addons || 0,
-              cashierName: order.cashierName || 'Unknown',
-              reference_number: order.GCashReferenceNumber || null
-            };
-          }).filter(o => o.orderType === 'Dine in' || o.orderType === 'Take out');
+  return {
+    id: order.id, 
+    customerName: 'In-Store', 
+    date: new Date(order.date), 
+    orderType: order.orderType,
+    paymentMethod: order.paymentMethod || 'N/A', 
+    total: order.total, 
+    status: order.status ? order.status.toUpperCase() : 'UNKNOWN',
+    items: order.orderItems ? order.orderItems.reduce((acc, item) => acc + item.quantity, 0) : 0,
+    orderItems: order.orderItems ? order.orderItems.map(item => ({
+      saleItemId: item.saleItemId,
+      name: item.name,
+      quantity: item.quantity,
+      price: item.price,
+      category: item.category,
+      size: item.size || 'Standard', 
+      addons: item.addons || []
+    })) : [],
+    source: 'store',
+    subtotal: order.subtotal || 0,
+    promotionalDiscount: order.promotionalDiscount || 0,
+    manualDiscount: order.manualDiscount || 0,
+    appliedDiscounts: order.appliedDiscounts || [],
+    addOns: order.addOns || order.appliedAddOns || order.addons || 0,
+    cashierName: order.cashierName || 'Unknown',
+    reference_number: order.GCashReferenceNumber || null,
+    updatedAt: order.updatedAt || order.date
+  };
+}).filter(o => o.orderType === 'Dine in' || o.orderType === 'Take out');
           
           newStoreOrders.push(...mappedOrders);
         } else {
@@ -586,6 +591,149 @@ function Orders() {
     }
   };
 
+  // NEW: Handle Full Refund
+  const handleFullRefund = async (orderToUpdate, pin) => {
+    const token = localStorage.getItem('authToken');
+    if (!token) {
+      toast.error("Authentication error. Please log in again.");
+      return;
+    }
+
+    try {
+      const headers = { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` };
+
+      // Verify PIN first
+      const pinResponse = await fetch(`${AUTH_API_BASE_URL}/users/verify-pin`, {
+        method: 'POST',
+        headers: headers,
+        body: JSON.stringify({ pin: pin })
+      });
+
+      if (!pinResponse.ok) {
+        const pinData = await pinResponse.json();
+        throw new Error(pinData.detail || "Invalid Manager PIN.");
+      }
+
+      const pinData = await pinResponse.json();
+      const managerUsername = pinData.managerUsername;
+
+      // Process refund
+      const refundUrl = `${SALES_API_BASE_URL}/auth/purchase_orders/${orderToUpdate.id}/refund`;
+      const refundBody = JSON.stringify({
+        managerUsername: managerUsername,
+        refundReason: "Cashier requested full refund"
+      });
+
+      const refundResponse = await fetch(refundUrl, {
+        method: 'POST',
+        headers: headers,
+        body: refundBody
+      });
+
+      if (!refundResponse.ok) {
+        const errorData = await refundResponse.json();
+        throw new Error(errorData.detail || "Failed to process refund.");
+      }
+
+      const result = await refundResponse.json();
+      
+      toast.success(`Order refunded successfully by ${managerUsername}!`);
+
+      // Update local state
+      setSelectedOrder(prev => 
+        prev && prev.id === orderToUpdate.id 
+          ? { ...prev, status: 'REFUNDED' } 
+          : null
+      );
+
+      if (orderToUpdate.source === 'store') {
+        setStoreOrders(prevOrders => 
+          prevOrders.map(order => 
+            order.id === orderToUpdate.id 
+              ? { ...order, status: 'REFUNDED' }
+              : order
+          )
+        );
+      }
+
+      fetchOrders().catch(err => console.error('Background refresh failed:', err));
+
+    } catch (err) {
+      console.error("Full refund error:", err);
+      toast.error(`Error: ${err.message}`);
+    }
+  };
+
+  // NEW: Handle Partial Refund
+  const handlePartialRefund = async (orderToUpdate, itemsToRefund, pin) => {
+    const token = localStorage.getItem('authToken');
+    if (!token) {
+      toast.error("Authentication error. Please log in again.");
+      return;
+    }
+
+    try {
+      const headers = { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` };
+
+      // Verify PIN first
+      const pinResponse = await fetch(`${AUTH_API_BASE_URL}/users/verify-pin`, {
+        method: 'POST',
+        headers: headers,
+        body: JSON.stringify({ pin: pin })
+      });
+
+      if (!pinResponse.ok) {
+        const pinData = await pinResponse.json();
+        throw new Error(pinData.detail || "Invalid Manager PIN.");
+      }
+
+      const pinData = await pinResponse.json();
+      const managerUsername = pinData.managerUsername;
+
+      // Prepare refund items
+      const refundItems = itemsToRefund.map(item => ({
+        saleItemId: parseInt(item.saleItemId),
+        refundQuantity: parseInt(item.refundQuantity),
+        itemName: String(item.name),
+        originalQuantity: parseInt(item.quantity),
+        unitPrice: parseFloat(item.price)
+      }));
+
+      // Process partial refund
+      const refundUrl = `${SALES_API_BASE_URL}/auth/purchase_orders/${orderToUpdate.id}/partial-refund`;
+      const refundBody = JSON.stringify({
+        managerUsername: managerUsername,
+        refundReason: "Cashier requested partial refund",
+        items: refundItems
+      });
+
+      const refundResponse = await fetch(refundUrl, {
+        method: 'POST',
+        headers: headers,
+        body: refundBody
+      });
+
+      if (!refundResponse.ok) {
+        const errorData = await refundResponse.json();
+        throw new Error(errorData.detail || "Failed to process partial refund.");
+      }
+
+      const result = await refundResponse.json();
+
+      toast.success(
+        `Partial refund processed successfully!\n` +
+        `Refund Amount: ₱${result.total_refund_amount.toFixed(2)}`
+      );
+
+      // Refresh orders
+      fetchOrders().catch(err => console.error('Background refresh failed:', err));
+
+    } catch (err) {
+      console.error("Partial refund error:", err);
+      toast.error(`Error: ${err.message}`);
+    }
+  };
+
   const ordersData = activeTab === "store" ? storeOrders : onlineOrders;
   
   const filteredData = ordersData.filter(order => {
@@ -759,7 +907,9 @@ function Orders() {
             isOpen={true} 
             onClose={() => setSelectedOrder(null)} 
             isStore={selectedOrder.source === 'store'} 
-            onUpdateStatus={handleUpdateStatus} 
+            onUpdateStatus={handleUpdateStatus}
+            onFullRefund={handleFullRefund}
+            onPartialRefund={handlePartialRefund}
           /> 
         )}
       </div>
