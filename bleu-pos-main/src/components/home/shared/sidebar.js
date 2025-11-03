@@ -18,23 +18,23 @@ function SidebarComponent() {
 
   // This effect re-runs every time the user navigates to a new page.
   useEffect(() => {
-  // Priority 1: Check URL params first
-  const params = new URLSearchParams(window.location.search);
-  const roleFromUrl = params.get('userRole');
-  
-  if (roleFromUrl) {
-    console.log('Sidebar: Setting role from URL:', roleFromUrl);
-    localStorage.setItem('userRole', roleFromUrl);
-    setUserRole(roleFromUrl);
-  } else {
-    // Priority 2: Fall back to localStorage
-    const roleFromStorage = localStorage.getItem('userRole');
-    console.log('Sidebar: Reading role from localStorage:', roleFromStorage);
-    if (roleFromStorage) {
-      setUserRole(roleFromStorage);
+    // Priority 1: Check URL params first
+    const params = new URLSearchParams(window.location.search);
+    const roleFromUrl = params.get('userRole');
+
+    if (roleFromUrl) {
+      console.log('Sidebar: Setting role from URL:', roleFromUrl);
+      localStorage.setItem('userRole', roleFromUrl);
+      setUserRole(roleFromUrl);
+    } else {
+      // Priority 2: Fall back to localStorage
+      const roleFromStorage = localStorage.getItem('userRole');
+      console.log('Sidebar: Reading role from localStorage:', roleFromStorage);
+      if (roleFromStorage) {
+        setUserRole(roleFromStorage);
+      }
     }
-  }
-}, [location]);
+  }, [location]);
 
   return (
     <div className="sidebar-wrapper">
@@ -96,13 +96,17 @@ function SidebarComponent() {
               >
                 Sales Report
               </MenuItem>
-              <MenuItem
-                icon={<FontAwesomeIcon icon={faClockRotateLeft} />}
-                component={<Link to="/home/activityLogs" />}
-                active={location.pathname === '/home/activityLogs'}
-              >
-                Activity Logs
-              </MenuItem>
+              
+              {/* Conditionally render the Activity Logs MenuItem */}
+              {userRole === 'admin' && (
+                <MenuItem
+                  icon={<FontAwesomeIcon icon={faClockRotateLeft} />}
+                  component={<Link to="/home/activityLogs" />}
+                  active={location.pathname === '/home/activityLogs'}
+                >
+                  Activity Logs
+                </MenuItem>
+              )}
             </Menu>
           </div>
         </div>
