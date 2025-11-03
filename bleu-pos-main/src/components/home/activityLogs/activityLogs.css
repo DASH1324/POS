@@ -369,3 +369,154 @@ body {
         margin-right: 0;
     }
 }
+
+/* Error State */
+.activityLogs-error {
+  text-align: center;
+  padding: 2rem;
+  background-color: #fee;
+  border-radius: 8px;
+  margin: 2rem;
+}
+
+.activityLogs-error p {
+  color: #c00;
+  margin-bottom: 1rem;
+}
+
+.activityLogs-error button {
+  padding: 0.5rem 1rem;
+  background-color: #ef4444;
+  color: white;
+  border: none;
+  border-radius: 4px;
+  cursor: pointer;
+}
+
+/* Empty State */
+.activityLogs-empty {
+  text-align: center;
+  padding: 3rem;
+  color: #9ca3af;
+  font-size: 1.1rem;
+}
+
+/* Action Icons in Events */
+.activityLogs-action-icon {
+  margin-right: 8px;
+  font-size: 0.9rem;
+}
+
+.activityLogs-event-text {
+  flex: 1;
+}
+
+.activityLogs-event-message {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+/* Info action styling (for UPDATE) */
+.activityLogs-event-info {
+  background-color: #dbeafe;
+  color: #1e40af;
+  padding: 12px;
+  border-radius: 6px;
+  border-left: 4px solid #3b82f6;
+  margin-bottom: 8px;
+}
+
+/* Blockchain Details */
+.activityLogs-blockchain-details {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+  margin-top: 8px;
+  padding: 8px 12px;
+  background-color: #f9fafb;
+  border-radius: 4px;
+  font-size: 0.75rem;
+}
+
+.activityLogs-detail-item {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  color: #6b7280;
+}
+
+.activityLogs-detail-item code {
+  background-color: #e5e7eb;
+  padding: 2px 6px;
+  border-radius: 3px;
+  font-family: 'Courier New', monospace;
+  font-size: 0.7rem;
+  color: #374151;
+}
+
+/* Activity Title Enhancement */
+.activityLogs-activity-title {
+  font-size: 1.1rem;
+  color: #1f2937;
+  font-weight: 600;
+}
+
+/* Event Content Spacing */
+.activityLogs-event-content {
+  flex: 1;
+  padding-left: 12px;
+}
+
+.activityLogs-event-message strong {
+  color: #1f2937;
+  font-weight: 600;
+}
+
+/* Responsive Blockchain Details */
+@media (max-width: 768px) {
+  .activityLogs-blockchain-details {
+    flex-direction: column;
+    gap: 6px;
+  }
+  
+  .activityLogs-detail-item {
+    font-size: 0.7rem;
+  }
+}
+
+/* Timeline Enhancement for Grouped Events */
+.activityLogs-activity-item {
+  margin-bottom: 2rem;
+}
+
+.activityLogs-event-item:last-child .activityLogs-event-message {
+  margin-bottom: 0;
+}
+
+/* Filter Bar Enhancement */
+.activityLogs-filterBar {
+  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+}
+
+.activityLogs-select {
+  padding: 8px 12px;
+  border-radius: 6px;
+  border: 1px solid #d1d5db;
+  background-color: white;
+  color: #374151;
+  font-size: 0.875rem;
+  cursor: pointer;
+  transition: border-color 0.2s;
+}
+
+.activityLogs-select:focus {
+  outline: none;
+  border-color: #3b82f6;
+  box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.1);
+}
+
+.activityLogs-select option {
+  padding: 8px;
+}

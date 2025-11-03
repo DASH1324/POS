@@ -14,6 +14,7 @@ from database import get_db_connection
 
 EXTERNAL_PRODUCTS_API_URL = "http://127.0.0.1:8001/is_products/products/details/" 
 AUTH_SERVICE_ME_URL = "http://localhost:4000/auth/users/me"
+BLOCKCHAIN_SERVICE_URL = "http://localhost:9005/blockchain/log"  # Add blockchain service URL
 
 
 router = APIRouter() 
@@ -41,6 +42,50 @@ async def validate_token_and_roles(token: str, allowed_roles: List[str]):
     
     return user_data
 
+# BLOCKCHAIN LOGGING HELPER
+async def log_to_blockchain(
+    token: str,
+    action: str,
+    entity_id: int,
+    actor_username: str,
+    change_description: str,
+    data: dict
+):
+    """
+    Log discount operations to blockchain
+    """
+    headers = {"Authorization": f"Bearer {token}"}
+    payload = {
+        "service_identifier": "DISCOUNTS_SERVICE",
+        "action": action,  # CREATE, UPDATE, DELETE
+        "entity_type": "Discount",
+        "entity_id": entity_id,
+        "actor_username": actor_username,
+        "change_description": change_description,
+        "data": data
+    }
+    
+    try:
+        async with httpx.AsyncClient() as client:
+            response = await client.post(
+                BLOCKCHAIN_SERVICE_URL,
+                json=payload,
+                headers=headers,
+                timeout=30.0
+            )
+            response.raise_for_status()
+            return response.json()
+    except httpx.RequestError as e:
+        print(f"⚠️  Blockchain logging failed (network error): {e}")
+        # Don't fail the main operation if blockchain logging fails
+        return None
+    except httpx.HTTPStatusError as e:
+        print(f"⚠️  Blockchain logging failed (HTTP {e.response.status_code}): {e.response.text}")
+        return None
+    except Exception as e:
+        print(f"⚠️  Blockchain logging failed (unexpected error): {e}")
+        return None
+
 # HELPER FUNCTION TO AUTO-EXPIRE DISCOUNTS
 async def auto_expire_discounts(conn):
     """Automatically updates discount status to 'expired' if validTo date has passed"""
@@ -55,7 +100,6 @@ async def auto_expire_discounts(conn):
             await cursor.execute(sql_expire, today)
             await conn.commit()
     except Exception as e:
-        # Log error but don't raise to avoid breaking the main flow
         print(f"Error auto-expiring discounts: {e}")
 
 # PYDANTIC MODELS
@@ -113,7 +157,7 @@ async def get_external_choices(token: str):
 
 @discounts_router.post("/", response_model=DiscountDetailOut, status_code=status.HTTP_201_CREATED)
 async def create_discount(discount_data: DiscountCreate, token: str = Depends(oauth2_scheme)):
-    await validate_token_and_roles(token, allowed_roles=["admin"])
+    user_data = await validate_token_and_roles(token, allowed_roles=["admin"])
     conn = await get_db_connection()
     try:
         conn.autocommit = False
@@ -128,15 +172,43 @@ async def create_discount(discount_data: DiscountCreate, token: str = Depends(oa
             new_id = (await cursor.fetchone())[0]
 
             if discount_data.applicationType == 'specific_products':
-                for name in discount_data.selectedProducts: await cursor.execute("INSERT INTO discount_applicable_products (discount_id, product_name) VALUES (?, ?)", new_id, name)
+                for name in discount_data.selectedProducts: 
+                    await cursor.execute("INSERT INTO discount_applicable_products (discount_id, product_name) VALUES (?, ?)", new_id, name)
             elif discount_data.applicationType == 'specific_categories':
-                for name in discount_data.selectedCategories: await cursor.execute("INSERT INTO discount_applicable_categories (discount_id, category_name) VALUES (?, ?)", new_id, name)
+                for name in discount_data.selectedCategories: 
+                    await cursor.execute("INSERT INTO discount_applicable_categories (discount_id, category_name) VALUES (?, ?)", new_id, name)
             
             await conn.commit()
+            
+            # Log to blockchain AFTER successful database commit
+            blockchain_data = {
+                "id": new_id,
+                "name": discount_data.discountName,
+                "status": discount_data.status,
+                "application_type": discount_data.applicationType,
+                "discount_type": discount_data.discountType,
+                "discount_value": str(discount_data.discountValue),
+                "minimum_spend": str(discount_data.minSpend),
+                "valid_from": discount_data.validFrom.isoformat(),
+                "valid_to": discount_data.validTo.isoformat(),
+                "selected_products": discount_data.selectedProducts,
+                "selected_categories": discount_data.selectedCategories
+            }
+            
+            await log_to_blockchain(
+                token=token,
+                action="CREATE",
+                entity_id=new_id,
+                actor_username=user_data.get("username", "unknown"),
+                change_description=f"Created discount: {discount_data.discountName}",
+                data=blockchain_data
+            )
+            
             return DiscountDetailOut(id=new_id, **discount_data.model_dump())
     except Exception as e:
         await conn.rollback()
-        if "UNIQUE" in str(e).upper(): raise HTTPException(status_code=409, detail=f"A discount with the name '{discount_data.discountName}' already exists.")
+        if "UNIQUE" in str(e).upper(): 
+            raise HTTPException(status_code=409, detail=f"A discount with the name '{discount_data.discountName}' already exists.")
         raise HTTPException(status_code=500, detail=f"Database error on create: {e}")
     finally:
         conn.autocommit = True
@@ -147,7 +219,6 @@ async def get_all_discounts(token: str = Depends(oauth2_scheme)):
     await validate_token_and_roles(token, allowed_roles=["admin", "manager", "cashier"])
     conn = await get_db_connection()
     try:
-        # Auto-expire discounts before fetching
         await auto_expire_discounts(conn)
         
         async with conn.cursor() as cursor:
@@ -197,7 +268,6 @@ async def get_discount(discount_id: int, token: str = Depends(oauth2_scheme)):
     await validate_token_and_roles(token, allowed_roles=["admin", "manager", "cashier"])
     conn = await get_db_connection()
     try:
-        # Auto-expire discounts before fetching
         await auto_expire_discounts(conn)
         
         async with conn.cursor() as cursor:
@@ -223,11 +293,19 @@ async def get_discount(discount_id: int, token: str = Depends(oauth2_scheme)):
 
 @discounts_router.put("/{discount_id}", response_model=DiscountDetailOut)
 async def update_discount(discount_id: int, discount_data: DiscountUpdate, token: str = Depends(oauth2_scheme)):
-    await validate_token_and_roles(token, allowed_roles=["admin"])
+    user_data = await validate_token_and_roles(token, allowed_roles=["admin"])
     conn = await get_db_connection()
     try:
         conn.autocommit = False
         async with conn.cursor() as cursor:
+            # Get old data for comparison
+            await cursor.execute("SELECT * FROM discounts WHERE id=? AND isDeleted = 0", discount_id)
+            old_discount = await cursor.fetchone()
+            if not old_discount:
+                raise HTTPException(status_code=404, detail="Discount not found")
+            
+            old_data = dict(zip([c[0] for c in cursor.description], old_discount))
+            
             sql_update = """
                 UPDATE discounts SET name=?, status=?, application_type=?, discount_type=?, discount_value=?, minimum_spend=?, valid_from=?, valid_to=?, updated_at=GETDATE()
                 WHERE id=? AND isDeleted = 0
@@ -241,15 +319,59 @@ async def update_discount(discount_id: int, discount_data: DiscountUpdate, token
             await cursor.execute("DELETE FROM discount_applicable_categories WHERE discount_id=?", discount_id)
 
             if discount_data.applicationType == 'specific_products':
-                for name in discount_data.selectedProducts: await cursor.execute("INSERT INTO discount_applicable_products (discount_id, product_name) VALUES (?, ?)", discount_id, name)
+                for name in discount_data.selectedProducts: 
+                    await cursor.execute("INSERT INTO discount_applicable_products (discount_id, product_name) VALUES (?, ?)", discount_id, name)
             elif discount_data.applicationType == 'specific_categories':
-                for name in discount_data.selectedCategories: await cursor.execute("INSERT INTO discount_applicable_categories (discount_id, category_name) VALUES (?, ?)", discount_id, name)
+                for name in discount_data.selectedCategories: 
+                    await cursor.execute("INSERT INTO discount_applicable_categories (discount_id, category_name) VALUES (?, ?)", discount_id, name)
 
             await conn.commit()
+            
+            # Build change description
+            changes = []
+            if old_data['name'] != discount_data.discountName:
+                changes.append(f"name: '{old_data['name']}' → '{discount_data.discountName}'")
+            if old_data['status'] != discount_data.status:
+                changes.append(f"status: '{old_data['status']}' → '{discount_data.status}'")
+            if old_data['discount_value'] != discount_data.discountValue:
+                changes.append(f"value: {old_data['discount_value']} → {discount_data.discountValue}")
+            
+            change_desc = f"Updated discount: {', '.join(changes) if changes else 'modified fields'}"
+            
+            # Log to blockchain
+            blockchain_data = {
+                "id": discount_id,
+                "name": discount_data.discountName,
+                "status": discount_data.status,
+                "application_type": discount_data.applicationType,
+                "discount_type": discount_data.discountType,
+                "discount_value": str(discount_data.discountValue),
+                "minimum_spend": str(discount_data.minSpend),
+                "valid_from": discount_data.validFrom.isoformat(),
+                "valid_to": discount_data.validTo.isoformat(),
+                "selected_products": discount_data.selectedProducts,
+                "selected_categories": discount_data.selectedCategories,
+                "previous_values": {
+                    "name": old_data['name'],
+                    "status": old_data['status'],
+                    "discount_value": str(old_data['discount_value'])
+                }
+            }
+            
+            await log_to_blockchain(
+                token=token,
+                action="UPDATE",
+                entity_id=discount_id,
+                actor_username=user_data.get("username", "unknown"),
+                change_description=change_desc,
+                data=blockchain_data
+            )
+            
             return DiscountDetailOut(id=discount_id, **discount_data.model_dump())
     except Exception as e:
         await conn.rollback()
-        if "UNIQUE" in str(e).upper(): raise HTTPException(status_code=409, detail=f"A discount with the name '{discount_data.discountName}' already exists.")
+        if "UNIQUE" in str(e).upper(): 
+            raise HTTPException(status_code=409, detail=f"A discount with the name '{discount_data.discountName}' already exists.")
         raise HTTPException(status_code=500, detail=f"Database error on update: {e}")
     finally:
         conn.autocommit = True
@@ -257,15 +379,43 @@ async def update_discount(discount_id: int, discount_data: DiscountUpdate, token
 
 @discounts_router.delete("/{discount_id}", status_code=status.HTTP_200_OK)
 async def delete_discount(discount_id: int, token: str = Depends(oauth2_scheme)):
-    await validate_token_and_roles(token, allowed_roles=["admin"])
+    user_data = await validate_token_and_roles(token, allowed_roles=["admin"])
     conn = await get_db_connection()
     try:
         conn.autocommit = False
         async with conn.cursor() as cursor:
-            # Soft delete: set isDeleted to 1
+            # Get discount data before deletion
+            await cursor.execute("SELECT name FROM discounts WHERE id=? AND isDeleted = 0", discount_id)
+            discount = await cursor.fetchone()
+            if not discount:
+                raise HTTPException(status_code=404, detail="Discount not found")
+            
+            discount_name = discount.name
+            
+            # Soft delete
             await cursor.execute("UPDATE discounts SET isDeleted = 1, updated_at = GETDATE() WHERE id = ? AND isDeleted = 0", discount_id)
-            if cursor.rowcount == 0: raise HTTPException(status_code=404, detail="Discount not found")
+            if cursor.rowcount == 0: 
+                raise HTTPException(status_code=404, detail="Discount not found")
+            
             await conn.commit()
+            
+            # Log to blockchain
+            blockchain_data = {
+                "id": discount_id,
+                "name": discount_name,
+                "deleted": True,
+                "deleted_at": datetime.now().isoformat()
+            }
+            
+            await log_to_blockchain(
+                token=token,
+                action="DELETE",
+                entity_id=discount_id,
+                actor_username=user_data.get("username", "unknown"),
+                change_description=f"Deleted discount: {discount_name}",
+                data=blockchain_data
+            )
+            
             return {"message": "Discount deleted successfully."}
     except Exception as e:
         await conn.rollback()

@@ -1,0 +1,12 @@
+{
+  "address": "0x4590e62B19C2b4E8bA974c72959C5ea9460A080F",
+  "abi": [
+    "event ActivityLogged(uint256 indexed,uint256,string,string,string,uint256,address indexed,string)",
+    "function getLog(uint256) view returns ((uint256,string,string,string,uint256,address,string,string,bytes32))",
+    "function getLogsByActor(address) view returns (uint256[])",
+    "function getLogsByEntity(string) view returns (uint256[])",
+    "function getLogsByService(string) view returns (uint256[])",
+    "function getTotalLogs() view returns (uint256)",
+    "function logActivity(string,string,string,uint256,address,string,string,bytes32) returns (uint256)"
+  ]
+}

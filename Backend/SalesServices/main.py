@@ -79,6 +79,8 @@ app.add_middleware(
         "http://localhost:5000",
         "http://localhost:7004",  # Add OOS service
         "http://127.0.0.1:7004",
+        "http://localhost:9005",  # Self
+        "http://127.0.0.1:9005",
     ],
     allow_credentials=True,
     allow_methods=["*"],
