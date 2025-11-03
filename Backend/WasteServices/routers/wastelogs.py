@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, status, BackgroundTasks
 from fastapi.security import OAuth2PasswordBearer
 from pydantic import BaseModel
 from typing import List, Optional
@@ -11,6 +11,9 @@ import logging
 logger = logging.getLogger(__name__)
 oauth2_scheme = OAuth2PasswordBearer(tokenUrl="http://127.0.0.1:4000/auth/token")
 router = APIRouter()
+
+# Blockchain service URL
+BLOCKCHAIN_SERVICE_URL = "http://127.0.0.1:9005/blockchain/log"
 
 # Auth validation
 async def validate_token_and_roles(token: str, allowed_roles: List[str]):
@@ -49,6 +52,46 @@ async def validate_token_and_roles(token: str, allowed_roles: List[str]):
         )
     return user_data
 
+# Background task for blockchain logging
+async def log_to_blockchain_background(
+    token: str,
+    action: str,
+    entity_id: int,
+    actor_username: str,
+    change_description: str,
+    data: dict
+):
+    """
+    Background task to log spillage activity to blockchain
+    Runs asynchronously without blocking the main response
+    """
+    try:
+        async with httpx.AsyncClient(timeout=30.0) as client:
+            blockchain_payload = {
+                "service_identifier": "WASTE_MANAGEMENT",
+                "action": action,
+                "entity_type": "Spillage",
+                "entity_id": entity_id,
+                "actor_username": actor_username,
+                "change_description": change_description,
+                "data": data
+            }
+            
+            response = await client.post(
+                BLOCKCHAIN_SERVICE_URL,
+                json=blockchain_payload,
+                headers={"Authorization": f"Bearer {token}"}
+            )
+            
+            if response.status_code == 201:
+                logger.info(f"✅ Blockchain log successful for spillage {entity_id}: {action}")
+            else:
+                logger.warning(f"⚠️  Blockchain logging failed: {response.status_code} - {response.text}")
+                
+    except Exception as e:
+        # Log error but don't fail - this is a background task
+        logger.error(f"❌ Blockchain logging error in background task: {e}")
+
 # Pydantic Models
 class ProductSoldInfo(BaseModel):
     product_name: str
@@ -61,7 +104,7 @@ class SpillageCreate(BaseModel):
     category: str
     quantity: int
     reason: str
-    logged_by: str  # Full employee name from frontend
+    logged_by: str
 
 class SpillageOut(BaseModel):
     spillage_id: int
@@ -73,7 +116,7 @@ class SpillageOut(BaseModel):
     reason: str
     logged_by: str
     logged_at: datetime
-    is_deleted: bool  # Added field
+    is_deleted: bool
 
 # API Endpoints
 
@@ -92,7 +135,6 @@ async def get_products_sold_by_cashier_and_date(
     conn = await get_db_connection()
     try:
         async with conn.cursor() as cursor:
-            # Query to get distinct products sold by the cashier on the specified date
             query = """
                 SELECT DISTINCT 
                     si.ItemName AS product_name,
@@ -107,14 +149,12 @@ async def get_products_sold_by_cashier_and_date(
             await cursor.execute(query, (spillage_date, cashier_name))
             rows = await cursor.fetchall()
             
-            result = []
-            for row in rows:
-                result.append({
-                    "product_name": row.product_name,
-                    "category": row.category
-                })
-            
-            return result
+            return [
+                ProductSoldInfo(
+                    product_name=row.product_name,
+                    category=row.category
+                ) for row in rows
+            ]
             
     except Exception as e:
         logger.error(f"Error fetching products sold on date by cashier: {e}")
@@ -129,12 +169,14 @@ async def get_products_sold_by_cashier_and_date(
 @router.post("/", response_model=SpillageOut)
 async def log_spillage(
     spillage: SpillageCreate,
+    background_tasks: BackgroundTasks,
     token: str = Depends(oauth2_scheme)
 ):
     """
     Log a new product spillage/waste entry.
+    Blockchain logging happens in background for optimal performance.
     """
-    await validate_token_and_roles(token, ["admin", "manager", "cashier"])
+    user_data = await validate_token_and_roles(token, ["admin", "manager", "cashier"])
     
     # Validate quantity
     if spillage.quantity <= 0:
@@ -169,7 +211,7 @@ async def log_spillage(
                     detail=f"Product '{spillage.product_name}' was not sold by cashier '{spillage.cashier_name}' on {spillage.spillage_date}"
                 )
             
-            # Insert spillage record with isDeleted defaulting to 0
+            # Insert spillage record
             insert_query = """
                 INSERT INTO ProductSpillage 
                     (CashierName, SpillageDate, ProductName, Category, Quantity, Reason, LoggedBy, LoggedAt, isDeleted)
@@ -195,7 +237,7 @@ async def log_spillage(
             result = await cursor.fetchone()
             await conn.commit()
             
-            return SpillageOut(
+            spillage_out = SpillageOut(
                 spillage_id=result.SpillageID,
                 cashier_name=result.CashierName,
                 spillage_date=result.SpillageDate,
@@ -207,6 +249,28 @@ async def log_spillage(
                 logged_at=result.LoggedAt,
                 is_deleted=bool(result.isDeleted)
             )
+            
+            # Schedule blockchain logging as background task
+            background_tasks.add_task(
+                log_to_blockchain_background,
+                token=token,
+                action="CREATE",
+                entity_id=result.SpillageID,
+                actor_username=user_data.get("username", spillage.logged_by),
+                change_description=f"New spillage logged: {spillage.quantity} units of {spillage.product_name} - Reason: {spillage.reason}",
+                data={
+                    "spillage_id": result.SpillageID,
+                    "cashier_name": spillage.cashier_name,
+                    "spillage_date": str(spillage.spillage_date),
+                    "product_name": spillage.product_name,
+                    "category": spillage.category,
+                    "quantity": spillage.quantity,
+                    "reason": spillage.reason,
+                    "logged_by": spillage.logged_by
+                }
+            )
+            
+            return spillage_out
             
     except HTTPException:
         raise
@@ -238,7 +302,6 @@ async def get_spillage_logs(
     try:
         conn = await get_db_connection()
         async with conn.cursor() as cursor:
-            # Start with the base query - include isDeleted
             query = """
                 SELECT 
                     SpillageID, CashierName, SpillageDate, ProductName, 
@@ -246,12 +309,8 @@ async def get_spillage_logs(
                 FROM ProductSpillage
             """
             
-            # Dynamically build the WHERE clause for all filters
-            conditions = []
+            conditions = ["isDeleted = 0"]
             params = []
-            
-            # Always exclude deleted records
-            conditions.append("isDeleted = 0")
             
             if start_date:
                 conditions.append("CAST(SpillageDate AS DATE) >= ?")
@@ -265,9 +324,7 @@ async def get_spillage_logs(
                 conditions.append("CashierName = ?")
                 params.append(cashier_name)
             
-            if conditions:
-                query += " WHERE " + " AND ".join(conditions)
-            
+            query += " WHERE " + " AND ".join(conditions)
             query += " ORDER BY LoggedAt DESC"
             
             await cursor.execute(query, tuple(params))
@@ -298,22 +355,27 @@ async def get_spillage_logs(
         if conn:
             await conn.close()
 
+
 @router.delete("/{spillage_id}")
 async def delete_spillage(
     spillage_id: int,
+    background_tasks: BackgroundTasks,
     token: str = Depends(oauth2_scheme)
 ):
     """
     Soft delete a spillage record by setting isDeleted = 1 (admin/manager only).
+    Blockchain logging happens in background.
     """
-    await validate_token_and_roles(token, ["admin", "manager"])
+    user_data = await validate_token_and_roles(token, ["admin", "manager"])
     
     conn = await get_db_connection()
     try:
         async with conn.cursor() as cursor:
-            # Check if record exists and is not already deleted
+            # Get full record details before deletion
             await cursor.execute(
-                "SELECT SpillageID, isDeleted FROM ProductSpillage WHERE SpillageID = ?",
+                """SELECT SpillageID, CashierName, SpillageDate, ProductName, Category, 
+                          Quantity, Reason, LoggedBy, isDeleted 
+                   FROM ProductSpillage WHERE SpillageID = ?""",
                 (spillage_id,)
             )
             
@@ -330,12 +392,33 @@ async def delete_spillage(
                     detail=f"Spillage record {spillage_id} is already deleted"
                 )
             
-            # Soft delete the record by setting isDeleted = 1
+            # Soft delete the record
             await cursor.execute(
                 "UPDATE ProductSpillage SET isDeleted = 1 WHERE SpillageID = ?",
                 (spillage_id,)
             )
             await conn.commit()
+            
+            # Schedule blockchain logging as background task
+            background_tasks.add_task(
+                log_to_blockchain_background,
+                token=token,
+                action="DELETE",
+                entity_id=spillage_id,
+                actor_username=user_data.get("username", "system"),
+                change_description=f"Spillage record deleted: {record.ProductName} ({record.Quantity} units)",
+                data={
+                    "spillage_id": spillage_id,
+                    "cashier_name": record.CashierName,
+                    "spillage_date": str(record.SpillageDate),
+                    "product_name": record.ProductName,
+                    "category": record.Category,
+                    "quantity": record.Quantity,
+                    "reason": record.Reason,
+                    "logged_by": record.LoggedBy,
+                    "action": "soft_delete"
+                }
+            )
             
             return {"message": f"Spillage record {spillage_id} deleted successfully"}
             
@@ -355,19 +438,23 @@ async def delete_spillage(
 @router.put("/{spillage_id}/restore")
 async def restore_spillage(
     spillage_id: int,
+    background_tasks: BackgroundTasks,
     token: str = Depends(oauth2_scheme)
 ):
     """
     Restore a soft-deleted spillage record by setting isDeleted = 0 (admin/manager only).
+    Blockchain logging happens in background.
     """
-    await validate_token_and_roles(token, ["admin", "manager"])
+    user_data = await validate_token_and_roles(token, ["admin", "manager"])
     
     conn = await get_db_connection()
     try:
         async with conn.cursor() as cursor:
-            # Check if record exists and is deleted
+            # Get full record details
             await cursor.execute(
-                "SELECT SpillageID, isDeleted FROM ProductSpillage WHERE SpillageID = ?",
+                """SELECT SpillageID, CashierName, SpillageDate, ProductName, Category, 
+                          Quantity, Reason, LoggedBy, isDeleted 
+                   FROM ProductSpillage WHERE SpillageID = ?""",
                 (spillage_id,)
             )
             
@@ -384,12 +471,33 @@ async def restore_spillage(
                     detail=f"Spillage record {spillage_id} is not deleted"
                 )
             
-            # Restore the record by setting isDeleted = 0
+            # Restore the record
             await cursor.execute(
                 "UPDATE ProductSpillage SET isDeleted = 0 WHERE SpillageID = ?",
                 (spillage_id,)
             )
             await conn.commit()
+            
+            # Schedule blockchain logging as background task
+            background_tasks.add_task(
+                log_to_blockchain_background,
+                token=token,
+                action="UPDATE",
+                entity_id=spillage_id,
+                actor_username=user_data.get("username", "system"),
+                change_description=f"Spillage record restored: {record.ProductName} ({record.Quantity} units)",
+                data={
+                    "spillage_id": spillage_id,
+                    "cashier_name": record.CashierName,
+                    "spillage_date": str(record.SpillageDate),
+                    "product_name": record.ProductName,
+                    "category": record.Category,
+                    "quantity": record.Quantity,
+                    "reason": record.Reason,
+                    "logged_by": record.LoggedBy,
+                    "action": "restore"
+                }
+            )
             
             return {"message": f"Spillage record {spillage_id} restored successfully"}
             
@@ -410,13 +518,15 @@ async def restore_spillage(
 async def update_spillage(
     spillage_id: int,
     spillage: SpillageCreate,
+    background_tasks: BackgroundTasks,
     token: str = Depends(oauth2_scheme)
 ):
     """
     Update an existing spillage record (admin/manager only).
     Only non-deleted records can be updated.
+    Blockchain logging happens in background.
     """
-    await validate_token_and_roles(token, ["admin", "manager"])
+    user_data = await validate_token_and_roles(token, ["admin", "manager"])
     
     # Validate quantity
     if spillage.quantity <= 0:
@@ -428,18 +538,22 @@ async def update_spillage(
     conn = await get_db_connection()
     try:
         async with conn.cursor() as cursor:
-            # Check if spillage record exists and is not deleted
-            check_query = "SELECT SpillageID, isDeleted FROM ProductSpillage WHERE SpillageID = ?"
-            await cursor.execute(check_query, (spillage_id,))
+            # Get old record for comparison
+            await cursor.execute(
+                """SELECT SpillageID, CashierName, SpillageDate, ProductName, Category, 
+                          Quantity, Reason, LoggedBy, isDeleted 
+                   FROM ProductSpillage WHERE SpillageID = ?""",
+                (spillage_id,)
+            )
             
-            record = await cursor.fetchone()
-            if not record:
+            old_record = await cursor.fetchone()
+            if not old_record:
                 raise HTTPException(
                     status_code=status.HTTP_404_NOT_FOUND,
                     detail=f"Spillage record with ID {spillage_id} not found"
                 )
             
-            if record.isDeleted:
+            if old_record.isDeleted:
                 raise HTTPException(
                     status_code=status.HTTP_400_BAD_REQUEST,
                     detail=f"Cannot update deleted spillage record. Please restore it first."
@@ -507,6 +621,44 @@ async def update_spillage(
             
             await cursor.execute(select_query, (spillage_id,))
             result = await cursor.fetchone()
+            
+            # Build change description
+            changes = []
+            if old_record.ProductName != spillage.product_name:
+                changes.append(f"Product: {old_record.ProductName} → {spillage.product_name}")
+            if old_record.Quantity != spillage.quantity:
+                changes.append(f"Quantity: {old_record.Quantity} → {spillage.quantity}")
+            if old_record.Reason != spillage.reason:
+                changes.append(f"Reason updated")
+            
+            change_desc = "Updated spillage: " + ", ".join(changes) if changes else "Spillage record updated"
+            
+            # Schedule blockchain logging as background task
+            background_tasks.add_task(
+                log_to_blockchain_background,
+                token=token,
+                action="UPDATE",
+                entity_id=spillage_id,
+                actor_username=user_data.get("username", spillage.logged_by),
+                change_description=change_desc,
+                data={
+                    "spillage_id": spillage_id,
+                    "old_data": {
+                        "product_name": old_record.ProductName,
+                        "quantity": old_record.Quantity,
+                        "reason": old_record.Reason
+                    },
+                    "new_data": {
+                        "cashier_name": spillage.cashier_name,
+                        "spillage_date": str(spillage.spillage_date),
+                        "product_name": spillage.product_name,
+                        "category": spillage.category,
+                        "quantity": spillage.quantity,
+                        "reason": spillage.reason,
+                        "logged_by": spillage.logged_by
+                    }
+                }
+            )
             
             return SpillageOut(
                 spillage_id=result.SpillageID,

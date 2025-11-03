@@ -61,6 +61,11 @@ function BlockchainActivityLogs() {
 
       // Fetch names for all usernames
       const namePromises = Array.from(allUsernames).map(async (username) => {
+        // Skip system users - don't make API calls for them
+        if (username === "System" || username === "SYSTEM_AUTO_CANCEL") {
+          return { username, fullName: "System (Automated)" };
+        }
+
         try {
           const response = await axios.get(
             `${USER_API_URL}/employee_name?username=${username}`,
@@ -171,6 +176,7 @@ function BlockchainActivityLogs() {
       case "DISCOUNTS_SERVICE":
         return <FaTag className="activityLogs-icon-white" />;
       case "POS_SALES":
+      case "POS_SALES_AUTO_CANCEL":
         return <FaShoppingCart className="activityLogs-icon-white" />;
       case "PRODUCTS_SERVICE":
         return <FaBox className="activityLogs-icon-white" />;
@@ -185,6 +191,7 @@ function BlockchainActivityLogs() {
     const colors = {
       DISCOUNTS_SERVICE: "#3b82f6",
       POS_SALES: "#10b981",
+      POS_SALES_AUTO_CANCEL: "#ef4444",
       PRODUCTS_SERVICE: "#f59e0b",
       INVENTORY_SERVICE: "#8b5cf6",
     };
@@ -199,6 +206,8 @@ function BlockchainActivityLogs() {
         return <FaEdit className="activityLogs-action-icon" />;
       case "DELETE":
         return <FaTrash className="activityLogs-action-icon" />;
+      case "AUTO_CANCEL":
+        return <FaTrash className="activityLogs-action-icon" />;
       default:
         return null;
     }
@@ -211,6 +220,8 @@ function BlockchainActivityLogs() {
       case "UPDATE":
         return "activityLogs-event-info";
       case "DELETE":
+        return "activityLogs-event-error";
+      case "AUTO_CANCEL":
         return "activityLogs-event-error";
       default:
         return "";
@@ -266,170 +277,176 @@ function BlockchainActivityLogs() {
       <div className="activityLogs-container">
         <Header pageTitle="Blockchain Activity Logs" />
 
-        <div className="activityLogs-content">
-          {/* Filter Bar */}
-          <div
-            className={`activityLogs-filterBar ${
-              isFilterOpen ? "open" : "collapsed"
-            }`}
-          >
-            <button
-              className="activityLogs-filter-toggle-btn"
-              onClick={() => setIsFilterOpen(!isFilterOpen)}
+        <div className="activityLogs-content-wrapper">
+          <div className="activityLogs-content">
+            {/* Filter Bar */}
+            <div
+              className={`activityLogs-filterBar ${
+                isFilterOpen ? "open" : "collapsed"
+              }`}
             >
-              <FaFilter />
-            </button>
+              <button
+                className="activityLogs-filter-toggle-btn"
+                onClick={() => setIsFilterOpen(!isFilterOpen)}
+              >
+                <FaFilter />
+              </button>
 
-            <div className="activityLogs-filter-item">
-              <div className="activityLogs-search-wrapper">
-                <FaSearch className="activityLogs-search-icon" />
-                <input
-                  type="text"
-                  placeholder="Search activities..."
-                  value={searchTerm}
-                  onChange={(e) => setSearchTerm(e.target.value)}
-                  className="activityLogs-search-input"
-                />
+              <div className="activityLogs-filter-item">
+                <div className="activityLogs-search-wrapper">
+                  <FaSearch className="activityLogs-search-icon" />
+                  <input
+                    type="text"
+                    placeholder="Search activities..."
+                    value={searchTerm}
+                    onChange={(e) => setSearchTerm(e.target.value)}
+                    className="activityLogs-search-input"
+                  />
+                </div>
               </div>
-            </div>
 
-            <div className="activityLogs-filter-item">
-              <span>Service:</span>
-              <select
-                value={serviceFilter}
-                onChange={(e) => setServiceFilter(e.target.value)}
-                className="activityLogs-select"
-              >
-                <option value="">All Services</option>
-                <option value="DISCOUNTS_SERVICE">Discounts</option>
-                <option value="POS_SALES">POS Sales</option>
-                <option value="PRODUCTS_SERVICE">Products</option>
-                <option value="INVENTORY_SERVICE">Inventory</option>
-              </select>
-            </div>
-
-            <div className="activityLogs-filter-item">
-              <span>Entity:</span>
-              <select
-                value={entityTypeFilter}
-                onChange={(e) => setEntityTypeFilter(e.target.value)}
-                className="activityLogs-select"
-              >
-                <option value="">All Types</option>
-                <option value="Discount">Discount</option>
-                <option value="Sale">Sale</option>
-                <option value="Product">Product</option>
-                <option value="Inventory">Inventory</option>
-              </select>
-            </div>
-
-            <div className="activityLogs-filter-item">
-              <span>Action:</span>
-              <select
-                value={actionFilter}
-                onChange={(e) => setActionFilter(e.target.value)}
-                className="activityLogs-select"
-              >
-                <option value="">All Actions</option>
-                <option value="CREATE">Create</option>
-                <option value="UPDATE">Update</option>
-                <option value="DELETE">Delete</option>
-              </select>
-            </div>
-
-            <button
-              className="activityLogs-clearBtn"
-              onClick={handleClearFilters}
-            >
-              Clear Filters
-            </button>
-          </div>
-
-          {/* Error State */}
-          {error && (
-            <div className="activityLogs-error">
-              <p>{error}</p>
-              <button onClick={fetchLogs}>Retry</button>
-            </div>
-          )}
-
-          {/* Loading State */}
-          {isLoading ? (
-            <div className="loading-container">
-              <div className="loading-bg">
-                <Lottie
-                  animationData={loadingAnimation}
-                  loop={true}
-                  className="loading-animation"
-                />
+              <div className="activityLogs-filter-item">
+                <span>Service:</span>
+                <select
+                  value={serviceFilter}
+                  onChange={(e) => setServiceFilter(e.target.value)}
+                  className="activityLogs-select"
+                >
+                  <option value="">All Services</option>
+                  <option value="DISCOUNTS_SERVICE">Discounts</option>
+                  <option value="POS_SALES">POS Sales</option>
+                  <option value="POS_SALES_AUTO_CANCEL">Auto Cancel</option>
+                  <option value="PRODUCTS_SERVICE">Products</option>
+                  <option value="INVENTORY_SERVICE">Inventory</option>
+                </select>
               </div>
-            </div>
-          ) : filteredGroups.length === 0 ? (
-            <div className="activityLogs-empty">
-              <p>No activity logs found</p>
-            </div>
-          ) : (
-            /* Timeline */
-            <div className="activityLogs-timeline">
-              <div className="activityLogs-timeline-line"></div>
 
-              {filteredGroups.map((group) => (
-                <div key={group.id} className="activityLogs-activity-item">
-                  {/* Main Activity Header */}
-                  <div className="activityLogs-activity-header">
-                    {/* Icon Circle */}
-                    <div
-                      className="activityLogs-icon-circle"
-                      style={{
-                        backgroundColor: getServiceColor(group.service),
-                      }}
-                    >
-                      {getServiceIcon(group.service)}
-                    </div>
+              <div className="activityLogs-filter-item">
+                <span>Entity:</span>
+                <select
+                  value={entityTypeFilter}
+                  onChange={(e) => setEntityTypeFilter(e.target.value)}
+                  className="activityLogs-select"
+                >
+                  <option value="">All Types</option>
+                  <option value="Discount">Discount</option>
+                  <option value="Sale">Sale</option>
+                  <option value="Product">Product</option>
+                  <option value="Inventory">Inventory</option>
+                </select>
+              </div>
 
-                    {/* Content */}
-                    <div className="activityLogs-activity-content">
-                      <div className="activityLogs-activity-title-row">
-                        <span className="activityLogs-timestamp">
-                          {formatTimestamp(group.firstTimestamp)}
-                        </span>
-                        <h3 className="activityLogs-activity-title">
-                          {getEntityTitle(group)}
-                        </h3>
+              <div className="activityLogs-filter-item">
+                <span>Action:</span>
+                <select
+                  value={actionFilter}
+                  onChange={(e) => setActionFilter(e.target.value)}
+                  className="activityLogs-select"
+                >
+                  <option value="">All Actions</option>
+                  <option value="CREATE">Create</option>
+                  <option value="UPDATE">Update</option>
+                  <option value="DELETE">Delete</option>
+                  <option value="AUTO_CANCEL">Auto Cancel</option>
+                </select>
+              </div>
+
+              <button
+                className="activityLogs-clearBtn"
+                onClick={handleClearFilters}
+              >
+                Clear Filters
+              </button>
+            </div>
+
+            {/* Error State */}
+            {error && (
+              <div className="activityLogs-error">
+                <p>{error}</p>
+                <button onClick={fetchLogs}>Retry</button>
+              </div>
+            )}
+
+            {/* Loading State */}
+            {isLoading ? (
+              <div className="loading-container">
+                <div className="loading-bg">
+                  <Lottie
+                    animationData={loadingAnimation}
+                    loop={true}
+                    className="loading-animation"
+                  />
+                </div>
+              </div>
+            ) : filteredGroups.length === 0 ? (
+              <div className="activityLogs-empty">
+                <p>No activity logs found</p>
+              </div>
+            ) : (
+              /* Timeline */
+              <div className="activityLogs-timeline">
+                <div className="activityLogs-timeline-line"></div>
+
+                {filteredGroups.map((group) => (
+                  <div key={group.id} className="activityLogs-activity-item">
+                    {/* Main Activity Header */}
+                    <div className="activityLogs-activity-header">
+                      {/* Icon Circle */}
+                      <div
+                        className="activityLogs-icon-circle"
+                        style={{
+                          backgroundColor: getServiceColor(group.service),
+                        }}
+                      >
+                        {getServiceIcon(group.service)}
                       </div>
 
-                      {/* Chain of Events */}
-                      {group.events.map((event, eventIndex) => (
-                        <div key={eventIndex} className="activityLogs-event-item">
-                          <div className="activityLogs-event-dot"></div>
-                          <div className="activityLogs-event-content">
-                            <div className="activityLogs-event-timestamp">
-                              {formatTimestamp(event.created_at)}
-                            </div>
-                            <div
-                              className={`activityLogs-event-message ${getActionClass(
-                                event.action
-                              )}`}
-                            >
-                              {getActionIcon(event.action)}
-                              <div className="activityLogs-event-text">
-                                <strong>
-                                  {actorNameMap[event.actor_username] ||
-                                    event.actor_username}
-                                </strong>{" "}
-                                {event.action.toLowerCase()}d:{" "}
-                                {event.change_description}
+                      {/* Content */}
+                      <div className="activityLogs-activity-content">
+                        <div className="activityLogs-activity-title-row">
+                          <span className="activityLogs-timestamp">
+                            {formatTimestamp(group.firstTimestamp)}
+                          </span>
+                          <h3 className="activityLogs-activity-title">
+                            {getEntityTitle(group)}
+                          </h3>
+                        </div>
+
+                        {/* Chain of Events */}
+                        {group.events.map((event, eventIndex) => (
+                          <div key={eventIndex} className="activityLogs-event-item">
+                            <div className="activityLogs-event-dot"></div>
+                            <div className="activityLogs-event-content">
+                              <div className="activityLogs-event-timestamp">
+                                {formatTimestamp(event.created_at)}
+                              </div>
+                              <div
+                                className={`activityLogs-event-message ${getActionClass(
+                                  event.action
+                                )}`}
+                              >
+                                {getActionIcon(event.action)}
+                                <div className="activityLogs-event-text">
+                                  <strong>
+                                    {actorNameMap[event.actor_username] ||
+                                      event.actor_username}
+                                  </strong>{" "}
+                                  {event.action === "AUTO_CANCEL" 
+                                    ? "auto-cancelled" 
+                                    : `${event.action.toLowerCase()}d`}:{" "}
+                                  {event.change_description}
+                                </div>
                               </div>
                             </div>
                           </div>
-                        </div>
-                      ))}
+                        ))}
+                      </div>
                     </div>
                   </div>
-                </div>
-              ))}
-            </div>
-          )}
+                ))}
+              </div>
+            )}
+          </div>
         </div>
       </div>
     </div>

@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, status, BackgroundTasks
 from fastapi.security import OAuth2PasswordBearer
 from pydantic import BaseModel, Field
 from typing import List, Optional, Literal
@@ -14,7 +14,7 @@ from database import get_db_connection
 
 EXTERNAL_PRODUCTS_API_URL = "http://127.0.0.1:8001/is_products/products/details/" 
 AUTH_SERVICE_ME_URL = "http://localhost:4000/auth/users/me"
-BLOCKCHAIN_SERVICE_URL = "http://localhost:9005/blockchain/log"  # Add blockchain service URL
+BLOCKCHAIN_SERVICE_URL = "http://localhost:9005/blockchain/log"
 
 
 router = APIRouter() 
@@ -42,8 +42,8 @@ async def validate_token_and_roles(token: str, allowed_roles: List[str]):
     
     return user_data
 
-# BLOCKCHAIN LOGGING HELPER
-async def log_to_blockchain(
+# BLOCKCHAIN LOGGING HELPER - Now runs in background
+async def log_to_blockchain_async(
     token: str,
     action: str,
     entity_id: int,
@@ -52,12 +52,12 @@ async def log_to_blockchain(
     data: dict
 ):
     """
-    Log discount operations to blockchain
+    Log discount operations to blockchain (async background task)
     """
     headers = {"Authorization": f"Bearer {token}"}
     payload = {
         "service_identifier": "DISCOUNTS_SERVICE",
-        "action": action,  # CREATE, UPDATE, DELETE
+        "action": action,
         "entity_type": "Discount",
         "entity_id": entity_id,
         "actor_username": actor_username,
@@ -66,25 +66,15 @@ async def log_to_blockchain(
     }
     
     try:
-        async with httpx.AsyncClient() as client:
+        async with httpx.AsyncClient(timeout=10.0) as client:
             response = await client.post(
                 BLOCKCHAIN_SERVICE_URL,
                 json=payload,
-                headers=headers,
-                timeout=30.0
+                headers=headers
             )
             response.raise_for_status()
-            return response.json()
-    except httpx.RequestError as e:
-        print(f"⚠️  Blockchain logging failed (network error): {e}")
-        # Don't fail the main operation if blockchain logging fails
-        return None
-    except httpx.HTTPStatusError as e:
-        print(f"⚠️  Blockchain logging failed (HTTP {e.response.status_code}): {e.response.text}")
-        return None
     except Exception as e:
-        print(f"⚠️  Blockchain logging failed (unexpected error): {e}")
-        return None
+        print(f"⚠️  Blockchain logging failed: {e}")
 
 # HELPER FUNCTION TO AUTO-EXPIRE DISCOUNTS
 async def auto_expire_discounts(conn):
@@ -156,7 +146,11 @@ async def get_external_choices(token: str):
 # DISCOUNT ENDPOINTS
 
 @discounts_router.post("/", response_model=DiscountDetailOut, status_code=status.HTTP_201_CREATED)
-async def create_discount(discount_data: DiscountCreate, token: str = Depends(oauth2_scheme)):
+async def create_discount(
+    discount_data: DiscountCreate, 
+    background_tasks: BackgroundTasks,
+    token: str = Depends(oauth2_scheme)
+):
     user_data = await validate_token_and_roles(token, allowed_roles=["admin"])
     conn = await get_db_connection()
     try:
@@ -180,7 +174,7 @@ async def create_discount(discount_data: DiscountCreate, token: str = Depends(oa
             
             await conn.commit()
             
-            # Log to blockchain AFTER successful database commit
+            # Log to blockchain in background - doesn't block response
             blockchain_data = {
                 "id": new_id,
                 "name": discount_data.discountName,
@@ -195,13 +189,10 @@ async def create_discount(discount_data: DiscountCreate, token: str = Depends(oa
                 "selected_categories": discount_data.selectedCategories
             }
             
-            await log_to_blockchain(
-                token=token,
-                action="CREATE",
-                entity_id=new_id,
-                actor_username=user_data.get("username", "unknown"),
-                change_description=f"Created discount: {discount_data.discountName}",
-                data=blockchain_data
+            background_tasks.add_task(
+                log_to_blockchain_async,
+                token, "CREATE", new_id, user_data.get("username", "unknown"),
+                f"Created discount: {discount_data.discountName}", blockchain_data
             )
             
             return DiscountDetailOut(id=new_id, **discount_data.model_dump())
@@ -222,47 +213,69 @@ async def get_all_discounts(token: str = Depends(oauth2_scheme)):
         await auto_expire_discounts(conn)
         
         async with conn.cursor() as cursor:
-            await cursor.execute("SELECT id, name, status, application_type, discount_type, discount_value, minimum_spend, valid_from, valid_to FROM discounts WHERE isDeleted = 0 ORDER BY id DESC")
-            discounts_raw = await cursor.fetchall()
-            discounts_map = {row.id: {"data": dict(zip([c[0] for c in cursor.description], row)), "products": [], "categories": []} for row in discounts_raw}
-            
-            await cursor.execute("SELECT discount_id, product_name FROM discount_applicable_products")
-            for row in await cursor.fetchall():
-                if row.discount_id in discounts_map: discounts_map[row.discount_id]["products"].append(row.product_name)
-            
-            await cursor.execute("SELECT discount_id, category_name FROM discount_applicable_categories")
-            for row in await cursor.fetchall():
-                if row.discount_id in discounts_map: discounts_map[row.discount_id]["categories"].append(row.category_name)
+            # CORRECTED QUERY: Replaced STRING_AGG with a more compatible
+            # STUFF and FOR XML PATH approach for older SQL Server versions.
+            sql = """
+                SELECT 
+                    d.id, d.name, d.status, d.application_type, d.discount_type, 
+                    d.discount_value, d.minimum_spend, d.valid_from, d.valid_to,
+                    (
+                        STUFF((SELECT DISTINCT ',' + dp.product_name
+                               FROM discount_applicable_products dp
+                               WHERE dp.discount_id = d.id
+                               FOR XML PATH('')), 1, 1, '')
+                    ) as products,
+                    (
+                        STUFF((SELECT DISTINCT ',' + dc.category_name
+                               FROM discount_applicable_categories dc
+                               WHERE dc.discount_id = d.id
+                               FOR XML PATH('')), 1, 1, '')
+                    ) as categories
+                FROM discounts d
+                WHERE d.isDeleted = 0
+                ORDER BY d.id DESC
+            """
+            await cursor.execute(sql)
+            rows = await cursor.fetchall()
             
             results = []
-            for _, item_data in discounts_map.items():
-                d, prods, cats = item_data['data'], item_data['products'], item_data['categories']
+            for row in rows:
+                # This processing logic remains the same and works correctly
+                prods = row.products.split(',') if row.products else []
+                cats = row.categories.split(',') if row.categories else []
+                
                 app_str = "All Products"
-                if d['application_type'] == 'specific_products': app_str = f"{len(prods)} Product(s)"
-                elif d['application_type'] == 'specific_categories': app_str = f"{len(cats)} Category(s)"
-                disc_str = f"₱{d['discount_value']:.2f}"
-                if d['discount_type'] == 'percentage': disc_str = f"{d['discount_value']:.1f}%"
+                if row.application_type == 'specific_products': 
+                    app_str = f"{len(prods)} Product(s)"
+                elif row.application_type == 'specific_categories': 
+                    app_str = f"{len(cats)} Category(s)"
+                
+                disc_str = f"₱{row.discount_value:.2f}"
+                if row.discount_type == 'percentage': 
+                    disc_str = f"{row.discount_value:.1f}%"
                 
                 results.append(DiscountListOut(
-                    id=d['id'], 
-                    name=d['name'], 
+                    id=row.id, 
+                    name=row.name, 
                     application=app_str, 
                     discount=disc_str, 
-                    minSpend=float(d['minimum_spend']), 
-                    validFrom=d['valid_from'].strftime('%Y-%m-%d'), 
-                    validTo=d['valid_to'].strftime('%Y-%m-%d'), 
-                    status=d['status'], 
-                    type=d['discount_type'],
-                    application_type=d['application_type'],
+                    minSpend=float(row.minimum_spend), 
+                    validFrom=row.valid_from.strftime('%Y-%m-%d'), 
+                    validTo=row.valid_to.strftime('%Y-%m-%d'), 
+                    status=row.status, 
+                    type=row.discount_type,
+                    application_type=row.application_type,
                     applicable_products=prods,
                     applicable_categories=cats
                 ))
             return results
     except Exception as e:
+        # It's good practice to log the full error for easier debugging
+        print(f"An unexpected error occurred in get_all_discounts: {e}")
         raise HTTPException(status_code=500, detail=f"Database error on get all: {e}")
     finally:
         if conn: await conn.close()
-
+        
 @discounts_router.get("/{discount_id}", response_model=DiscountDetailOut)
 async def get_discount(discount_id: int, token: str = Depends(oauth2_scheme)):
     await validate_token_and_roles(token, allowed_roles=["admin", "manager", "cashier"])
@@ -292,7 +305,12 @@ async def get_discount(discount_id: int, token: str = Depends(oauth2_scheme)):
         if conn: await conn.close()
 
 @discounts_router.put("/{discount_id}", response_model=DiscountDetailOut)
-async def update_discount(discount_id: int, discount_data: DiscountUpdate, token: str = Depends(oauth2_scheme)):
+async def update_discount(
+    discount_id: int, 
+    discount_data: DiscountUpdate, 
+    background_tasks: BackgroundTasks,
+    token: str = Depends(oauth2_scheme)
+):
     user_data = await validate_token_and_roles(token, allowed_roles=["admin"])
     conn = await get_db_connection()
     try:
@@ -338,7 +356,7 @@ async def update_discount(discount_id: int, discount_data: DiscountUpdate, token
             
             change_desc = f"Updated discount: {', '.join(changes) if changes else 'modified fields'}"
             
-            # Log to blockchain
+            # Log to blockchain in background
             blockchain_data = {
                 "id": discount_id,
                 "name": discount_data.discountName,
@@ -358,13 +376,10 @@ async def update_discount(discount_id: int, discount_data: DiscountUpdate, token
                 }
             }
             
-            await log_to_blockchain(
-                token=token,
-                action="UPDATE",
-                entity_id=discount_id,
-                actor_username=user_data.get("username", "unknown"),
-                change_description=change_desc,
-                data=blockchain_data
+            background_tasks.add_task(
+                log_to_blockchain_async,
+                token, "UPDATE", discount_id, user_data.get("username", "unknown"),
+                change_desc, blockchain_data
             )
             
             return DiscountDetailOut(id=discount_id, **discount_data.model_dump())
@@ -378,7 +393,11 @@ async def update_discount(discount_id: int, discount_data: DiscountUpdate, token
         if conn: await conn.close()
 
 @discounts_router.delete("/{discount_id}", status_code=status.HTTP_200_OK)
-async def delete_discount(discount_id: int, token: str = Depends(oauth2_scheme)):
+async def delete_discount(
+    discount_id: int, 
+    background_tasks: BackgroundTasks,
+    token: str = Depends(oauth2_scheme)
+):
     user_data = await validate_token_and_roles(token, allowed_roles=["admin"])
     conn = await get_db_connection()
     try:
@@ -399,7 +418,7 @@ async def delete_discount(discount_id: int, token: str = Depends(oauth2_scheme))
             
             await conn.commit()
             
-            # Log to blockchain
+            # Log to blockchain in background
             blockchain_data = {
                 "id": discount_id,
                 "name": discount_name,
@@ -407,13 +426,10 @@ async def delete_discount(discount_id: int, token: str = Depends(oauth2_scheme))
                 "deleted_at": datetime.now().isoformat()
             }
             
-            await log_to_blockchain(
-                token=token,
-                action="DELETE",
-                entity_id=discount_id,
-                actor_username=user_data.get("username", "unknown"),
-                change_description=f"Deleted discount: {discount_name}",
-                data=blockchain_data
+            background_tasks.add_task(
+                log_to_blockchain_async,
+                token, "DELETE", discount_id, user_data.get("username", "unknown"),
+                f"Deleted discount: {discount_name}", blockchain_data
             )
             
             return {"message": "Discount deleted successfully."}

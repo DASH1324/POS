@@ -296,6 +296,42 @@ async def log_to_blockchain(log_data: ActivityLogRequest) -> ActivityLogResponse
             detail=f"Failed to log to blockchain: {str(e)}"
         )
 
+@router.post("/log", response_model=ActivityLogResponse, status_code=status.HTTP_201_CREATED)
+async def create_activity_log(
+    log_data: ActivityLogRequest,
+    current_user: dict = Depends(get_current_active_user)
+):
+    """
+    Log an activity to the blockchain.
+    This should be called by other microservices after successful POST/PATCH operations.
+    
+    Example usage from other services:
+    ```python
+    async with httpx.AsyncClient() as client:
+        await client.post(
+            "http://localhost:9005/blockchain/log",
+            json={
+                "service_identifier": "POS_SALES",
+                "action": "CREATE",
+                "entity_type": "Sale",
+                "entity_id": sale_id,
+                "actor_username": current_user["username"],
+                "change_description": "New sale created",
+                "data": sale_data
+            },
+            headers={"Authorization": f"Bearer {token}"}
+        )
+    ```
+    """
+    # Ensure actor username matches authenticated user
+    if log_data.actor_username != current_user.get("username"):
+        logger.warning(f"⚠️  Actor username mismatch: {log_data.actor_username} vs {current_user.get('username')}")
+    
+    # Log to blockchain
+    result = await log_to_blockchain(log_data)
+    
+    return result
+    
 # ========================================
 # API ENDPOINTS - FIXED AUTHENTICATION
 # ========================================

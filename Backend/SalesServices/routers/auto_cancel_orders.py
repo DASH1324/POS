@@ -3,6 +3,7 @@ from datetime import datetime, timedelta
 import logging
 import asyncio
 import httpx
+import os
 from database import get_db_connection
 
 logger = logging.getLogger(__name__)
@@ -12,9 +13,59 @@ router_auto_cancel = APIRouter(
     tags=["Auto Cancel Orders"]
 )
 
+# Blockchain Configuration
+BLOCKCHAIN_LOG_URL = os.getenv("BLOCKCHAIN_LOG_URL", "http://localhost:8003/blockchain/log")
+
 # Flag to control the background task
 _background_task_running = False
 _background_task = None
+
+async def log_to_blockchain_system(
+    action: str,
+    entity_id: int,
+    change_description: str,
+    data: dict
+):
+    """
+    Log system actions to blockchain without authentication token.
+    Uses system credentials or unauthenticated endpoint.
+    """
+    # Check if blockchain logging is enabled
+    if not BLOCKCHAIN_LOG_URL or BLOCKCHAIN_LOG_URL == "disabled":
+        logger.info(f"ℹ️  Blockchain logging disabled - skipping log for {action} on Sale {entity_id}")
+        return None
+    
+    payload = {
+        "service_identifier": "POS_SALES_AUTO_CANCEL",
+        "action": action,
+        "entity_type": "Sale",
+        "entity_id": entity_id,
+        "actor_username": "System",  # System user for automated actions
+        "change_description": change_description,
+        "data": data
+    }
+    
+    try:
+        async with httpx.AsyncClient(timeout=30.0) as client:
+            # Try without authentication first (for system actions)
+            # If your blockchain service requires auth, you'll need to add a system token
+            response = await client.post(BLOCKCHAIN_LOG_URL, json=payload)
+            response.raise_for_status()
+            result = response.json()
+            logger.info(f"✅ Blockchain log recorded: {action} on Sale {entity_id} (TX: {result.get('transaction_hash', 'N/A')})")
+            return result
+    except httpx.ConnectError as e:
+        logger.warning(f"⚠️  Blockchain service unavailable at {BLOCKCHAIN_LOG_URL}: {e}")
+    except httpx.TimeoutException as e:
+        logger.warning(f"⚠️  Blockchain logging timeout: {e}")
+    except httpx.RequestError as e:
+        logger.warning(f"⚠️  Blockchain logging failed (network error): {e}")
+    except httpx.HTTPStatusError as e:
+        logger.warning(f"⚠️  Blockchain logging failed (HTTP {e.response.status_code}): {e.response.text}")
+    except Exception as e:
+        logger.warning(f"⚠️  Blockchain logging failed: {e}")
+    
+    return None
 
 async def auto_cancel_expired_orders():
     """
@@ -36,7 +87,8 @@ async def auto_cancel_expired_orders():
                         s.GCashReferenceNumber, 
                         s.OrderType,
                         s.CreatedAt,
-                        s.CashierName
+                        s.CashierName,
+                        s.TotalAmount
                     FROM Sales s
                     WHERE s.Status = 'pending' 
                     AND s.CreatedAt < ?
@@ -53,6 +105,7 @@ async def auto_cancel_expired_orders():
                         order_type = order.OrderType
                         created_at = order.CreatedAt
                         cashier_name = order.CashierName
+                        total_amount = order.TotalAmount
                         
                         try:
                             # Update status to cancelled
@@ -72,8 +125,31 @@ async def auto_cancel_expired_orders():
                             await conn.commit()
                             
                             logger.info(
-                                f" Auto-cancelled POS order SaleID={sale_id}, "
+                                f"✅ Auto-cancelled POS order SaleID={sale_id}, "
                                 f"Ref={reference_number}, Type={order_type}"
+                            )
+                            
+                            # Log to blockchain
+                            time_elapsed = datetime.now() - created_at
+                            minutes_elapsed = int(time_elapsed.total_seconds() / 60)
+                            
+                            blockchain_data = {
+                                "sale_id": sale_id,
+                                "reference_number": reference_number,
+                                "order_type": order_type,
+                                "total_amount": str(total_amount) if total_amount else "0.00",
+                                "original_cashier": cashier_name,
+                                "created_at": created_at.isoformat(),
+                                "cancelled_at": datetime.now().isoformat(),
+                                "minutes_elapsed": minutes_elapsed,
+                                "cancellation_reason": "Order expired after 30 minutes"
+                            }
+                            
+                            await log_to_blockchain_system(
+                                action="AUTO_CANCEL",
+                                entity_id=sale_id,
+                                change_description=f"Automatically cancelled order after {minutes_elapsed} minutes (threshold: 30 min) - Ref: {reference_number or 'N/A'}",
+                                data=blockchain_data
                             )
                             
                             # If it's an online order (has reference number), notify OOS
@@ -90,26 +166,26 @@ async def auto_cancel_expired_orders():
                                         )
                                         
                                         if response.status_code == 200:
-                                            logger.info(f" Notified OOS to cancel order {reference_number}")
+                                            logger.info(f"✅ Notified OOS to cancel order {reference_number}")
                                         else:
                                             logger.warning(
-                                                f" Failed to notify OOS: {response.status_code} - {response.text}"
+                                                f"⚠️  Failed to notify OOS: {response.status_code} - {response.text}"
                                             )
                                             
                                 except httpx.RequestError as e:
-                                    logger.error(f" Failed to notify OOS for {reference_number}: {e}")
+                                    logger.error(f"❌ Failed to notify OOS for {reference_number}: {e}")
                             
                         except Exception as e:
                             await conn.rollback()
-                            logger.error(f" Failed to auto-cancel SaleID={sale_id}: {e}", exc_info=True)
+                            logger.error(f"❌ Failed to auto-cancel SaleID={sale_id}: {e}", exc_info=True)
                             continue
                 else:
-                    logger.info("No expired pending orders found")
+                    logger.info("✓ No expired pending orders found")
                     
             await conn.close()
             
         except Exception as e:
-            logger.error(f" Error in auto-cancel task: {e}", exc_info=True)
+            logger.error(f"❌ Error in auto-cancel task: {e}", exc_info=True)
         
         # Wait 5 minutes before next check
         await asyncio.sleep(300)  
@@ -126,7 +202,7 @@ async def start_auto_cancel_task():
     _background_task_running = True
     _background_task = asyncio.create_task(auto_cancel_expired_orders())
     
-    logger.info(" Started auto-cancel background task")
+    logger.info("✅ Started auto-cancel background task")
     return {"message": "Auto-cancel task started successfully"}
 
 
@@ -147,7 +223,7 @@ async def stop_auto_cancel_task():
         except asyncio.CancelledError:
             pass
     
-    logger.info(" Stopped auto-cancel background task")
+    logger.info("✅ Stopped auto-cancel background task")
     return {"message": "Auto-cancel task stopped successfully"}
 
 

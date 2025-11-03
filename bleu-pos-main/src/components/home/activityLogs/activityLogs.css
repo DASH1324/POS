@@ -8,6 +8,8 @@ body {
     display: flex;
     flex-direction: row;
     min-height: 100vh;
+    height: 100vh;
+    overflow: hidden;
 }
 
 .activityLogs-container {
@@ -19,6 +21,34 @@ body {
     margin-left: 10px;
     margin-right: 40px;
     margin-bottom: 30px;
+    display: flex;
+    flex-direction: column;
+}
+
+.activityLogs-content-wrapper {
+    flex: 1;
+    overflow-y: auto;
+    overflow-x: hidden;
+    padding-right: 10px;
+}
+
+/* Custom Scrollbar */
+.activityLogs-content-wrapper::-webkit-scrollbar {
+    width: 8px;
+}
+
+.activityLogs-content-wrapper::-webkit-scrollbar-track {
+    background: #f1f1f1;
+    border-radius: 10px;
+}
+
+.activityLogs-content-wrapper::-webkit-scrollbar-thumb {
+    background: #4B929D;
+    border-radius: 10px;
+}
+
+.activityLogs-content-wrapper::-webkit-scrollbar-thumb:hover {
+    background: #3a7580;
 }
 
 .activityLogs-content {
@@ -163,6 +193,7 @@ body {
     padding: 20px;
     border-radius: 12px;
     position: relative;
+    margin-bottom: 20px;
 }
 
 .activityLogs-timeline-line {

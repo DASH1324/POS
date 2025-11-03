@@ -16,7 +16,6 @@ function LogSpillageModal({ show, onClose, onSave, loggedByName }) {
   const [availableProducts, setAvailableProducts] = useState([]);
   const [availableCashiers, setAvailableCashiers] = useState([]);
 
-  // Reset form when modal closes
   useEffect(() => {
     if (!show) {
       setCashierName("");
@@ -30,14 +29,12 @@ function LogSpillageModal({ show, onClose, onSave, loggedByName }) {
     }
   }, [show]);
 
-  // Fetch cashiers when modal opens
   useEffect(() => {
     if (show) {
       fetchCashiers();
     }
   }, [show]);
 
-  // Fetch products when BOTH date AND cashierName change
   useEffect(() => {
     if (date && cashierName && show) {
       fetchProductsSoldByCashierOnDate(date, cashierName);
@@ -46,7 +43,6 @@ function LogSpillageModal({ show, onClose, onSave, loggedByName }) {
       setProductType("");
       setProductName("");
     }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [date, cashierName, show]);
 
   if (!show) return null;
@@ -106,7 +102,6 @@ function LogSpillageModal({ show, onClose, onSave, loggedByName }) {
         throw new Error("No authentication token found. Please log in again.");
       }
 
-      // Find the selected cashier object to get their username
       const selectedCashierObj = availableCashiers.find(c => c.FullName === selectedCashier);
       
       if (!selectedCashierObj) {
@@ -142,7 +137,6 @@ function LogSpillageModal({ show, onClose, onSave, loggedByName }) {
           productType: "No products were processed by this cashier on this date",
         }));
       } else {
-        // Clear any previous error if products are found
         setErrors((prev) => {
           const { productType, ...rest } = prev;
           return rest;
@@ -164,15 +158,57 @@ function LogSpillageModal({ show, onClose, onSave, loggedByName }) {
     setErrors((prev) => ({ ...prev, [field]: "" }));
   };
 
-  // Get unique categories from available products
   const categories = [...new Set(availableProducts.map((p) => p.category))];
 
-  // Filter products by selected category
   const filteredProducts = productType
     ? availableProducts.filter((p) => p.category === productType)
     : [];
 
-  // Function to deduct from IMS using spillage endpoints
+  // Check if category is merchandise-related
+  const isMerchandiseCategory = (category) => {
+    const merchandiseCategories = ['merchandise', 'all items'];
+    return merchandiseCategories.includes(category.toLowerCase());
+  };
+
+  // Function to deduct merchandise directly
+  const deductFromMerchandise = async (spillageData, token) => {
+    const spillageItem = {
+      product_name: spillageData.product_name,
+      category: spillageData.category,
+      quantity: spillageData.quantity
+    };
+
+    try {
+      const response = await fetch(
+        "http://localhost:8002/merchandise/deduct-from-spillage",
+        {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            Authorization: `Bearer ${token}`,
+          },
+          body: JSON.stringify({
+            spillage_item: spillageItem
+          }),
+        }
+      );
+
+      if (!response.ok) {
+        const errorData = await response.json();
+        console.error("Failed to deduct merchandise:", errorData);
+        throw new Error(errorData.detail || "Failed to deduct merchandise from inventory");
+      }
+
+      const result = await response.json();
+      console.log("Merchandise deduction result:", result);
+      console.log("Successfully deducted merchandise for spillage");
+    } catch (error) {
+      console.error("Error deducting merchandise:", error);
+      throw error;
+    }
+  };
+
+  // Function to deduct from IMS (ingredients and materials)
   const deductFromIMS = async (spillageData, token) => {
     const spillageItem = {
       product_name: spillageData.product_name,
@@ -181,7 +217,6 @@ function LogSpillageModal({ show, onClose, onSave, loggedByName }) {
     };
 
     try {
-      // Deduct ingredients using spillage endpoint
       const ingredientsResponse = await fetch(
         "http://127.0.0.1:8002/ingredients/deduct-from-spillage",
         {
@@ -205,7 +240,6 @@ function LogSpillageModal({ show, onClose, onSave, loggedByName }) {
       const ingredientsResult = await ingredientsResponse.json();
       console.log("Ingredients deduction result:", ingredientsResult);
 
-      // Deduct materials using spillage endpoint
       const materialsResponse = await fetch(
         "http://localhost:8002/materials/deduct-from-spillage",
         {
@@ -258,7 +292,6 @@ function LogSpillageModal({ show, onClose, onSave, loggedByName }) {
     try {
       const token = localStorage.getItem("authToken");
       
-      // Find the selected cashier object to get their username for saving
       const selectedCashierObj = availableCashiers.find(c => c.FullName === cashierName);
       
       if (!selectedCashierObj) {
@@ -294,12 +327,18 @@ function LogSpillageModal({ show, onClose, onSave, loggedByName }) {
 
       const savedSpillage = await response.json();
       
-      // Deduct from IMS after successful spillage save
+      // Deduct from appropriate inventory based on category
       try {
-        await deductFromIMS(spillageData, token);
+        if (isMerchandiseCategory(productType)) {
+          console.log(`Category '${productType}' is merchandise. Deducting from Merchandise table.`);
+          await deductFromMerchandise(spillageData, token);
+        } else {
+          console.log(`Category '${productType}' is not merchandise. Deducting from IMS (ingredients/materials).`);
+          await deductFromIMS(spillageData, token);
+        }
         console.log("Spillage logged and inventory deducted successfully");
       } catch (imsError) {
-        console.error("Warning: Spillage saved but IMS deduction failed:", imsError);
+        console.error("Warning: Spillage saved but inventory deduction failed:", imsError);
         setErrors({
           submit: "Spillage saved, but inventory deduction may have failed. Please verify inventory levels.",
         });

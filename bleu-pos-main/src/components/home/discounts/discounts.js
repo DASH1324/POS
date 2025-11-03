@@ -416,6 +416,77 @@ function Discounts() {
     }));
   };
 
+  // Helper function to transform discount detail to list format
+  const transformDiscountDetailToList = (detail) => {
+    const appStr = detail.applicationType === 'all_products' 
+      ? "All Products"
+      : detail.applicationType === 'specific_products'
+      ? `${detail.selectedProducts.length} Product(s)`
+      : `${detail.selectedCategories.length} Category(s)`;
+    
+    const discStr = detail.discountType === 'percentage'
+      ? `${parseFloat(detail.discountValue).toFixed(1)}%`
+      : `₱${parseFloat(detail.discountValue).toFixed(2)}`;
+
+    return {
+      id: detail.id,
+      name: detail.discountName,
+      application: appStr,
+      discount: discStr,
+      minSpend: parseFloat(detail.minSpend),
+      validFrom: detail.validFrom,
+      validTo: detail.validTo,
+      status: detail.status,
+      type: detail.discountType,
+      application_type: detail.applicationType,
+      applicable_products: detail.selectedProducts || [],
+      applicable_categories: detail.selectedCategories || []
+    };
+  };
+
+  // Helper function to transform promotion detail to list format
+  const transformPromotionDetailToList = (detail) => {
+    let typeStr = detail.promotionType.toUpperCase();
+    if (detail.promotionType === 'bogo') {
+      typeStr = `BOGO (${detail.buyQuantity}+${detail.getQuantity})`;
+    }
+
+    let valueStr = "";
+    if (detail.promotionType === 'percentage') {
+      valueStr = `${parseFloat(detail.promotionValue).toFixed(1)}%`;
+    } else if (detail.promotionType === 'fixed') {
+      valueStr = `₱${parseFloat(detail.promotionValue).toFixed(2)}`;
+    } else if (detail.promotionType === 'bogo') {
+      if (detail.bogoDiscountType === 'percentage') {
+        valueStr = `${parseFloat(detail.bogoDiscountValue).toFixed(1)}% off`;
+      } else {
+        valueStr = `₱${parseFloat(detail.bogoDiscountValue).toFixed(2)} off`;
+      }
+    }
+
+    let productsStr = "";
+    if (detail.applicationType === 'all_products') {
+      productsStr = "All Products";
+    } else if (detail.applicationType === 'specific_categories') {
+      const cats = detail.selectedCategories || [];
+      productsStr = cats.length <= 2 ? cats.join(", ") : `${cats.length} categories`;
+    } else {
+      const prods = detail.selectedProducts || [];
+      productsStr = prods.length <= 2 ? prods.join(", ") : `${prods.length} products`;
+    }
+
+    return {
+      id: detail.id,
+      name: detail.promotionName,
+      type: typeStr,
+      value: valueStr,
+      products: productsStr,
+      validFrom: detail.validFrom,
+      validTo: detail.validTo,
+      status: detail.status
+    };
+  };
+
   const handleSaveDiscount = async () => {
     if (userRole === "manager") return;
 
@@ -437,10 +508,20 @@ function Discounts() {
     const method = isEditing ? "PUT" : "POST";
 
     try {
-      await apiFetch(endpoint, method, discountForm);
+      const result = await apiFetch(endpoint, method, discountForm);
+      
+      // Transform the returned detail data to list format
+      const listItem = transformDiscountDetailToList(result);
+      
+      // Update state optimistically instead of refetching
+      if (isEditing) {
+        setDiscounts(prev => prev.map(d => d.id === listItem.id ? listItem : d));
+      } else {
+        setDiscounts(prev => [listItem, ...prev]);
+      }
+      
       alert(`Discount '${discountForm.discountName}' saved successfully.`);
       setShowDiscountModal(false);
-      fetchDiscounts();
     } catch (error) {
       alert(`Error saving discount: ${error.message}`);
     } finally {
@@ -515,10 +596,20 @@ function Discounts() {
     const method = isEditing ? "PUT" : "POST";
 
     try {
-      await apiFetch(endpoint, method, payload);
+      const result = await apiFetch(endpoint, method, payload);
+      
+      // Transform the returned detail data to list format
+      const listItem = transformPromotionDetailToList(result);
+      
+      // Update state optimistically instead of refetching
+      if (isEditing) {
+        setPromotions(prev => prev.map(p => p.id === listItem.id ? listItem : p));
+      } else {
+        setPromotions(prev => [listItem, ...prev]);
+      }
+      
       alert(`Promotion '${promotionForm.promotionName}' saved successfully.`);
       setShowPromotionModal(false);
-      fetchPromotions();
     } catch (error) {
       alert(`Error saving promotion: ${error.message}`);
     } finally {
@@ -980,10 +1071,12 @@ function Discounts() {
                 try {
                   if (deleteTarget.type === "discount") {
                     await apiFetch(`/discounts/${deleteTarget.id}`, "DELETE");
-                    fetchDiscounts();
+                    // Remove from state instead of refetching
+                    setDiscounts(prev => prev.filter(d => d.id !== deleteTarget.id));
                   } else {
                     await apiFetch(`/promotions/${deleteTarget.id}`, "DELETE");
-                    fetchPromotions();
+                    // Remove from state instead of refetching
+                    setPromotions(prev => prev.filter(p => p.id !== deleteTarget.id));
                   }
                   setDeleteTarget(null);
                 } catch (error) {
@@ -1007,4 +1100,4 @@ function Discounts() {
   );
 }
 
-export default Discounts;
+export default Discounts; 

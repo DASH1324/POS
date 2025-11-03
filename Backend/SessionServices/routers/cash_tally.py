@@ -1,4 +1,4 @@
-from fastapi import APIRouter, HTTPException, status, Depends
+from fastapi import APIRouter, HTTPException, status, Depends, BackgroundTasks
 from pydantic import BaseModel
 from typing import Dict, Optional
 from decimal import Decimal
@@ -18,6 +18,10 @@ from fastapi.security import OAuth2PasswordBearer
 oauth2_scheme = OAuth2PasswordBearer(tokenUrl="http://127.0.0.1:4000/auth/token")
 USER_SERVICE_ME_URL = "http://localhost:4000/auth/users/me"
 USER_SERVICE_VERIFY_PIN_URL = "http://localhost:4000/users/verify-pin"
+USER_SERVICE_EMPLOYEE_NAME_URL = "http://127.0.0.1:4000/users/employee_name"
+
+# --- Blockchain Configuration ---
+BLOCKCHAIN_LOG_URL = "http://localhost:9005/blockchain/log"
 
 # --- Define the new router ---
 router_cash_tally = APIRouter(
@@ -31,7 +35,9 @@ async def get_current_active_user(token: str = Depends(oauth2_scheme)):
         try:
             response = await client.get(USER_SERVICE_ME_URL, headers={"Authorization": f"Bearer {token}"})
             response.raise_for_status()
-            return response.json()
+            user_data = response.json()
+            user_data['access_token'] = token
+            return user_data
         except httpx.HTTPStatusError as e:
             raise HTTPException(status_code=e.response.status_code, detail=f"Invalid token: {e.response.text}", headers={"WWW-Authenticate": "Bearer"})
         except httpx.RequestError:
@@ -79,6 +85,64 @@ async def verify_manager_pin(pin: str, token: str):
                 detail="Auth service unavailable."
             )
 
+# --- Helper function to get employee full name ---
+async def get_employee_full_name(username: str, token: str):
+    """Fetch the full name of an employee based on username"""
+    async with httpx.AsyncClient() as client:
+        try:
+            response = await client.get(
+                USER_SERVICE_EMPLOYEE_NAME_URL,
+                params={"username": username},
+                headers={"Authorization": f"Bearer {token}"}
+            )
+            
+            if response.status_code == 200:
+                data = response.json()
+                return data.get("fullName", username)  # Fallback to username if fullName not found
+            else:
+                logger.warning(f"Could not fetch full name for {username}, using username instead")
+                return username
+        except httpx.RequestError:
+            logger.warning(f"Auth service unavailable when fetching name for {username}, using username instead")
+            return username
+
+# --- Blockchain Logging Helper ---
+async def log_to_blockchain(
+    service_identifier: str,
+    action: str,
+    entity_type: str,
+    entity_id: int,
+    actor_username: str,
+    change_description: str,
+    data: dict,
+    token: str
+):
+    """Log activity to blockchain service (non-blocking)"""
+    async with httpx.AsyncClient(timeout=30.0) as client:
+        try:
+            response = await client.post(
+                BLOCKCHAIN_LOG_URL,
+                json={
+                    "service_identifier": service_identifier,
+                    "action": action,
+                    "entity_type": entity_type,
+                    "entity_id": entity_id,
+                    "actor_username": actor_username,
+                    "change_description": change_description,
+                    "data": data
+                },
+                headers={"Authorization": f"Bearer {token}"}
+            )
+            
+            if response.status_code == 201:
+                logger.info(f"✅ Blockchain log created: {action} - {entity_type} #{entity_id}")
+            else:
+                logger.warning(f"⚠️ Blockchain logging failed: {response.status_code} - {response.text}")
+                
+        except Exception as e:
+            logger.error(f"❌ Blockchain logging error: {e}")
+            # Don't raise exception - blockchain logging failure shouldn't block main operation
+
 # --- API Endpoint to Close a Cashier Session ---
 @router_cash_tally.post(
     "/close_session",
@@ -86,6 +150,7 @@ async def verify_manager_pin(pin: str, token: str):
 )
 async def close_session(
     request: CloseSessionRequest,
+    background_tasks: BackgroundTasks,
     current_user: dict = Depends(get_current_active_user),
     token: str = Depends(oauth2_scheme)
 ):
@@ -95,6 +160,9 @@ async def close_session(
 
     # Verify manager PIN and get username
     manager_username = await verify_manager_pin(request.pin, token)
+    
+    # Get manager's full name
+    manager_full_name = await get_employee_full_name(manager_username, token)
 
     conn = None
     try:
@@ -111,6 +179,7 @@ async def close_session(
                 raise HTTPException(status_code=404, detail="No active session found with the provided ID.")
 
             initial_cash = Decimal(session_row.InitialCash)
+            cashier_name = session_row.CashierName
             session_start_time = session_row.SessionStart
 
             # Step 2: Calculate the cash sales made ONLY during this specific session
@@ -124,7 +193,7 @@ async def close_session(
                   AND s.Status = 'completed'
                   AND s.CreatedAt >= ?;
                 """,
-                session_row.CashierName, session_start_time
+                cashier_name, session_start_time
             )
             cash_sales_row = await cursor.fetchone()
             cash_sales_at_close = Decimal(cash_sales_row[0])
@@ -151,7 +220,6 @@ async def close_session(
                     CheckedBy = ?
                 WHERE SessionID = ?;
             """
-            # FIX: Convert Decimal objects to float before passing as parameters
             await cursor.execute(
                 update_sql,
                 float(closing_cash),
@@ -161,11 +229,41 @@ async def close_session(
             )
             await conn.commit()
 
-            logger.info(f"Session {request.sessionId} for cashier {session_row.CashierName} has been closed by {manager_username}.")
+            logger.info(f"Session {request.sessionId} for cashier {cashier_name} has been closed by {manager_username}.")
+            
+            # Prepare blockchain log data
+            blockchain_data = {
+                "sessionId": request.sessionId,
+                "cashierName": cashier_name,
+                "initialCash": float(initial_cash),
+                "closingCash": float(closing_cash),
+                "cashSalesAtClose": float(cash_sales_at_close),
+                "cashCounts": request.cashCounts,
+                "checkedBy": manager_username,
+                "verifiedBy": manager_full_name,
+                "discrepancy": float(closing_cash - (initial_cash + cash_sales_at_close))
+            }
+            
+            # Log to blockchain in background
+            background_tasks.add_task(
+                log_to_blockchain,
+                service_identifier="CASH_TALLY",
+                action="CLOSE_SESSION",
+                entity_type="CashierSession",
+                entity_id=request.sessionId,
+                actor_username=cashier_name,
+                change_description=f"Session closed for cashier {cashier_name}. Verified by {manager_full_name}. Closing cash: {float(closing_cash)}, Sales: {float(cash_sales_at_close)}",
+                data=blockchain_data,
+                token=current_user.get('access_token')
+            )
+            
             return {
                 "message": "Session closed successfully",
                 "sessionId": request.sessionId,
-                "checkedBy": manager_username
+                "checkedBy": manager_username,
+                "verifiedBy": manager_full_name,
+                "closingCash": float(closing_cash),
+                "cashSalesAtClose": float(cash_sales_at_close)
             }
 
     except HTTPException:
@@ -186,6 +284,7 @@ async def close_session(
 )
 async def report_discrepancy(
     request: ReportDiscrepancyRequest,
+    background_tasks: BackgroundTasks,
     current_user: dict = Depends(get_current_active_user),
     token: str = Depends(oauth2_scheme)
 ):
@@ -195,6 +294,9 @@ async def report_discrepancy(
 
     # Verify manager PIN and get username
     manager_username = await verify_manager_pin(request.pin, token)
+    
+    # Get manager's full name
+    manager_full_name = await get_employee_full_name(manager_username, token)
 
     conn = None
     try:
@@ -211,6 +313,7 @@ async def report_discrepancy(
                 raise HTTPException(status_code=404, detail="No active session found with the provided ID.")
 
             initial_cash = Decimal(session_row.InitialCash)
+            cashier_name = session_row.CashierName
             session_start_time = session_row.SessionStart
 
             # Step 2: Calculate the cash sales made ONLY during this specific session
@@ -224,7 +327,7 @@ async def report_discrepancy(
                   AND s.Status = 'completed'
                   AND s.CreatedAt >= ?;
                 """,
-                session_row.CashierName, session_start_time
+                cashier_name, session_start_time
             )
             cash_sales_row = await cursor.fetchone()
             cash_sales_at_close = Decimal(cash_sales_row[0])
@@ -246,7 +349,6 @@ async def report_discrepancy(
                 (SessionID, DiscrepancyAmount, ReportedBy, ReportedAt, CheckedBy)
                 VALUES (?, ?, ?, GETDATE(), ?);
             """
-            # FIX: Pass the discrepancy amount as a float directly
             await cursor.execute(
                 insert_sql,
                 request.sessionId,
@@ -266,7 +368,6 @@ async def report_discrepancy(
                     CheckedBy = ?
                 WHERE SessionID = ?;
             """
-            # FIX: Convert Decimal objects to float before passing as parameters
             await cursor.execute(
                 update_sql,
                 float(closing_cash),
@@ -278,12 +379,43 @@ async def report_discrepancy(
             await conn.commit()
 
             logger.info(f"Discrepancy of {request.discrepancyAmount} reported for session {request.sessionId} by {request.reportedBy}, checked by {manager_username}. Session closed.")
+            
+            # Prepare blockchain log data
+            blockchain_data = {
+                "sessionId": request.sessionId,
+                "cashierName": cashier_name,
+                "initialCash": float(initial_cash),
+                "closingCash": float(closing_cash),
+                "cashSalesAtClose": float(cash_sales_at_close),
+                "discrepancyAmount": request.discrepancyAmount,
+                "reportedBy": request.reportedBy,
+                "checkedBy": manager_username,
+                "verifiedBy": manager_full_name,
+                "cashCounts": request.cashCounts,
+                "expectedCash": float(initial_cash + cash_sales_at_close),
+                "actualCash": float(closing_cash)
+            }
+            
+            # Log to blockchain in background
+            background_tasks.add_task(
+                log_to_blockchain,
+                service_identifier="CASH_TALLY",
+                action="REPORT_DISCREPANCY",
+                entity_type="CashDiscrepancy",
+                entity_id=request.sessionId,
+                actor_username=cashier_name,
+                change_description=f"Cash discrepancy of {request.discrepancyAmount} reported for cashier {cashier_name}. Verified by {manager_full_name}",
+                data=blockchain_data,
+                token=current_user.get('access_token')
+            )
+            
             return {
                 "message": "Discrepancy reported and session closed successfully",
                 "sessionId": request.sessionId,
                 "discrepancyAmount": request.discrepancyAmount,
                 "reportedBy": request.reportedBy,
                 "checkedBy": manager_username,
+                "verifiedBy": manager_full_name,
                 "closingCash": float(closing_cash),
                 "cashSalesAtClose": float(cash_sales_at_close)
             }
