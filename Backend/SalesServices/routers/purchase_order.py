@@ -1168,20 +1168,20 @@ async def partial_refund_order(
                 WHERE si.SaleID = ?
                 GROUP BY si.SaleItemID, si.Quantity
             """, parsed_id)
-            
+
             all_items_check = await cursor.fetchall()
             all_fully_refunded = all(item.Quantity == item.TotalRefunded for item in all_items_check)
-            
+
             # Update sale status
             if all_fully_refunded:
                 await cursor.execute(
-                    "UPDATE Sales SET Status = 'refunded', IsPartiallyRefunded = 0, UpdatedAt = GETDATE() WHERE SaleID = ?",
+                    "UPDATE Sales SET Status = 'refunded', UpdatedAt = GETDATE() WHERE SaleID = ?",
                     parsed_id
                 )
                 status_message = "All items have been refunded. Order marked as fully refunded."
             else:
                 await cursor.execute(
-                    "UPDATE Sales SET IsPartiallyRefunded = 1, UpdatedAt = GETDATE() WHERE SaleID = ?",
+                    "UPDATE Sales SET UpdatedAt = GETDATE() WHERE SaleID = ?",
                     parsed_id
                 )
                 status_message = "Partial refund processed successfully."
@@ -1333,7 +1333,7 @@ async def partial_refund_order_today(
             for detail in refund_details:
                 await cursor.execute("INSERT INTO RefundedItems (RefundID, SaleItemID, RefundedQuantity, RefundAmount) VALUES (?, ?, ?, ?)", refund_id, detail['sale_item_id'], detail['refund_quantity'], detail['refund_amount'])
 
-            await cursor.execute("UPDATE Sales SET IsPartiallyRefunded = 1, UpdatedAt = GETDATE() WHERE SaleID = ?", parsed_id)
+            await cursor.execute("UPDATE Sales SET UpdatedAt = GETDATE() WHERE SaleID = ?", parsed_id)
             await conn.commit()
             
             logger.info(f"Partial refund (today) processed for order {order_id} by {request.managerUsername}.")

@@ -55,6 +55,55 @@ body {
     margin-top: 25px;
 }
 
+/* === TABS AND FILTER WRAPPER === */
+.activityLogs-tabs-filter-wrapper {
+    display: flex;
+    flex-direction: column;
+    gap: 15px;
+    margin-bottom: 15px;
+}
+
+/* === TABS === */
+.activityLogs-tabs {
+    display: flex;
+    gap: 10px;
+}
+
+.activityLogs-tab {
+    padding: 8px 16px;
+    background-color: #ffffff;
+    color: #666;
+    border: none;
+    border-radius: 6px;
+    cursor: pointer;
+    font-weight: 500;
+    transition: background-color 0.3s;
+    width: 150px;
+}
+
+.activityLogs-tab:hover {
+    background-color: #f1f1f1;
+}
+
+.activityLogs-tab--active {
+    background-color: #4B929D;
+    color: white;
+}
+
+.activityLogs-tab--active:hover {
+    background-color: #4B929D;
+    color: white;
+}
+
+/* === PERIOD TEXT === */
+.activityLogs-period-text {
+    font-size: 14px;
+    font-weight: 500;
+    color: #1f2937;
+    margin-left: 10px;
+    margin-right: 10px;
+}
+
 /* === FILTER BAR WITH TOGGLE === */
 .activityLogs-filterBar {
     display: flex;
@@ -65,16 +114,14 @@ body {
     border-radius: 12px;
     box-shadow: 0 2px 4px rgba(0, 0, 0, 0.04);
     border-left: 4px solid #4B929D;
-    margin-bottom: 24px;
     margin-left: auto;
-    width: auto;
-    max-width: fit-content;
+    width: fit-content;
     transition: all 0.5s ease-in-out;
     overflow: hidden;
 }
 
 .activityLogs-filterBar.collapsed {
-    width: auto;
+    width: fit-content;
     padding: 12px 14px;
 }
 
@@ -119,6 +166,7 @@ body {
 /* Search Wrapper */
 .activityLogs-search-wrapper {
     position: relative;
+    flex: 1;
     width: 220px;
 }
 
@@ -290,6 +338,7 @@ body {
 
 .activityLogs-event-content {
     flex: 1;
+    padding-left: 12px;
 }
 
 .activityLogs-event-timestamp {
@@ -302,6 +351,9 @@ body {
     font-size: 13px;
     padding: 12px;
     border-radius: 6px;
+    display: flex;
+    align-items: center;
+    gap: 8px;
 }
 
 .activityLogs-event-success {
@@ -316,59 +368,88 @@ body {
     color: #991b1b;
 }
 
-/* Sub Event Item */
-.activityLogs-subevent-item {
-    display: flex;
-    align-items: flex-start;
-    gap: 12px;
-    margin-bottom: 8px;
-    margin-left: 48px;
+.activityLogs-event-info {
+    background-color: #dbeafe;
+    color: #1e40af;
+    border-left: 4px solid #3b82f6;
 }
 
-.activityLogs-subevent-dot {
-    width: 10px;
-    height: 10px;
-    border-radius: 50%;
-    flex-shrink: 0;
-    margin-top: 5px;
-}
-
-.activityLogs-subevent-success {
-    background: #10b981;
-}
-
-.activityLogs-subevent-error {
-    background: #ef4444;
-}
-
-.activityLogs-subevent-content {
+.activityLogs-event-text {
     flex: 1;
 }
 
-.activityLogs-subevent-timestamp {
-    font-size: 12px;
-    color: #9ca3af;
-    margin-bottom: 4px;
+.activityLogs-event-message strong {
+    color: #1f2937;
+    font-weight: 600;
 }
 
-.activityLogs-subevent-message {
-    display: flex;
-    align-items: center;
-    gap: 8px;
-    font-size: 13px;
-    color: #374151;
-}
-
-.activityLogs-subevent-message svg {
+/* Action Icons in Events */
+.activityLogs-action-icon {
+    margin-right: 8px;
+    font-size: 0.9rem;
     flex-shrink: 0;
 }
 
+/* Error State - Inside Timeline */
+.activityLogs-error {
+    text-align: center;
+    padding: 2rem;
+    background-color: #fef2f2;
+    border-radius: 8px;
+    border-left: 4px solid #ef4444;
+}
+
+.activityLogs-error p {
+    color: #991b1b;
+    margin-bottom: 1rem;
+    font-weight: 500;
+}
+
+.activityLogs-error button {
+    padding: 0.5rem 1rem;
+    background-color: #ef4444;
+    color: white;
+    border: none;
+    border-radius: 4px;
+    cursor: pointer;
+    transition: background-color 0.3s;
+}
+
+.activityLogs-error button:hover {
+    background-color: #dc2626;
+}
+
+/* Empty State - Inside Timeline */
+.activityLogs-empty-inline {
+    text-align: center;
+    padding: 3rem;
+    color: #9ca3af;
+    font-size: 1.1rem;
+}
+
 /* === RESPONSIVE DESIGN === */
+@media (max-width: 1400px) {
+    .activityLogs-tabs-filter-wrapper {
+        flex-direction: column;
+        align-items: stretch;
+    }
+
+    .activityLogs-filterBar {
+        margin-left: 0;
+        width: 100%;
+    }
+
+    .activityLogs-tabs {
+        justify-content: flex-start;
+    }
+}
+
 @media (max-width: 1024px) {
     .activityLogs-filterBar {
         flex-direction: column;
         align-items: stretch;
         gap: 12px;
+        width: 100%;
     }
 
     .activityLogs-filterBar.collapsed {
@@ -393,161 +474,36 @@ body {
         margin: 20px 10px;
     }
 
+    .activityLogs-tabs {
+        gap: 8px;
+        flex-wrap: wrap;
+    }
+
+    .activityLogs-tab {
+        width: auto;
+        min-width: 120px;
+        font-size: 13px;
+        padding: 8px 12px;
+    }
+
     .activityLogs-filterBar {
         padding: 12px 16px;
         gap: 12px;
-        margin-left: 0;
-        margin-right: 0;
+    }
+
+    .activityLogs-period-text {
+        font-size: 12px;
     }
 }
 
-/* Error State */
-.activityLogs-error {
-  text-align: center;
-  padding: 2rem;
-  background-color: #fee;
-  border-radius: 8px;
-  margin: 2rem;
-}
+@media (max-width: 480px) {
+    .activityLogs-tabs {
+        width: 100%;
+    }
 
-.activityLogs-error p {
-  color: #c00;
-  margin-bottom: 1rem;
-}
-
-.activityLogs-error button {
-  padding: 0.5rem 1rem;
-  background-color: #ef4444;
-  color: white;
-  border: none;
-  border-radius: 4px;
-  cursor: pointer;
-}
-
-/* Empty State */
-.activityLogs-empty {
-  text-align: center;
-  padding: 3rem;
-  color: #9ca3af;
-  font-size: 1.1rem;
-}
-
-/* Action Icons in Events */
-.activityLogs-action-icon {
-  margin-right: 8px;
-  font-size: 0.9rem;
-}
-
-.activityLogs-event-text {
-  flex: 1;
-}
-
-.activityLogs-event-message {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-}
-
-/* Info action styling (for UPDATE) */
-.activityLogs-event-info {
-  background-color: #dbeafe;
-  color: #1e40af;
-  padding: 12px;
-  border-radius: 6px;
-  border-left: 4px solid #3b82f6;
-  margin-bottom: 8px;
-}
-
-/* Blockchain Details */
-.activityLogs-blockchain-details {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 12px;
-  margin-top: 8px;
-  padding: 8px 12px;
-  background-color: #f9fafb;
-  border-radius: 4px;
-  font-size: 0.75rem;
-}
-
-.activityLogs-detail-item {
-  display: flex;
-  align-items: center;
-  gap: 4px;
-  color: #6b7280;
-}
-
-.activityLogs-detail-item code {
-  background-color: #e5e7eb;
-  padding: 2px 6px;
-  border-radius: 3px;
-  font-family: 'Courier New', monospace;
-  font-size: 0.7rem;
-  color: #374151;
-}
-
-/* Activity Title Enhancement */
-.activityLogs-activity-title {
-  font-size: 1.1rem;
-  color: #1f2937;
-  font-weight: 600;
-}
-
-/* Event Content Spacing */
-.activityLogs-event-content {
-  flex: 1;
-  padding-left: 12px;
-}
-
-.activityLogs-event-message strong {
-  color: #1f2937;
-  font-weight: 600;
-}
-
-/* Responsive Blockchain Details */
-@media (max-width: 768px) {
-  .activityLogs-blockchain-details {
-    flex-direction: column;
-    gap: 6px;
-  }
-  
-  .activityLogs-detail-item {
-    font-size: 0.7rem;
-  }
-}
-
-/* Timeline Enhancement for Grouped Events */
-.activityLogs-activity-item {
-  margin-bottom: 2rem;
-}
-
-.activityLogs-event-item:last-child .activityLogs-event-message {
-  margin-bottom: 0;
-}
-
-/* Filter Bar Enhancement */
-.activityLogs-filterBar {
-  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-  box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
-}
-
-.activityLogs-select {
-  padding: 8px 12px;
-  border-radius: 6px;
-  border: 1px solid #d1d5db;
-  background-color: white;
-  color: #374151;
-  font-size: 0.875rem;
-  cursor: pointer;
-  transition: border-color 0.2s;
-}
-
-.activityLogs-select:focus {
-  outline: none;
-  border-color: #3b82f6;
-  box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.1);
-}
-
-.activityLogs-select option {
-  padding: 8px;
+    .activityLogs-tab {
+        flex: 1;
+        width: auto;
+        min-width: 100px;
+    }
 }

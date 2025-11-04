@@ -375,6 +375,31 @@ body {
   gap: 10px;
 }
 
+.aSalesRep-section-title-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 16px;
+}
+
+.aSalesRep-view-all-btn {
+  background: none;
+  border: none;
+  color: #4B929D;
+  font-size: 14px;
+  font-weight: 600;
+  cursor: pointer;
+  padding: 0;
+  text-decoration: none;
+  transition: color 0.2s ease;
+  white-space: nowrap;
+  text-decoration: underline;
+}
+
+.aSalesRep-view-all-btn:hover {
+  color: #367680;
+}
+
 .aSalesRep-table-container {
   background: white;
   border-radius: 8px;

@@ -1,11 +1,16 @@
+# FILE: cash_tally_router.py (FIXED AND CORRECTED VERSION)
+
 from fastapi import APIRouter, HTTPException, status, Depends, BackgroundTasks
 from pydantic import BaseModel
 from typing import Dict, Optional
-from decimal import Decimal
+from decimal import Decimal, getcontext
 import sys
 import os
 import httpx
 import logging
+
+# Set precision for Decimal calculations
+getcontext().prec = 18
 
 # --- Configure logging & DB connection ---
 logging.basicConfig(level=logging.INFO)
@@ -98,7 +103,7 @@ async def get_employee_full_name(username: str, token: str):
             
             if response.status_code == 200:
                 data = response.json()
-                return data.get("fullName", username)  # Fallback to username if fullName not found
+                return data.get("fullName", username)
             else:
                 logger.warning(f"Could not fetch full name for {username}, using username instead")
                 return username
@@ -141,9 +146,91 @@ async def log_to_blockchain(
                 
         except Exception as e:
             logger.error(f"❌ Blockchain logging error: {e}")
-            # Don't raise exception - blockchain logging failure shouldn't block main operation
 
-# --- API Endpoint to Close a Cashier Session ---
+# --- Calculate NET cash sales (with refunds deducted) ---
+async def calculate_net_cash_sales(cursor, cashier_name: str, session_start_time):
+    """
+    Calculate net cash sales = Gross Cash Sales - Cash Refunds
+    This accounts for both full and partial refunds on cash transactions
+    """
+    # Step 1: Calculate gross cash sales with proportional discounts
+    gross_sales_query = """
+        WITH SaleItemTotals AS (
+            SELECT 
+                s.SaleID,
+                si.SaleItemID,
+                si.Quantity,
+                (si.UnitPrice * si.Quantity) AS ItemSubtotal,
+                ISNULL((
+                    SELECT SUM(a.Price * sia.Quantity)
+                    FROM SaleItemAddons sia 
+                    JOIN Addons a ON sia.AddonID = a.AddonID
+                    WHERE sia.SaleItemID = si.SaleItemID
+                ), 0) AS AddonsTotal,
+                ISNULL(s.TotalDiscountAmount, 0) + ISNULL(s.PromotionalDiscountAmount, 0) AS TotalSaleDiscount
+            FROM Sales s 
+            JOIN SaleItems si ON s.SaleID = si.SaleID
+            WHERE s.Status = 'completed'
+                AND s.CashierName = ?
+                AND s.PaymentMethod = 'Cash'
+                AND s.CreatedAt >= ?
+        ),
+        SaleTotalsBeforeDiscount AS (
+            SELECT 
+                SaleID, 
+                SUM(ItemSubtotal + AddonsTotal) AS GrossTotal
+            FROM SaleItemTotals 
+            GROUP BY SaleID
+        )
+        SELECT 
+            ISNULL(SUM(
+                (sit.ItemSubtotal + sit.AddonsTotal) - 
+                (
+                    CASE 
+                        WHEN stbd.GrossTotal > 0 
+                        THEN ((sit.ItemSubtotal + sit.AddonsTotal) / stbd.GrossTotal) * sit.TotalSaleDiscount
+                        ELSE 0
+                    END
+                )
+            ), 0) AS GrossCashSales
+        FROM SaleItemTotals sit
+        JOIN SaleTotalsBeforeDiscount stbd ON sit.SaleID = stbd.SaleID
+    """
+    
+    await cursor.execute(gross_sales_query, cashier_name, session_start_time)
+    gross_result = await cursor.fetchone()
+    gross_cash_sales = Decimal(gross_result[0] if gross_result and gross_result[0] else 0)
+    
+    # Step 2: Calculate total cash refunds during this session
+    refunds_query = """
+        SELECT ISNULL(SUM(ri.RefundAmount), 0) AS TotalCashRefunds
+        FROM RefundedOrders ro
+        JOIN RefundedItems ri ON ro.RefundID = ri.RefundID
+        JOIN Sales s ON ro.SaleID = s.SaleID
+        WHERE s.PaymentMethod = 'Cash'
+            AND s.CashierName = ?
+            AND ro.RefundedAt >= ?
+    """
+    
+    await cursor.execute(refunds_query, cashier_name, session_start_time)
+    refund_result = await cursor.fetchone()
+    total_cash_refunds = Decimal(refund_result[0] if refund_result and refund_result[0] else 0)
+    
+    # Step 3: Calculate net cash sales
+    net_cash_sales = gross_cash_sales - total_cash_refunds
+    
+    logger.info(f"=== CASH SALES CALCULATION ===")
+    logger.info(f"Cashier: {cashier_name}")
+    logger.info(f"Session Start: {session_start_time}")
+    logger.info(f"Gross Cash Sales: ₱{gross_cash_sales}")
+    logger.info(f"Total Cash Refunds: ₱{total_cash_refunds}")
+    logger.info(f"NET Cash Sales: ₱{net_cash_sales}")
+    logger.info(f"=============================")
+    
+    return net_cash_sales, gross_cash_sales, total_cash_refunds
+
+
+# --- API Endpoint to Close a Cashier Session (CORRECTED) ---
 @router_cash_tally.post(
     "/close_session",
     summary="Close out a cashier's session after a cash count"
@@ -158,17 +245,14 @@ async def close_session(
     if current_user.get("userRole") not in allowed_roles:
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Permission denied.")
 
-    # Verify manager PIN and get username
     manager_username = await verify_manager_pin(request.pin, token)
-    
-    # Get manager's full name
     manager_full_name = await get_employee_full_name(manager_username, token)
 
     conn = None
     try:
         conn = await get_db_connection()
         async with conn.cursor() as cursor:
-            # Step 1: Get the current active session details
+            # Get session details
             await cursor.execute(
                 "SELECT SessionID, CashierName, InitialCash, Status, SessionStart FROM CashierSessions WHERE SessionID = ? AND Status = 'Active'",
                 request.sessionId
@@ -182,34 +266,34 @@ async def close_session(
             cashier_name = session_row.CashierName
             session_start_time = session_row.SessionStart
 
-            # Step 2: Calculate the cash sales made ONLY during this specific session
-            await cursor.execute(
-                """
-                SELECT ISNULL(SUM(si.UnitPrice * si.Quantity), 0)
-                FROM Sales s
-                JOIN SaleItems si ON s.SaleID = si.SaleID
-                WHERE s.CashierName = ?
-                  AND s.PaymentMethod = 'Cash'
-                  AND s.Status = 'completed'
-                  AND s.CreatedAt >= ?;
-                """,
-                cashier_name, session_start_time
+            net_cash_sales, gross_cash_sales, total_refunds = await calculate_net_cash_sales(
+                cursor, cashier_name, session_start_time
             )
-            cash_sales_row = await cursor.fetchone()
-            cash_sales_at_close = Decimal(cash_sales_row[0])
 
-            # Step 3: Calculate the total cash counted by the cashier from the request
+            # Calculate closing cash from denominations
             denominations = {
                 'bills1000': 1000, 'bills500': 500, 'bills200': 200, 'bills100': 100,
                 'bills50': 50, 'bills20': 20, 'coins10': 10, 'coins5': 5, 'coins1': 1,
-                'cents25': 0.25, 'cents10': 0.10, 'cents05': 0.05
+                'cents25': '0.25', 'cents10': '0.10', 'cents05': '0.05' # Use strings for precision
             }
             closing_cash = Decimal(0)
             for key, count in request.cashCounts.items():
                 if key in denominations:
                     closing_cash += Decimal(denominations[key]) * Decimal(count)
 
-            # Step 4: Update the session record to close it out with CheckedBy
+            expected_cash = initial_cash + net_cash_sales
+            discrepancy = closing_cash - expected_cash
+
+            # --- FIX START: Correct for floating-point artifacts ---
+            # Define a tolerance for what is considered zero (e.g., less than 0.01 PHP)
+            TOLERANCE = Decimal('0.01')
+            
+            # If the discrepancy is smaller than the tolerance, snap it to exactly zero
+            if abs(discrepancy) < TOLERANCE:
+                discrepancy = Decimal('0.0')
+            # --- FIX END ---
+
+            # Update session
             update_sql = """
                 UPDATE CashierSessions
                 SET
@@ -223,28 +307,39 @@ async def close_session(
             await cursor.execute(
                 update_sql,
                 float(closing_cash),
-                float(cash_sales_at_close),
+                float(gross_cash_sales),
                 manager_username,
                 request.sessionId
             )
             await conn.commit()
 
-            logger.info(f"Session {request.sessionId} for cashier {cashier_name} has been closed by {manager_username}.")
-            
-            # Prepare blockchain log data
+            logger.info(f"✅ Session {request.sessionId} closed successfully")
+            logger.info(f"Expected Cash: ₱{expected_cash.quantize(Decimal('0.01'))}")
+            logger.info(f"Actual Cash: ₱{closing_cash.quantize(Decimal('0.01'))}")
+            logger.info(f"Discrepancy: ₱{discrepancy.quantize(Decimal('0.01'))}")
+
+            # Blockchain logging
             blockchain_data = {
                 "sessionId": request.sessionId,
                 "cashierName": cashier_name,
                 "initialCash": float(initial_cash),
                 "closingCash": float(closing_cash),
-                "cashSalesAtClose": float(cash_sales_at_close),
+                "grossCashSales": float(gross_cash_sales),
+                "cashRefunds": float(total_refunds),
+                "netCashSales": float(net_cash_sales),
+                "expectedCash": float(expected_cash),
+                "discrepancy": float(discrepancy), # Now this will be a clean 0.0 when appropriate
                 "cashCounts": request.cashCounts,
                 "checkedBy": manager_username,
-                "verifiedBy": manager_full_name,
-                "discrepancy": float(closing_cash - (initial_cash + cash_sales_at_close))
+                "verifiedBy": manager_full_name
             }
             
-            # Log to blockchain in background
+            # Use the corrected discrepancy in the log description
+            change_description = (
+                f"Session closed. Net sales: ₱{net_cash_sales:.2f}, "
+                f"Refunds: ₱{total_refunds:.2f}, Discrepancy: ₱{discrepancy:.2f}"
+            )
+
             background_tasks.add_task(
                 log_to_blockchain,
                 service_identifier="CASH_TALLY",
@@ -252,7 +347,7 @@ async def close_session(
                 entity_type="CashierSession",
                 entity_id=request.sessionId,
                 actor_username=cashier_name,
-                change_description=f"Session closed for cashier {cashier_name}. Verified by {manager_full_name}. Closing cash: {float(closing_cash)}, Sales: {float(cash_sales_at_close)}",
+                change_description=change_description,
                 data=blockchain_data,
                 token=current_user.get('access_token')
             )
@@ -263,7 +358,11 @@ async def close_session(
                 "checkedBy": manager_username,
                 "verifiedBy": manager_full_name,
                 "closingCash": float(closing_cash),
-                "cashSalesAtClose": float(cash_sales_at_close)
+                "grossCashSales": float(gross_cash_sales),
+                "cashRefunds": float(total_refunds),
+                "netCashSales": float(net_cash_sales),
+                "expectedCash": float(expected_cash),
+                "discrepancy": float(discrepancy) # Return the corrected value
             }
 
     except HTTPException:
@@ -277,7 +376,8 @@ async def close_session(
         if conn:
             await conn.close()
 
-# --- API Endpoint to Report Cash Discrepancy ---
+
+# --- API Endpoint to Report Cash Discrepancy (FIXED) ---
 @router_cash_tally.post(
     "/report_discrepancy",
     summary="Report a cash discrepancy for a session and close it"
@@ -292,17 +392,14 @@ async def report_discrepancy(
     if current_user.get("userRole") not in allowed_roles:
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Permission denied.")
 
-    # Verify manager PIN and get username
     manager_username = await verify_manager_pin(request.pin, token)
-    
-    # Get manager's full name
     manager_full_name = await get_employee_full_name(manager_username, token)
 
     conn = None
     try:
         conn = await get_db_connection()
         async with conn.cursor() as cursor:
-            # Step 1: Get the current active session details
+            # Get session details
             await cursor.execute(
                 "SELECT SessionID, CashierName, InitialCash, Status, SessionStart FROM CashierSessions WHERE SessionID = ? AND Status = 'Active'",
                 request.sessionId
@@ -316,23 +413,12 @@ async def report_discrepancy(
             cashier_name = session_row.CashierName
             session_start_time = session_row.SessionStart
 
-            # Step 2: Calculate the cash sales made ONLY during this specific session
-            await cursor.execute(
-                """
-                SELECT ISNULL(SUM(si.UnitPrice * si.Quantity), 0)
-                FROM Sales s
-                JOIN SaleItems si ON s.SaleID = si.SaleID
-                WHERE s.CashierName = ?
-                  AND s.PaymentMethod = 'Cash'
-                  AND s.Status = 'completed'
-                  AND s.CreatedAt >= ?;
-                """,
-                cashier_name, session_start_time
+            # ✅ FIXED: Calculate NET cash sales
+            net_cash_sales, gross_cash_sales, total_refunds = await calculate_net_cash_sales(
+                cursor, cashier_name, session_start_time
             )
-            cash_sales_row = await cursor.fetchone()
-            cash_sales_at_close = Decimal(cash_sales_row[0])
 
-            # Step 3: Calculate the total cash counted by the cashier from the request
+            # Calculate closing cash
             denominations = {
                 'bills1000': 1000, 'bills500': 500, 'bills200': 200, 'bills100': 100,
                 'bills50': 50, 'bills20': 20, 'coins10': 10, 'coins5': 5, 'coins1': 1,
@@ -343,7 +429,7 @@ async def report_discrepancy(
                 if key in denominations:
                     closing_cash += Decimal(denominations[key]) * Decimal(count)
 
-            # Step 4: Insert discrepancy record with CheckedBy
+            # Insert discrepancy record
             insert_sql = """
                 INSERT INTO CashDiscrepancies 
                 (SessionID, DiscrepancyAmount, ReportedBy, ReportedAt, CheckedBy)
@@ -357,7 +443,7 @@ async def report_discrepancy(
                 manager_username
             )
 
-            # Step 5: Close the session with ClosingCash, CashSalesAtClose, and CheckedBy
+            # Close session with GROSS sales
             update_sql = """
                 UPDATE CashierSessions
                 SET
@@ -371,32 +457,31 @@ async def report_discrepancy(
             await cursor.execute(
                 update_sql,
                 float(closing_cash),
-                float(cash_sales_at_close),
+                float(gross_cash_sales),
                 manager_username,
                 request.sessionId
             )
 
             await conn.commit()
 
-            logger.info(f"Discrepancy of {request.discrepancyAmount} reported for session {request.sessionId} by {request.reportedBy}, checked by {manager_username}. Session closed.")
-            
-            # Prepare blockchain log data
+            logger.info(f"✅ Discrepancy reported and session {request.sessionId} closed")
+
+            # Blockchain logging
             blockchain_data = {
                 "sessionId": request.sessionId,
                 "cashierName": cashier_name,
                 "initialCash": float(initial_cash),
                 "closingCash": float(closing_cash),
-                "cashSalesAtClose": float(cash_sales_at_close),
+                "grossCashSales": float(gross_cash_sales),
+                "cashRefunds": float(total_refunds),
+                "netCashSales": float(net_cash_sales),
                 "discrepancyAmount": request.discrepancyAmount,
                 "reportedBy": request.reportedBy,
                 "checkedBy": manager_username,
                 "verifiedBy": manager_full_name,
-                "cashCounts": request.cashCounts,
-                "expectedCash": float(initial_cash + cash_sales_at_close),
-                "actualCash": float(closing_cash)
+                "cashCounts": request.cashCounts
             }
             
-            # Log to blockchain in background
             background_tasks.add_task(
                 log_to_blockchain,
                 service_identifier="CASH_TALLY",
@@ -404,7 +489,7 @@ async def report_discrepancy(
                 entity_type="CashDiscrepancy",
                 entity_id=request.sessionId,
                 actor_username=cashier_name,
-                change_description=f"Cash discrepancy of {request.discrepancyAmount} reported for cashier {cashier_name}. Verified by {manager_full_name}",
+                change_description=f"Discrepancy: ₱{request.discrepancyAmount}. Net sales: ₱{float(net_cash_sales)}",
                 data=blockchain_data,
                 token=current_user.get('access_token')
             )
@@ -417,7 +502,9 @@ async def report_discrepancy(
                 "checkedBy": manager_username,
                 "verifiedBy": manager_full_name,
                 "closingCash": float(closing_cash),
-                "cashSalesAtClose": float(cash_sales_at_close)
+                "grossCashSales": float(gross_cash_sales),
+                "cashRefunds": float(total_refunds),
+                "netCashSales": float(net_cash_sales)
             }
 
     except HTTPException:

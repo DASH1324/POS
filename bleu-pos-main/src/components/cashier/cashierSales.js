@@ -280,23 +280,32 @@ function CashierSales({ shiftLabel = "Morning Shift", shiftTime = "6:00AM – 2:
       }
     };
 
+    // Fetch data based on active tab
     if (activeTab === 'summary') {
       fetchSalesMetricsByDate();
       fetchCancelledOrders();
       fetchTopProducts();
       fetchSpillageData();
     }
+    
     if (activeTab === 'cash') {
       fetchSessionData();
       fetchSessionSalesMetrics();
+      
+      const interval = setInterval(() => {
+        fetchSessionSalesMetrics();
+      }, 10000);
+      
+      return () => clearInterval(interval);
     }
   }, [activeTab, orderTypeFilter, productTypeFilter, selectedDate]);
 
   const today = new Date();
   const formattedDate = date || today.toLocaleDateString('en-US', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' });
-const todayString = new Date(today.getTime() - (today.getTimezoneOffset() * 60000))
-  .toISOString()
-  .split('T')[0];
+  const todayString = new Date(today.getTime() - (today.getTimezoneOffset() * 60000))
+    .toISOString()
+    .split('T')[0];
+  
   const salesMetrics = [
     { title: 'Total Sales', key: 'totalSales', format: 'currency', icon: faCashRegister, isLoading: isSalesLoading, error: salesError },
     { title: 'Cash Sales', key: 'cashSales', format: 'currency', icon: faMoneyBillWave, isLoading: isSalesLoading, error: salesError },
@@ -357,7 +366,45 @@ const todayString = new Date(today.getTime() - (today.getTimezoneOffset() * 6000
   const openModal = (type) => setModalType(type);
   const closeModal = () => setModalType(null);
 
-  // Open PIN modal for confirm count
+  const handleTabChange = (tab) => {
+    setActiveTab(tab);
+    
+    if (tab === 'cash') {
+      const username = localStorage.getItem('username');
+      const token = localStorage.getItem('authToken');
+      
+      if (token && username) {
+        setIsSessionSalesLoading(true);
+        fetch(`${SALES_METRICS_API_URL}/current_session`, {
+          method: 'POST',
+          headers: { 
+            'Content-Type': 'application/json', 
+            'Authorization': `Bearer ${token}` 
+          },
+          body: JSON.stringify({
+            cashierName: username,
+            orderType: orderTypeFilter,
+            productType: productTypeFilter
+          })
+        })
+        .then(response => {
+          if (!response.ok) throw new Error("Failed to fetch session sales.");
+          return response.json();
+        })
+        .then(data => {
+          setSessionSalesData(data);
+          setSessionSalesError(null);
+        })
+        .catch(err => {
+          setSessionSalesError(err.message);
+        })
+        .finally(() => {
+          setIsSessionSalesLoading(false);
+        });
+      }
+    }
+  };
+
   const handleConfirmCount = () => {
     if (!activeSessionId) { 
       alert("Error: No active session found to close."); 
@@ -369,7 +416,6 @@ const todayString = new Date(today.getTime() - (today.getTimezoneOffset() * 6000
     setShowPinModal(true);
   };
 
-  // Open PIN modal for report discrepancy
   const handleReportDiscrepancy = () => {
     if (!activeSessionId) { 
       alert("Error: No active session found."); 
@@ -381,7 +427,6 @@ const todayString = new Date(today.getTime() - (today.getTimezoneOffset() * 6000
     setShowPinModal(true);
   };
 
-  // Confirm PIN and execute action
   const confirmPinAction = async () => {
     if (!enteredPin || enteredPin.length < 4) {
       setPinError("Please enter a valid PIN.");
@@ -393,7 +438,6 @@ const todayString = new Date(today.getTime() - (today.getTimezoneOffset() * 6000
 
     try {
       if (pinModalType === 'confirm') {
-        // Confirm Count action
         const response = await fetch(`${CASH_TALLY_API_URL}/close_session`, {
           method: 'POST', 
           headers: { 
@@ -419,7 +463,6 @@ const todayString = new Date(today.getTime() - (today.getTimezoneOffset() * 6000
         setError(`Session ${data.sessionId} has been closed.`);
 
       } else if (pinModalType === 'discrepancy') {
-        // Report Discrepancy action - NOW INCLUDES CASH COUNTS
         const response = await fetch(`${CASH_TALLY_API_URL}/report_discrepancy`, {
           method: 'POST',
           headers: {
@@ -431,7 +474,7 @@ const todayString = new Date(today.getTime() - (today.getTimezoneOffset() * 6000
             discrepancyAmount: discrepancyInSession,
             reportedBy: loggedInUser,
             pin: enteredPin,
-            cashCounts: cashCounts  // Added cash counts here
+            cashCounts: cashCounts
           })
         });
 
@@ -539,7 +582,27 @@ const todayString = new Date(today.getTime() - (today.getTimezoneOffset() * 6000
                     <div className="cashier-summary-row"><span>Expected Cash</span><span className="cashier-expected-amount">₱{expectedCashInSession.toFixed(2)}</span></div>
                     <div className="cashier-summary-row"><span>Actual Cash (Counted)</span><span className="cashier-actual-amount">₱{actualCashCounted.toFixed(2)}</span></div>
                     <div className={`cashier-summary-row cashier-discrepancy ${hasDiscrepancyInSession ? 'has-discrepancy' : 'no-discrepancy'}`}><span className="cashier-discrepancy-label"><FontAwesomeIcon icon={hasDiscrepancyInSession ? faExclamationTriangle : faCheckCircle} />Discrepancy</span><span className={`cashier-discrepancy-amount ${discrepancyInSession > 0 ? 'positive' : discrepancyInSession < 0 ? 'negative' : 'zero'}`}>{discrepancyInSession >= 0 ? '+' : ''}₱{discrepancyInSession.toFixed(2)}</span></div>
-                    <div className="cashier-action-buttons">{hasDiscrepancyInSession && (<button className="cashier-report-btn" onClick={handleReportDiscrepancy} disabled={!activeSessionId || isSubmitting}><FontAwesomeIcon icon={faExclamationTriangle} /> Report Discrepancy</button>)}<button className="cashier-confirm-btn" onClick={handleConfirmCount} disabled={!activeSessionId || isSubmitting}><FontAwesomeIcon icon={isSubmitting ? faSpinner : faCheckCircle} spin={isSubmitting} /> {isSubmitting ? 'Submitting...' : 'Confirm Count'}</button></div>
+                    
+                    {/* --- MODIFIED BUTTON LOGIC --- */}
+                    <div className="cashier-action-buttons">
+                        {hasDiscrepancyInSession && (
+                            <button 
+                                className="cashier-report-btn" 
+                                onClick={handleReportDiscrepancy} 
+                                disabled={!activeSessionId || isSubmitting}>
+                                <FontAwesomeIcon icon={faExclamationTriangle} /> Report Discrepancy
+                            </button>
+                        )}
+                        <button 
+                            className="cashier-confirm-btn" 
+                            onClick={handleConfirmCount} 
+                            disabled={!activeSessionId || isSubmitting || hasDiscrepancyInSession}>
+                            <FontAwesomeIcon icon={isSubmitting ? faSpinner : faCheckCircle} spin={isSubmitting} /> 
+                            {isSubmitting ? 'Submitting...' : 'Confirm Count'}
+                        </button>
+                    </div>
+                    {/* --- END OF MODIFICATION --- */}
+
                 </div>
                 {error && <div className="cashier-summary-info">{error}</div>}
             </div>

@@ -67,7 +67,7 @@ const getPeriodText = (dateRange, customStart, customEnd) => {
   }
 };
 
-// Transform API data to normalize payment methods
+// Transform API data to normalize payment methods and include promotional discount
 const transformApiData = (apiTransaction) => {
   let transactionType = apiTransaction.type;
   
@@ -91,7 +91,10 @@ const transformApiData = (apiTransaction) => {
     items: apiTransaction.items || [],
     total: apiTransaction.total,
     subtotal: apiTransaction.subtotal,
-    discount: apiTransaction.discount,
+    discount: apiTransaction.discount || 0,
+    promotionalDiscount: apiTransaction.promotionalDiscount || 0,
+    discountName: apiTransaction.discountName,
+    promotionNames: apiTransaction.promotionNames,
     status: apiTransaction.status,
     paymentMethod: paymentMethod,
     type: transactionType,
@@ -195,7 +198,6 @@ function TransactionHistory() {
       setStatistics(data);
     } catch (err) {
       console.error("Failed to fetch statistics:", err);
-      // Don't show error to user, just use default values
     }
   }, [navigate]);
 
@@ -289,20 +291,18 @@ function TransactionHistory() {
     }
   };
 
-  // Handle full refund (original functionality)
+  // Handle full refund
   const handleFullRefund = async (transaction) => {
     try {
       const token = localStorage.getItem("authToken");
-      
-      // MODIFIED: Get username from local storage instead of prompt
       const managerUsername = localStorage.getItem("username");
+      
       if (!managerUsername) {
         alert("Authorization failed. Username not found. Please log in again.");
         return;
       }
       
       const refundReason = prompt("Enter refund reason (optional):") || "Customer requested refund";
-      
       const orderId = transaction.id;
       
       const response = await fetch(
@@ -343,103 +343,84 @@ function TransactionHistory() {
     }
   };
 
-  // Handle partial refund (new functionality)
-  // Handle partial refund (new functionality)
-const handlePartialRefund = async (transaction, itemsToRefund) => {
-  try {
-    const token = localStorage.getItem("authToken");
-    
-    console.log("=== PARTIAL REFUND DEBUG ===");
-    console.log("Transaction:", transaction);
-    console.log("Items to refund:", itemsToRefund);
-    
-    // Get username from local storage
-    const managerUsername = localStorage.getItem("username");
-    if (!managerUsername) {
-      alert("Authorization failed. Username not found. Please log in again.");
-      return;
-    }
-    
-    const refundReason = prompt("Enter refund reason (optional):") || "Customer requested partial refund";
-    
-    const refundItems = itemsToRefund.map(item => {
-      const payload = {
+  // Handle partial refund
+  const handlePartialRefund = async (transaction, itemsToRefund) => {
+    try {
+      const token = localStorage.getItem("authToken");
+      const managerUsername = localStorage.getItem("username");
+      
+      if (!managerUsername) {
+        alert("Authorization failed. Username not found. Please log in again.");
+        return;
+      }
+      
+      const refundReason = prompt("Enter refund reason (optional):") || "Customer requested partial refund";
+      
+      const refundItems = itemsToRefund.map(item => ({
         saleItemId: parseInt(item.saleItemId),
         refundQuantity: parseInt(item.refundQuantity),
         itemName: String(item.name),
         originalQuantity: parseInt(item.quantity),
         unitPrice: parseFloat(item.price)
+      }));
+      
+      const requestBody = {
+        managerUsername: String(managerUsername),
+        refundReason: String(refundReason),
+        items: refundItems
       };
-      console.log("Mapped item payload:", payload);
-      return payload;
-    });
-    
-    const requestBody = {
-      managerUsername: String(managerUsername),
-      refundReason: String(refundReason),
-      items: refundItems
-    };
-    
-    console.log("Request body:", JSON.stringify(requestBody, null, 2));
-    
-    const response = await fetch(
-      `${PARTIAL_REFUND_API_URL}/${transaction.id}/partial-refund-today`,
-      {
-        method: "POST",
-        headers: {
-          "Authorization": `Bearer ${token}`,
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify(requestBody)
-      }
-    );
-    
-    console.log("Response status:", response.status);
-    
-    if (!response.ok) {
-      const errorData = await response.json();
-      console.error("Error response:", errorData);
-      throw new Error(errorData.detail || "Failed to process partial refund");
-    }
-    
-    const result = await response.json();
-    console.log("Response data:", result);
-    
-    // Handle both response formats (detailed and simple)
-    if (result.total_refund_amount !== undefined && result.refunded_items) {
-      // Detailed response format
-      alert(
-        `${result.message}\n\n` +
-        `Refund Type: ${result.refund_type}\n` +
-        `Total Refund Amount: ₱${result.total_refund_amount.toFixed(2)}\n\n` +
-        `Refunded Items:\n${result.refunded_items.map(item => 
-          `- ${item.item_name} (x${item.quantity}): ₱${item.amount.toFixed(2)}`
-        ).join('\n')}`
-      );
-    } else {
-      // Simple response format
-      const totalRefundAmount = refundItems.reduce((sum, item) => 
-        sum + (item.unitPrice * item.refundQuantity), 0
+      
+      const response = await fetch(
+        `${PARTIAL_REFUND_API_URL}/${transaction.id}/partial-refund-today`,
+        {
+          method: "POST",
+          headers: {
+            "Authorization": `Bearer ${token}`,
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify(requestBody)
+        }
       );
       
-      alert(
-        `${result.message}\n\n` +
-        `Order ID: ${result.order_id}\n` +
-        `Total Refund Amount: ₱${totalRefundAmount.toFixed(2)}\n\n` +
-        `Refunded Items:\n${refundItems.map(item => 
-          `- ${item.itemName} (x${item.refundQuantity}): ₱${(item.unitPrice * item.refundQuantity).toFixed(2)}`
-        ).join('\n')}`
-      );
+      if (!response.ok) {
+        const errorData = await response.json();
+        throw new Error(errorData.detail || "Failed to process partial refund");
+      }
+      
+      const result = await response.json();
+      
+      if (result.total_refund_amount !== undefined && result.refunded_items) {
+        alert(
+          `${result.message}\n\n` +
+          `Refund Type: ${result.refund_type}\n` +
+          `Total Refund Amount: ₱${result.total_refund_amount.toFixed(2)}\n\n` +
+          `Refunded Items:\n${result.refunded_items.map(item => 
+            `- ${item.item_name} (x${item.quantity}): ₱${item.amount.toFixed(2)}`
+          ).join('\n')}`
+        );
+      } else {
+        const totalRefundAmount = refundItems.reduce((sum, item) => 
+          sum + (item.unitPrice * item.refundQuantity), 0
+        );
+        
+        alert(
+          `${result.message}\n\n` +
+          `Order ID: ${result.order_id}\n` +
+          `Total Refund Amount: ₱${totalRefundAmount.toFixed(2)}\n\n` +
+          `Refunded Items:\n${refundItems.map(item => 
+            `- ${item.itemName} (x${item.refundQuantity}): ₱${(item.unitPrice * item.refundQuantity).toFixed(2)}`
+          ).join('\n')}`
+        );
+      }
+      
+      handleRefresh();
+      closeModal();
+      
+    } catch (error) {
+      console.error("Partial refund error:", error);
+      alert(`Error processing partial refund: ${error.message}`);
     }
-    
-    handleRefresh();
-    closeModal();
-    
-  } catch (error) {
-    console.error("Partial refund error:", error);
-    alert(`Error processing partial refund: ${error.message}`);
-  }
-};
+  };
 
   const getDateRange = useCallback(() => {
     const now = new Date();
@@ -524,9 +505,7 @@ const handlePartialRefund = async (transaction, itemsToRefund) => {
     return [...new Set(currentTabTransactions.map((t) => t.paymentMethod).filter(Boolean))];
   }, [transactions, activeTab]);
 
-  // Use statistics from backend for summary cards
   const summary = useMemo(() => {
-    // Calculate from filtered transactions for display purposes
     const totalSales = filteredTransactions
       .filter(t => t.status.toLowerCase() === 'completed')
       .reduce((sum, t) => sum + parseFloat(t.total || 0), 0);
@@ -541,7 +520,6 @@ const handlePartialRefund = async (transaction, itemsToRefund) => {
       .filter(t => t.status.toLowerCase() === 'completed' && t.paymentMethod === 'GCASH')
       .reduce((sum, t) => sum + parseFloat(t.total || 0), 0);
     
-    // Use backend statistics for refunds
     const totalRefunds = statistics.refund_summary?.totalRefundAmount || 0;
     
     return { totalSales, totalTransactions, totalRefunds, cashSales, digitalSales };
@@ -552,13 +530,6 @@ const handlePartialRefund = async (transaction, itemsToRefund) => {
   };
 
   const handleRowClick = async (row) => {
-    console.log("=== SELECTED TRANSACTION ===");
-    console.log("Full transaction:", row);
-    console.log("Transaction items:", row.items);
-    if (row.items && row.items.length > 0) {
-      console.log("First item structure:", row.items[0]);
-    }
-    
     setLoadingOrderDetails(true);
     try {
       const token = getAuthToken();
@@ -580,10 +551,6 @@ const handlePartialRefund = async (transaction, itemsToRefund) => {
         const detailedOrder = allOrders.find(order => order.id === orderId);
         
         if (detailedOrder && detailedOrder.orderItems) {
-          console.log("=== DETAILED ORDER WITH SALE ITEM IDS ===");
-          console.log("Detailed order:", detailedOrder);
-          console.log("Order items with IDs:", detailedOrder.orderItems);
-          
           const enhancedTransaction = {
             ...row,
             items: detailedOrder.orderItems.map(orderItem => ({
@@ -600,14 +567,11 @@ const handlePartialRefund = async (transaction, itemsToRefund) => {
             }))
           };
           
-          console.log("Enhanced transaction:", enhancedTransaction);
           setSelectedTransaction(enhancedTransaction);
         } else {
-          console.warn("Could not find detailed order, using original transaction");
           setSelectedTransaction(row);
         }
       } else {
-        console.error("Failed to fetch order details");
         setSelectedTransaction(row);
       }
     } catch (error) {
@@ -655,9 +619,9 @@ const handlePartialRefund = async (transaction, itemsToRefund) => {
     { name: "QTY", selector: (row) => row.items?.reduce((sum, item) => sum + (item.quantity || 0), 0) || 0, sortable: true, width: "5%", center: true },
     { name: "SUBTOTAL", selector: (row) => row.subtotal, cell: (row) => <div style={{ fontWeight: "600" }}>₱{parseFloat(row.subtotal).toFixed(2)}</div>, sortable: true, width: "7%", center: true },
     { name: "REFUND", selector: (row) => row.refundInfo?.totalRefundAmount || 0, cell: (row) => <div style={{ color: row.refundInfo?.totalRefundAmount > 0 ? "#dc3545" : "#666" }}>₱{parseFloat(row.refundInfo?.totalRefundAmount || 0).toFixed(2)}</div>, sortable: true, width: "7%", center: true },
-    { name: "DISCOUNT", selector: (row) => row.discount, cell: (row) => <div>₱{parseFloat(row.discount || 0).toFixed(2)}</div>, sortable: true, width: "7%", center: true },
+    { name: "DISCOUNT", selector: (row) => (row.discount || 0) + (row.promotionalDiscount || 0), cell: (row) => <div>₱{(parseFloat(row.discount || 0) + parseFloat(row.promotionalDiscount || 0)).toFixed(2)}</div>, sortable: true, width: "7%", center: true },
     { name: "PAYMENT", selector: (row) => row.paymentMethod || "N/A", width: "7%", center: true },
-    { name: "TOTAL", selector: (row) => row.total, cell: (row) => <div style={{ fontWeight: "600" }}>₱{parseFloat(row.total).toFixed(2)}</div>, sortable: true, width: "7%", center: true },
+    { name: "TOTAL", selector: (row) => row.status.toLowerCase() === 'refunded' ? 0 : row.total, cell: (row) => <div style={{ fontWeight: "600" }}>₱{row.status.toLowerCase() === 'refunded' ? '0.00' : parseFloat(row.total).toFixed(2)}</div>, sortable: true, width: "7%", center: true },
     {
       name: "STATUS", selector: (row) => row.status,
       cell: (row) => <span className={`transHis-status-badge ${row.status.toLowerCase()}`}>{row.status.toUpperCase()}</span>,

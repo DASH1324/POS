@@ -126,6 +126,9 @@ class TransactionRecordWithRefunds(BaseModel):
     total: float
     subtotal: float
     discount: float
+    promotionalDiscount: Optional[float] = 0.0
+    discountName: Optional[str] = None
+    promotionNames: Optional[str] = None
     status: str
     paymentMethod: str
     type: str
@@ -150,6 +153,15 @@ class TransactionStatistics(BaseModel):
     total_items_sold: int
     refund_summary: RefundSummary
 
+# Helper function to get discount/promotion text
+def get_discount_promotion_text(discount, promo_discount, discount_name, promo_names):
+    parts = []
+    if discount and discount > 0 and discount_name:
+        parts.append(f"Discount: {discount_name}")
+    if promo_discount and promo_discount > 0 and promo_names:
+        parts.append(f"Promotion: {promo_names}")
+    return " | ".join(parts) if parts else "None"
+
 # Update the get_all_transaction_history endpoint
 @router_transaction_history.get(
     "/all",
@@ -166,6 +178,7 @@ async def get_all_transaction_history(
     """
     Get all transaction history with comprehensive refund information.
     Includes individual item refund tracking and displays refund amounts properly.
+    Now also includes discount and promotion information.
     """
     allowed_roles = ["admin", "manager"]
     if current_user.get("userRole") not in allowed_roles:
@@ -178,15 +191,35 @@ async def get_all_transaction_history(
     try:
         conn = await get_db_connection()
         async with conn.cursor() as cursor:
-            # Main query to get sales with refund information
+            # Main query to get sales with refund, discount, and promotion information
             sql = """
                 SELECT
                     s.SaleID, s.OrderType, s.PaymentMethod, s.CreatedAt, s.CashierName,
-                    s.TotalDiscountAmount, s.Status, s.GCashReferenceNumber, s.IsPartiallyRefunded,
+                    s.TotalDiscountAmount, s.PromotionalDiscountAmount, s.Status, s.GCashReferenceNumber,
                     si.SaleItemID, si.ItemName, si.Quantity AS ItemQuantity, si.UnitPrice, si.Category,
                     a.AddonID, a.AddonName, a.Price AS AddonPrice, sia.Quantity AS AddonQuantity,
                     ri.RefundedQuantity, ri.RefundAmount AS ItemRefundAmount,
-                    ro.RefundType, ro.RefundAmount AS TotalRefundAmount, ro.RefundReason
+                    ro.RefundType, ro.RefundAmount AS TotalRefundAmount, ro.RefundReason,
+                    (SELECT TOP 1 d.name 
+                     FROM SaleDiscounts sd 
+                     JOIN discounts d ON sd.DiscountID = d.id 
+                     WHERE sd.SaleID = s.SaleID) AS DiscountName,
+                    (SELECT STRING_AGG(p.name, ', ')
+                     FROM promotions p
+                     WHERE p.id IN (
+                         SELECT DISTINCT promotion_id 
+                         FROM (
+                             SELECT pap.promotion_id
+                             FROM promotion_applicable_products pap
+                             JOIN SaleItems si2 ON si2.ItemName = pap.product_name
+                             WHERE si2.SaleID = s.SaleID
+                             UNION
+                             SELECT pac.promotion_id
+                             FROM promotion_applicable_categories pac
+                             JOIN SaleItems si2 ON si2.Category = pac.category_name
+                             WHERE si2.SaleID = s.SaleID
+                         ) AS applied_promos
+                     )) AS PromotionNames
                 FROM Sales AS s
                 LEFT JOIN SaleItems AS si ON s.SaleID = si.SaleID
                 LEFT JOIN SaleItemAddons AS sia ON si.SaleItemID = sia.SaleItemID
@@ -239,13 +272,15 @@ async def get_all_transaction_history(
                         "type": transaction_type,
                         "items": [],
                         "total": 0,
-                        "originalSubtotal": Decimal('0.0'),  # Full original amount
-                        "subtotal": Decimal('0.0'),  # Amount after refunds
+                        "originalSubtotal": Decimal('0.0'),
+                        "subtotal": Decimal('0.0'),
                         "discount": row.TotalDiscountAmount or Decimal('0.0'),
+                        "promotionalDiscount": row.PromotionalDiscountAmount or Decimal('0.0'),
+                        "discountName": row.DiscountName,
+                        "promotionNames": row.PromotionNames,
                         "_processed_items": {},
                         "refundInfo": None,
-                        "_isPartiallyRefunded": row.IsPartiallyRefunded,
-                        "_item_refund_map": {}  # Track refunds per item
+                        "_item_refund_map": {}
                     }
                     
                     # Add refund info if exists
@@ -326,9 +361,10 @@ async def get_all_transaction_history(
                 subtotal = transaction_data["subtotal"]
                 original_subtotal = transaction_data["originalSubtotal"]
                 discount = transaction_data["discount"]
+                promo_discount = transaction_data["promotionalDiscount"]
                 
-                # Calculate final total (subtotal after refunds - discount)
-                final_total = subtotal - discount
+                # Calculate final total (subtotal after refunds - discount - promo discount)
+                final_total = subtotal - discount - promo_discount
                 
                 # Update refund info with original amounts
                 if transaction_data.get("refundInfo"):
@@ -342,12 +378,20 @@ async def get_all_transaction_history(
                     orderType=transaction_data["orderType"],
                     items=[TransactionItemWithRefund(**item) for item in transaction_data["items"]],
                     total=float(final_total),
-                    subtotal=float(original_subtotal),  # Show original subtotal in table
+                    subtotal=float(original_subtotal),
                     discount=float(discount),
+                    promotionalDiscount=float(promo_discount),
+                    discountName=transaction_data["discountName"],
+                    promotionNames=transaction_data["promotionNames"],
                     status=transaction_data["status"],
                     paymentMethod=transaction_data["paymentMethod"] or "N/A",
                     type=transaction_data["type"],
-                    discountsAndPromotions="Discount Applied" if discount > 0 else "None",
+                    discountsAndPromotions=get_discount_promotion_text(
+                        discount, 
+                        promo_discount,
+                        transaction_data["discountName"],
+                        transaction_data["promotionNames"]
+                    ),
                     cashierName=transaction_data["cashierName"],
                     GCashReferenceNumber=transaction_data["GCashReferenceNumber"],
                     refundInfo=transaction_data.get("refundInfo")
@@ -396,7 +440,7 @@ async def get_transaction_statistics(
                     SUM(CASE WHEN s.Status = 'completed' THEN 1 ELSE 0 END) as completed_transactions,
                     SUM(CASE WHEN s.Status = 'cancelled' THEN 1 ELSE 0 END) as cancelled_transactions,
                     SUM(CASE WHEN s.Status = 'refunded' OR s.Status = 'refund' THEN 1 ELSE 0 END) as refunded_transactions,
-                    SUM(CASE WHEN s.TotalDiscountAmount > 0 THEN 1 ELSE 0 END) as transactions_with_discount
+                    SUM(CASE WHEN s.TotalDiscountAmount > 0 OR s.PromotionalDiscountAmount > 0 THEN 1 ELSE 0 END) as transactions_with_discount
                 FROM Sales s
                 WHERE 1=1
             """
@@ -439,7 +483,7 @@ async def get_transaction_statistics(
                             JOIN SaleItemAddons sia ON si.SaleItemID = sia.SaleItemID
                             JOIN Addons a ON sia.AddonID = a.AddonID
                             WHERE si.SaleID = s.SaleID
-                        ), 0) - COALESCE(s.TotalDiscountAmount, 0) as revenue
+                        ), 0) - COALESCE(s.TotalDiscountAmount, 0) - COALESCE(s.PromotionalDiscountAmount, 0) as revenue
                     FROM Sales s
                     WHERE 1=1
             """
@@ -670,12 +714,10 @@ async def get_transaction_report(
         calc_start_date = today
         calc_end_date = today
     elif period == "weekly":
-    # Last 7 days including today
         calc_end_date = today
         calc_start_date = today - timedelta(days=6)
     elif period == "monthly":
         calc_start_date = today.replace(day=1)
-        # Last day of current month
         if today.month == 12:
             calc_end_date = today.replace(day=31)
         else:
@@ -780,8 +822,8 @@ async def get_transaction_report(
             # 4. Discount and Promotion Distribution
             discount_promo_sql = """
                 SELECT 
-                    SUM(CASE WHEN s.TotalDiscountAmount > 0 THEN 1 ELSE 0 END) as with_discount,
-                    SUM(CASE WHEN s.TotalDiscountAmount = 0 THEN 1 ELSE 0 END) as no_discount
+                    SUM(CASE WHEN s.TotalDiscountAmount > 0 OR s.PromotionalDiscountAmount > 0 THEN 1 ELSE 0 END) as with_discount,
+                    SUM(CASE WHEN s.TotalDiscountAmount = 0 AND s.PromotionalDiscountAmount = 0 THEN 1 ELSE 0 END) as no_discount
                 FROM Sales s
                 WHERE CAST(s.CreatedAt AS DATE) BETWEEN ? AND ?
             """
@@ -789,7 +831,7 @@ async def get_transaction_report(
             discount_row = await cursor.fetchone()
             
             discount_promo_data = [
-                DiscountPromoDataPoint(name="With Discount", value=discount_row.with_discount or 0),
+                DiscountPromoDataPoint(name="With Discount/Promo", value=discount_row.with_discount or 0),
                 DiscountPromoDataPoint(name="No Discount/Promo", value=discount_row.no_discount or 0)
             ]
             
@@ -800,6 +842,7 @@ async def get_transaction_report(
                         s.SaleID,
                         s.Status,
                         s.TotalDiscountAmount,
+                        s.PromotionalDiscountAmount,
                         (
                             SELECT SUM(si.Quantity * si.UnitPrice)
                             FROM SaleItems si
@@ -811,7 +854,7 @@ async def get_transaction_report(
                             JOIN SaleItemAddons sia ON si.SaleItemID = sia.SaleItemID
                             JOIN Addons a ON sia.AddonID = a.AddonID
                             WHERE si.SaleID = s.SaleID
-                        ), 0) - s.TotalDiscountAmount as revenue
+                        ), 0) - s.TotalDiscountAmount - s.PromotionalDiscountAmount as revenue
                     FROM Sales s
                     WHERE CAST(s.CreatedAt AS DATE) BETWEEN ? AND ?
                 )

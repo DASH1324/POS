@@ -1,5 +1,6 @@
 import React, { useState, useMemo, useEffect } from 'react';
 import ReactDOM from 'react-dom/client';
+import { Link } from 'react-router-dom';
 import { BarChart, Bar, PieChart, Pie, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Cell, AreaChart, Area, Legend } from 'recharts';
 import { FaFileExport, FaCashRegister, FaChartLine, FaBoxOpen, FaPercentage, FaUserFriends, FaExclamationTriangle } from 'react-icons/fa';
 import { FaFilter } from "react-icons/fa";
@@ -8,8 +9,7 @@ import { generatePDFReport, generateCSVReport } from './salesMonitoringExport';
 import "./salesMonitoring.css";
 import Sidebar from "../shared/sidebar";
 import Header from "../shared/header";
-import loadingAnimation from "../../../assets/animation/loading.json";
-import Lottie from "lottie-react";
+import Loading from "../shared/loading";
 import '../../confirmAlertCustom.css';
 
 // --- HELPER FUNCTION FOR DISPLAYING DATE RANGES ---
@@ -499,11 +499,7 @@ function SalesMonitoring() {
         </div>
         <div className="salesMonMetrics-content">
           {loading ? (
-            <div className="loading-container">
-              <div className="loading-bg">
-                <Lottie animationData={loadingAnimation} loop={true} className="loading-animation" />
-              </div>
-            </div>
+            <Loading />
           ) : (
             <>
               {processedData.length === 0 && !error && (
@@ -636,13 +632,15 @@ function SalesMonitoring() {
                     </div>
                   </div>
                   <div className='salesMonTableCard'>
-                    <h3 className='salesMonTableTitle'>Sales Breakdown</h3>
+                    <h3 className='salesMonTableTitle'>
+                      Sales Breakdown
+                      <Link to="/home/salesReport" className="salesMon-view-all-btn">
+                        View All Report
+                      </Link>
+                    </h3>
                     <DataTable
                       columns={salesBreakdownColumns}
                       data={salesBreakdown}
-                      pagination
-                      paginationPerPage={10}
-                      paginationRowsPerPageOptions={[10]}
                       striped
                       highlightOnHover
                       customStyles={customStyles}

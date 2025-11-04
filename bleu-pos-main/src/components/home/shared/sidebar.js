@@ -11,28 +11,38 @@ import {
 } from '@fortawesome/free-solid-svg-icons';
 
 function SidebarComponent() {
-  const [collapsed, setCollapsed] = useState(false);
-  const [userRole, setUserRole] = useState(''); // State to hold the user's role
-  const toggleSidebar = () => setCollapsed(!collapsed);
-  const location = useLocation(); // Gets the current page location
+  const [collapsed, setCollapsed] = useState(() => {
+    // Load saved collapse state (default false)
+    const saved = localStorage.getItem('sidebarCollapsed');
+    return saved === 'true';
+  });
 
-  // This effect re-runs every time the user navigates to a new page.
+  const [userRole, setUserRole] = useState('');
+  const location = useLocation();
+
+  const toggleSidebar = () => {
+    setCollapsed((prev) => {
+      const newState = !prev;
+      localStorage.setItem('sidebarCollapsed', newState);
+      return newState;
+    });
+  };
+
   useEffect(() => {
-    // Priority 1: Check URL params first
+    // Sync collapse state on page load (to ensure consistency)
+    const saved = localStorage.getItem('sidebarCollapsed');
+    if (saved !== null) setCollapsed(saved === 'true');
+
+    // Check user role
     const params = new URLSearchParams(window.location.search);
     const roleFromUrl = params.get('userRole');
 
     if (roleFromUrl) {
-      console.log('Sidebar: Setting role from URL:', roleFromUrl);
       localStorage.setItem('userRole', roleFromUrl);
       setUserRole(roleFromUrl);
     } else {
-      // Priority 2: Fall back to localStorage
       const roleFromStorage = localStorage.getItem('userRole');
-      console.log('Sidebar: Reading role from localStorage:', roleFromStorage);
-      if (roleFromStorage) {
-        setUserRole(roleFromStorage);
-      }
+      if (roleFromStorage) setUserRole(roleFromStorage);
     }
   }, [location]);
 
@@ -44,7 +54,7 @@ function SidebarComponent() {
             <img src={logo} alt="Logo" className="logo" />
           </div>
 
-          <div className='item-wrap'>
+          <div className="item-wrap">
             {!collapsed && <div className="section-title">GENERAL OPERATIONS</div>}
             <Menu>
               <MenuItem
@@ -96,8 +106,7 @@ function SidebarComponent() {
               >
                 Sales Report
               </MenuItem>
-              
-              {/* Conditionally render the Activity Logs MenuItem */}
+
               {userRole === 'admin' && (
                 <MenuItem
                   icon={<FontAwesomeIcon icon={faClockRotateLeft} />}

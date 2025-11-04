@@ -14,7 +14,7 @@ router_auto_cancel = APIRouter(
 )
 
 # Blockchain Configuration
-BLOCKCHAIN_LOG_URL = os.getenv("BLOCKCHAIN_LOG_URL", "http://localhost:8003/blockchain/log")
+BLOCKCHAIN_LOG_URL = os.getenv("BLOCKCHAIN_LOG_URL", "http://localhost:9005/blockchain/log")
 
 # Flag to control the background task
 _background_task_running = False
@@ -79,6 +79,7 @@ async def auto_cancel_expired_orders():
             
             async with conn.cursor() as cursor:
                 # Find all pending orders older than 30 minutes
+                # Calculate total from SaleItems instead of non-existent TotalAmount column
                 expiration_time = datetime.now() - timedelta(minutes=30)
                 
                 await cursor.execute("""
@@ -88,7 +89,12 @@ async def auto_cancel_expired_orders():
                         s.OrderType,
                         s.CreatedAt,
                         s.CashierName,
-                        s.TotalAmount
+                        -- Calculate total from SaleItems
+                        ISNULL((
+                            SELECT SUM(si.UnitPrice * si.Quantity)
+                            FROM SaleItems si
+                            WHERE si.SaleID = s.SaleID
+                        ), 0) AS CalculatedTotal
                     FROM Sales s
                     WHERE s.Status = 'pending' 
                     AND s.CreatedAt < ?
@@ -105,7 +111,7 @@ async def auto_cancel_expired_orders():
                         order_type = order.OrderType
                         created_at = order.CreatedAt
                         cashier_name = order.CashierName
-                        total_amount = order.TotalAmount
+                        total_amount = order.CalculatedTotal  # Use calculated total
                         
                         try:
                             # Update status to cancelled

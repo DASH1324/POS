@@ -4,7 +4,7 @@ import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
 import { faPercent } from '@fortawesome/free-solid-svg-icons';
 import "./transactionDetailsModal.css";
 
-// NEW HELPER: Get user role from local storage
+// Helper: Get user role from local storage
 const getIsUserAdmin = () => {
   return localStorage.getItem("userRole") === "admin";
 }
@@ -21,7 +21,6 @@ const TransHisModal = ({
   const [refundMode, setRefundMode] = useState(false);
   const [selectedItems, setSelectedItems] = useState({});
   
-  // Check the role on component render
   const isUserAdmin = getIsUserAdmin(); 
 
   if (!show || !transaction) return null;
@@ -125,7 +124,8 @@ const TransHisModal = ({
   };
 
   const { actualSubtotal, totalRefunded } = calculateActualTotals();
-  const actualTotal = actualSubtotal - transaction.discount;
+  const totalDiscount = (transaction.discount || 0) + (transaction.promotionalDiscount || 0);
+  const actualTotal = actualSubtotal - totalDiscount;
   const isRefunded = transaction.status.toLowerCase() === 'refunded' || totalRefunded > 0;
 
   return (
@@ -200,14 +200,25 @@ const TransHisModal = ({
             </div>
           )}
 
-          {/* Discount Section */}
-          {transaction.discountsAndPromotions && transaction.discountsAndPromotions !== "None" && (
+          {/* Discount & Promotion Section */}
+          {((transaction.discount && transaction.discount > 0) || 
+            (transaction.promotionalDiscount && transaction.promotionalDiscount > 0)) && (
             <div className="transHis-modal-applied-discounts">
               <h4>Applied Discounts & Promotions</h4>
-              <div className="transHis-modal-discount-item">
-                <FontAwesomeIcon icon={faPercent} />
-                <span>{transaction.discountName || transaction.discountsAndPromotions}</span>
-              </div>
+              
+              {transaction.discount > 0 && transaction.discountName && (
+                <div className="transHis-modal-discount-item">
+                  <FontAwesomeIcon icon={faPercent} />
+                  <span>Discount: {transaction.discountName} (-₱{transaction.discount.toFixed(2)})</span>
+                </div>
+              )}
+              
+              {transaction.promotionalDiscount > 0 && transaction.promotionNames && (
+                <div className="transHis-modal-discount-item" style={{ marginTop: '8px' }}>
+                  <FontAwesomeIcon icon={faPercent} />
+                  <span>Promotion: {transaction.promotionNames} (-₱{transaction.promotionalDiscount.toFixed(2)})</span>
+                </div>
+              )}
             </div>
           )}
 
@@ -330,11 +341,19 @@ const TransHisModal = ({
               </div>
             )}
             
-            {/* Show discount if exists */}
+            {/* Show regular discount if exists */}
             {transaction.discount > 0 && (
               <div className="transHis-modal-breakdown-row transHis-modal-discount">
-                <span>Discount:</span>
+                <span>Discount{transaction.discountName ? ` (${transaction.discountName})` : ''}:</span>
                 <span>-₱{transaction.discount.toFixed(2)}</span>
+              </div>
+            )}
+            
+            {/* Show promotional discount if exists */}
+            {(transaction.promotionalDiscount && transaction.promotionalDiscount > 0) && (
+              <div className="transHis-modal-breakdown-row transHis-modal-discount">
+                <span>Promotion{transaction.promotionNames ? ` (${transaction.promotionNames})` : ''}:</span>
+                <span>-₱{transaction.promotionalDiscount.toFixed(2)}</span>
               </div>
             )}
             
@@ -377,8 +396,6 @@ const TransHisModal = ({
           {/* Action Buttons */}
           {transaction.status.toLowerCase() === "completed" && (
             <div className="transHis-modal-actions">
-              
-              {/* Conditional rendering based on role */}
               {isUserAdmin ? (
                 <div className="transHis-admin-message"></div>
               ) : (

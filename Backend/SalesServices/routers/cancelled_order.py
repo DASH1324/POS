@@ -66,13 +66,22 @@ class CancelledOrderRequest(BaseModel):
     orderType: Optional[str] = "All"
     productType: Optional[str] = "All"
 
-# --- Helper to generate WHERE clause for product types ---
+# --- Helper functions to generate WHERE clauses ---
+def get_order_type_condition(order_type: str) -> str:
+    """Generate SQL WHERE clause for order type filtering"""
+    if order_type == "Store":
+        return "AND s.OrderType IN ('Dine in', 'Take out')"
+    elif order_type == "Online":
+        return "AND s.OrderType IN ('Pick up', 'Delivery')"
+    return ""  # For 'All'
+
 def get_product_type_condition(product_type: str) -> str:
+    """Generate SQL WHERE clause for product type filtering"""
     if product_type == "Products":
         return "AND si.Category != 'merchandise'"
     elif product_type == "Merchandise":
         return "AND si.Category = 'merchandise'"
-    return ""
+    return ""  # For 'All'
 
 # --- Endpoint to Get Cancelled and Refunded Orders by Date ---
 @router_cancelled_order.post(
@@ -96,48 +105,106 @@ async def get_cancelled_and_refunded_orders_by_date(
         conn = await get_db_connection()
         async with conn.cursor() as cursor:
 
-            base_sql = """
+            # Build the WHERE clause components
+            order_type_condition = get_order_type_condition(request.orderType)
+            product_type_condition = get_product_type_condition(request.productType)
+
+            # CORRECTED SQL: Properly calculate proportional discounts and refunds
+            base_sql = f"""
+            WITH SaleItemDetails AS (
                 SELECT
-                    s.SaleID, s.OrderType, s.PaymentMethod, s.CreatedAt, s.CashierName,
-                    s.TotalDiscountAmount, s.Status, s.GCashReferenceNumber, s.UpdatedAt,
-                    s.IsPartiallyRefunded,
+                    s.SaleID, s.OrderType, s.PaymentMethod, s.CreatedAt, s.UpdatedAt,
+                    s.CashierName, s.GCashReferenceNumber, s.Status,
                     si.SaleItemID, si.ItemName, si.Quantity, si.UnitPrice, si.Category,
-                    ISNULL(ri.RefundedQuantity, 0) AS RefundedQuantity
+                    -- Calculate item subtotal including addons
+                    (si.UnitPrice * si.Quantity) + ISNULL((
+                        SELECT SUM(a.Price * sia.Quantity)
+                        FROM SaleItemAddons sia 
+                        JOIN Addons a ON sia.AddonID = a.AddonID
+                        WHERE sia.SaleItemID = si.SaleItemID
+                    ), 0) AS ItemTotalWithAddons,
+                    -- Get total discount for the entire sale
+                    ISNULL(s.TotalDiscountAmount, 0) + ISNULL(s.PromotionalDiscountAmount, 0) AS TotalSaleDiscount
                 FROM Sales AS s
                 LEFT JOIN SaleItems AS si ON s.SaleID = si.SaleID
-                LEFT JOIN RefundedItems AS ri ON si.SaleItemID = ri.SaleItemID
                 WHERE (
                     s.Status IN ('cancelled', 'refunded')
-                    OR (s.Status = 'completed' AND s.IsPartiallyRefunded = 1)
+                    OR EXISTS (
+                        SELECT 1 FROM RefundedOrders ro 
+                        WHERE ro.SaleID = s.SaleID AND ro.RefundType = 'partial'
+                    )
                 )
                 AND s.CashierName = ?
                 AND CAST(s.UpdatedAt AS DATE) = ?
+                {order_type_condition}
+                {product_type_condition}
+            ),
+            -- Calculate sale-level totals for proportional discount distribution
+            SaleTotals AS (
+                SELECT 
+                    SaleID,
+                    SUM(ItemTotalWithAddons) AS SaleGrossTotal
+                FROM SaleItemDetails
+                GROUP BY SaleID
+            ),
+            -- Get refunded quantities and amounts
+            RefundedInfo AS (
+                SELECT 
+                    ri.SaleItemID,
+                    SUM(ri.RefundedQuantity) AS RefundedQty,
+                    SUM(ri.RefundAmount) AS RefundedAmount
+                FROM RefundedItems ri
+                GROUP BY ri.SaleItemID
+            ),
+            -- Calculate final item values after proportional discounts and refunds
+            FinalItems AS (
+                SELECT 
+                    sid.SaleID, sid.OrderType, sid.PaymentMethod, sid.CreatedAt, sid.UpdatedAt,
+                    sid.CashierName, sid.GCashReferenceNumber, sid.Status,
+                    sid.SaleItemID, sid.ItemName, sid.Quantity, sid.UnitPrice, sid.Category,
+                    -- Apply proportional discount to each item
+                    CASE 
+                        WHEN st.SaleGrossTotal > 0 
+                        THEN sid.ItemTotalWithAddons - ((sid.ItemTotalWithAddons / st.SaleGrossTotal) * sid.TotalSaleDiscount)
+                        ELSE sid.ItemTotalWithAddons
+                    END AS ItemTotalAfterDiscount,
+                    ISNULL(ri.RefundedQty, 0) AS RefundedQty,
+                    ISNULL(ri.RefundedAmount, 0) AS RefundedAmount
+                FROM SaleItemDetails sid
+                JOIN SaleTotals st ON sid.SaleID = st.SaleID
+                LEFT JOIN RefundedInfo ri ON sid.SaleItemID = ri.SaleItemID
+            ),
+            -- Determine refund type for each sale
+            RefundTypes AS (
+                SELECT 
+                    SaleID,
+                    MAX(RefundType) AS RefundType
+                FROM RefundedOrders
+                GROUP BY SaleID
+            )
+            SELECT 
+                fi.SaleID, fi.OrderType, fi.PaymentMethod, fi.CreatedAt, fi.UpdatedAt,
+                fi.CashierName, fi.GCashReferenceNumber, fi.Status,
+                fi.SaleItemID, fi.ItemName, fi.Quantity, fi.UnitPrice, fi.Category,
+                fi.RefundedQty, fi.ItemTotalAfterDiscount, fi.RefundedAmount,
+                rt.RefundType
+            FROM FinalItems fi
+            LEFT JOIN RefundTypes rt ON fi.SaleID = rt.SaleID
+            WHERE fi.SaleItemID IS NOT NULL
+            ORDER BY fi.UpdatedAt DESC;
             """
 
             params = [request.cashierName, request.date]
-
-            if request.orderType == "Store":
-                base_sql += " AND s.OrderType IN ('Dine in', 'Take out')"
-            elif request.orderType == "Online":
-                base_sql += " AND s.OrderType IN ('Pick up', 'Delivery')"
-
-            product_type_condition = get_product_type_condition(request.productType)
-            base_sql += product_type_condition
-
-            # Ordering by the update timestamp from the Sales table.
-            final_sql = base_sql + " ORDER BY s.UpdatedAt DESC;"
-
-            await cursor.execute(final_sql, *params)
+            await cursor.execute(base_sql, *params)
             rows = await cursor.fetchall()
 
-            orders_dict: Dict[int, dict] = {}
-            item_subtotals: Dict[int, Decimal] = {}
-
+            # Process results
+            orders_dict = {}
+            
             for row in rows:
                 sale_id = row.SaleID
+                
                 if sale_id not in orders_dict:
-                    item_subtotals[sale_id] = Decimal('0.0')
-                    # Use UpdatedAt for the displayed time of the event (cancellation/refund)
                     event_time = row.UpdatedAt or row.CreatedAt
                     orders_dict[sale_id] = {
                         "id": f"SO-{sale_id}",
@@ -149,33 +216,32 @@ async def get_cancelled_and_refunded_orders_by_date(
                         "GCashReferenceNumber": row.GCashReferenceNumber,
                         "items": 0,
                         "orderItems": [],
-                        "_totalDiscount": row.TotalDiscountAmount,
-                        "_isPartiallyRefunded": row.IsPartiallyRefunded,
+                        "_total": Decimal('0.0'),
+                        "_refundType": row.RefundType
                     }
 
-                # For cancelled or fully refunded orders, show all items
-                # For partially refunded orders, only show items that were actually refunded
+                # Determine what to show based on order status
                 should_include_item = False
-                item_quantity = 0
-                
-                if row.SaleItemID:
-                    if row.Status in ('cancelled', 'refunded'):
-                        # Show all items with original quantity
-                        should_include_item = True
-                        item_quantity = row.Quantity or 0
-                    elif row.Status == 'completed' and row.IsPartiallyRefunded and row.RefundedQuantity > 0:
-                        # Only show items that were actually refunded, with refunded quantity
-                        should_include_item = True
-                        item_quantity = row.RefundedQuantity
+                display_quantity = 0
+                item_contribution = Decimal('0.0')
 
-                if should_include_item:
-                    item_price = row.UnitPrice or Decimal('0.0')
-                    orders_dict[sale_id]["items"] += item_quantity
-                    item_total = item_price * item_quantity
+                if row.Status in ('cancelled', 'refunded'):
+                    # For fully cancelled/refunded: show original items
+                    should_include_item = True
+                    display_quantity = row.Quantity
+                    item_contribution = row.ItemTotalAfterDiscount
+                elif row.Status == 'completed' and row.RefundedQty > 0:
+                    # For partial refunds: show only refunded items
+                    should_include_item = True
+                    display_quantity = row.RefundedQty
+                    item_contribution = row.RefundedAmount
 
+                if should_include_item and row.SaleItemID:
+                    orders_dict[sale_id]["items"] += display_quantity
+                    orders_dict[sale_id]["_total"] += item_contribution
+
+                    # Fetch addons for this item
                     addons_data = {}
-                    addons_total_price = Decimal('0.0')
-
                     addons_sql = """
                         SELECT a.AddonName, a.Price, sia.Quantity
                         FROM SaleItemAddons sia
@@ -186,46 +252,32 @@ async def get_cancelled_and_refunded_orders_by_date(
                     addon_rows = await cursor.fetchall()
 
                     for addon_row in addon_rows:
-                        addon_price = Decimal(str(addon_row.Price)) * addon_row.Quantity
-                        addons_total_price += addon_price
                         addons_data[addon_row.AddonName] = {
                             "price": float(addon_row.Price),
                             "quantity": addon_row.Quantity
                         }
 
-                    item_subtotals[sale_id] += item_total + addons_total_price
-
-                    # Determine status label for display
-                    if row.Status == 'refunded':
-                        status_label = 'Refund'
-                    elif row.Status == 'cancelled':
-                        status_label = 'Cancelled'
-                    else:  # Partially refunded (completed + IsPartiallyRefunded)
-                        status_label = 'Partial Refund'
-
                     orders_dict[sale_id]["orderItems"].append(
                         ProcessingSaleItem(
                             name=row.ItemName,
-                            quantity=item_quantity,
-                            price=float(item_price),
+                            quantity=display_quantity,
+                            price=float(row.UnitPrice),
                             category=row.Category,
                             addons=addons_data
                         )
                     )
 
+            # Build response
             response_list = []
             for sale_id, order_data in orders_dict.items():
-                # Only include orders that have at least one item
                 if len(order_data["orderItems"]) > 0:
-                    subtotal = item_subtotals.get(sale_id, Decimal('0.0'))
-                    total_discount = order_data.pop("_totalDiscount", Decimal('0.0'))
-                    is_partially_refunded = order_data.pop("_isPartiallyRefunded", False)
-                    final_total = subtotal - total_discount
-                    order_data["total"] = float(final_total)
-                    
-                    # Override status for display purposes
-                    if is_partially_refunded and order_data["status"] == "completed":
+                    # Handle status display
+                    if order_data["_refundType"] == 'partial' and order_data["status"] == "completed":
                         order_data["status"] = "partial_refund"
+                    
+                    order_data["total"] = float(order_data["_total"])
+                    del order_data["_total"]
+                    del order_data["_refundType"]
                     
                     response_list.append(ProcessingOrder(**order_data))
 
@@ -235,4 +287,5 @@ async def get_cancelled_and_refunded_orders_by_date(
         logger.error(f"Error fetching cancelled/refunded orders for {request.cashierName} on {request.date}: {e}", exc_info=True)
         raise HTTPException(status_code=500, detail="Failed to fetch cancelled/refunded orders.")
     finally:
-        if conn: await conn.close()
+        if conn: 
+            await conn.close()

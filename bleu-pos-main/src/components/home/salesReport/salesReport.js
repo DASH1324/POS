@@ -13,8 +13,8 @@ import { FontAwesomeIcon } from "@fortawesome/react-fontawesome";
 import { faArrowTrendUp, faArrowTrendDown } from "@fortawesome/free-solid-svg-icons";
 import CustomDateModal from "../shared/customDateModal";
 import handleSalesReportExport from "./salesReportExport";
-import Lottie from "lottie-react";
-import loadingAnimation from "../../../assets/animation/loading.json";
+import SalesReportModal from "./salesReportModal";
+import Loading from "../shared/loading";
 import '../../confirmAlertCustom.css';
 
 const CASHIERS_API_URL = "http://127.0.0.1:4000/users/cashiers";
@@ -69,6 +69,7 @@ function SalesReport() {
   const [reportData, setReportData] = useState(null);
   const [salesBreakdownTab, setSalesBreakdownTab] = useState('category');
   const [financialTab, setFinancialTab] = useState('cashDrawer');
+  const [isBreakdownModalOpen, setIsBreakdownModalOpen] = useState(false);
 
   // --- FETCH CASHIERS LIST ---
   useEffect(() => {
@@ -302,7 +303,7 @@ function SalesReport() {
         
         {/* --- Scrollable Content Area --- */}
         <div className="aSalesRep-scrollable-content">
-          {isLoading && <div className="aSalesRep-loading-container"><Lottie animationData={loadingAnimation} loop={true} style={{width: 150, height: 150}}/></div>}
+          {isLoading && <Loading />}
           
           {error && <div className="aSalesRep-error-container"><FaExclamationTriangle/><span>{error}</span></div>}
           
@@ -421,16 +422,50 @@ function SalesReport() {
 
                 {/* Sales Breakdown */}
                 <div className="aSalesRep-table-section">
-                  <h3 className="aSalesRep-section-title">Sales Breakdown</h3>
+                  <div className="aSalesRep-section-title-row">
+                    <h3 className="aSalesRep-section-title">Sales Breakdown</h3>
+                    <button 
+                      className="aSalesRep-view-all-btn"
+                      onClick={() => setIsBreakdownModalOpen(true)}
+                    >
+                      View All
+                    </button>
+                  </div>
                   <div className="aSalesRep-tabs-container">
-                    <button className={`aSalesRep-content-tab ${salesBreakdownTab === 'category' ? 'active' : ''}`} onClick={() => setSalesBreakdownTab('category')}>By Category</button>
-                    <button className={`aSalesRep-content-tab ${salesBreakdownTab === 'product' ? 'active' : ''}`} onClick={() => setSalesBreakdownTab('product')}>By Product</button>
+                    <button 
+                      className={`aSalesRep-content-tab ${salesBreakdownTab === 'category' ? 'active' : ''}`} 
+                      onClick={() => setSalesBreakdownTab('category')}
+                    >
+                      By Category
+                    </button>
+                    <button 
+                      className={`aSalesRep-content-tab ${salesBreakdownTab === 'product' ? 'active' : ''}`} 
+                      onClick={() => setSalesBreakdownTab('product')}
+                    >
+                      By Product
+                    </button>
                   </div>
                   <div className="aSalesRep-table-container">
                     {salesBreakdownTab === 'category' ? (
-                      <DataTable columns={categoryColumns} data={reportData.categoryBreakdown ?? []} striped highlightOnHover responsive customStyles={commonTableStyles} />
+                      <DataTable 
+                        columns={categoryColumns} 
+                        data={reportData.categoryBreakdown ?? []} 
+                        striped 
+                        highlightOnHover 
+                        responsive 
+                        pagination
+                        customStyles={commonTableStyles} 
+                      />
                     ) : (
-                      <DataTable columns={productColumns} data={reportData.productBreakdown ?? []} striped highlightOnHover responsive pagination customStyles={commonTableStyles} />
+                      <DataTable 
+                        columns={productColumns} 
+                        data={reportData.productBreakdown ?? []} 
+                        striped 
+                        highlightOnHover 
+                        responsive 
+                        pagination 
+                        customStyles={commonTableStyles} 
+                      />
                     )}
                   </div>
                 </div>
@@ -440,6 +475,14 @@ function SalesReport() {
         </div>
       </div>
       <CustomDateModal show={isCustomModalOpen} onClose={() => setIsCustomModalOpen(false)} onApply={handleCustomApply} />
+
+      <SalesReportModal
+          show={isBreakdownModalOpen}
+          onClose={() => setIsBreakdownModalOpen(false)}
+          data={salesBreakdownTab === 'category' ? reportData?.categoryBreakdown : reportData?.productBreakdown}
+          type={salesBreakdownTab}
+          periodText={currentPeriodText}
+        />
     </div>
   );
 }

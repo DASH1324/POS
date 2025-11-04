@@ -482,6 +482,7 @@ const CartPanel = ({
         appliedDiscounts: getAppliedDiscountNames(),
         // `promotionalDiscountAmount` is a new field that sends the calculated promo value
         promotionalDiscountAmount: promotionalDiscountValue,
+        promotionalDiscountName: autoPromotion?.name || null,
         gcashReference: gcashRef
     };
 

@@ -20,6 +20,9 @@ from database import get_db_connection
 oauth2_scheme = OAuth2PasswordBearer(tokenUrl="http://127.0.0.1:4000/auth/token")
 USER_SERVICE_ME_URL = "http://localhost:4000/auth/users/me"
 
+# --- Blockchain Service URL ---
+BLOCKCHAIN_LOG_URL = "http://localhost:9005/blockchain/log"
+
 # --- URLs for Inventory Deduction Endpoints ---
 INGREDIENTS_DEDUCT_URL = "http://127.0.0.1:8002/ingredients/deduct-from-sale"
 MATERIALS_DEDUCT_URL = "http://127.0.0.1:8002/materials/deduct-from-sale"
@@ -58,11 +61,55 @@ async def get_current_active_user(token: str = Depends(oauth2_scheme)):
         try:
             response = await client.get(USER_SERVICE_ME_URL, headers={"Authorization": f"Bearer {token}"})
             response.raise_for_status()
-            return response.json()
+            user_data = response.json()
+            user_data['access_token'] = token
+            return user_data
         except httpx.HTTPStatusError as e:
             raise HTTPException(status_code=e.response.status_code, detail=f"Invalid token or user not found: {e.response.text}")
         except httpx.RequestError:
             raise HTTPException(status_code=status.HTTP_503_SERVICE_UNAVAILABLE, detail="Could not connect to the authentication service.")
+
+# --- Blockchain Logging Helper ---
+async def log_to_blockchain(
+    service_identifier: str,
+    action: str,
+    entity_type: str,
+    entity_id: int,
+    actor_username: str,
+    change_description: str,
+    data: dict,
+    token: str
+):
+    """
+    Log an activity to the blockchain service.
+    This runs in the background and doesn't block the main response.
+    """
+    try:
+        async with httpx.AsyncClient(timeout=30.0) as client:
+            payload = {
+                "service_identifier": service_identifier,
+                "action": action,
+                "entity_type": entity_type,
+                "entity_id": entity_id,
+                "actor_username": actor_username,
+                "change_description": change_description,
+                "data": data
+            }
+            
+            headers = {
+                "Authorization": f"Bearer {token}",
+                "Content-Type": "application/json"
+            }
+            
+            response = await client.post(BLOCKCHAIN_LOG_URL, json=payload, headers=headers)
+            response.raise_for_status()
+            
+            result = response.json()
+            logger.info(f"✅ Blockchain log created: TX {result.get('transaction_hash')} for {entity_type} ID {entity_id}")
+            
+    except Exception as e:
+        logger.error(f"❌ Blockchain logging failed for {entity_type} {entity_id}: {e}", exc_info=True)
+        # Don't raise - blockchain logging failure shouldn't break the sale
 
 # --- Helper to call Inventory Services ---
 async def trigger_inventory_deduction(url: str, cart_items: List[SaleItem], token: str, inventory_type: str):
@@ -202,6 +249,9 @@ async def create_sale(
                 raise HTTPException(status_code=500, detail="Failed to create sale record, starting rollback.")
             sale_id = sale_id_row[0]
 
+            # Prepare detailed sale items data for blockchain
+            items_data = []
+            
             for item in sale.cartItems:
                 sql_item = """
                     DECLARE @InsertedItems TABLE (SaleItemID INT);
@@ -223,6 +273,16 @@ async def create_sale(
                     raise HTTPException(status_code=500, detail=f"Failed to insert sale item: {item.name}")
                 sale_item_id = sale_item_id_row[0]
                 
+                # Collect item data for blockchain
+                item_data = {
+                    "sale_item_id": sale_item_id,
+                    "name": item.name,
+                    "quantity": item.quantity,
+                    "price": float(item.price),
+                    "category": item.category,
+                    "addons": []
+                }
+                
                 if item.addons:
                     for addon in item.addons:
                         await cursor.execute("SELECT 1 FROM Addons WHERE AddonID = ?", addon.addonId)
@@ -232,6 +292,16 @@ async def create_sale(
                             await cursor.execute("SET IDENTITY_INSERT dbo.Addons OFF;")
                         
                         await cursor.execute("INSERT INTO SaleItemAddons (SaleItemID, AddonID, Quantity) VALUES (?, ?, ?)", sale_item_id, addon.addonId, addon.quantity)
+                        
+                        # Add addon to item data
+                        item_data["addons"].append({
+                            "addon_id": addon.addonId,
+                            "addon_name": addon.addonName,
+                            "price": float(addon.price),
+                            "quantity": addon.quantity
+                        })
+                
+                items_data.append(item_data)
 
             for discount in discount_details:
                 sql_sale_discount = "INSERT INTO SaleDiscounts (SaleID, DiscountID, DiscountAppliedAmount) VALUES (?, ?, ?)"
@@ -239,13 +309,46 @@ async def create_sale(
 
             await conn.commit()
             
-        # Schedule inventory deductions as background task
-        products, merchandise = separate_cart_items_by_type(sale.cartItems)
-        background_tasks.add_task(process_inventory_deductions_background, products, merchandise, token)
-        
-        # Return immediately without waiting for inventory deductions
+        # Prepare comprehensive blockchain data
         total_combined_discount = manual_discount + promo_discount
         final_total = subtotal - total_combined_discount
+        
+        blockchain_data = {
+            "sale_id": sale_id,
+            "order_type": sale.orderType,
+            "payment_method": sale.paymentMethod,
+            "cashier_name": cashier_name,
+            "items": items_data,
+            "subtotal": float(subtotal),
+            "manual_discount": float(manual_discount),
+            "promotional_discount": float(promo_discount),
+            "total_discount": float(total_combined_discount),
+            "final_total": float(final_total),
+            "gcash_reference": sale.gcashReference,
+            "status": "processing",
+            "applied_discounts": sale.appliedDiscounts,
+            "total_items": len(sale.cartItems),
+            "total_quantity": sum(item.quantity for item in sale.cartItems)
+        }
+        
+        # Schedule inventory deductions as background task
+        products, merchandise = separate_cart_items_by_type(sale.cartItems)
+        background_tasks.add_task(process_inventory_deductions_background, products, merchandise, current_user['access_token'])
+        
+        # Schedule blockchain logging as background task
+        background_tasks.add_task(
+            log_to_blockchain,
+            service_identifier="POS_SALES",
+            action="CREATE",
+            entity_type="Sale",
+            entity_id=sale_id,
+            actor_username=cashier_name,
+            change_description=f"New sale created: {len(items_data)} items, Total: ₱{final_total:.2f}, Payment: {sale.paymentMethod}",
+            data=blockchain_data,
+            token=current_user['access_token']
+        )
+        
+        # Return immediately without waiting for background tasks
         return {
             "saleId": sale_id,
             "subtotal": float(subtotal),
@@ -314,7 +417,7 @@ async def get_orders_by_status(
                         addons_list.append({'name': addon.AddonName, 'price': float(addon.Price), 'quantity': addon.Quantity})
                     
                     order_items.append({
-                        'saleItemId': item.SaleItemID,  # Named as saleItemId
+                        'saleItemId': item.SaleItemID,
                         'name': item.ItemName, 
                         'quantity': item.Quantity, 
                         'price': float(item.UnitPrice), 

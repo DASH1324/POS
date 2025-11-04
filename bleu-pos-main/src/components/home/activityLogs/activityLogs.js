@@ -17,27 +17,82 @@ import {
 import Lottie from "lottie-react";
 import loadingAnimation from "../../../assets/animation/loading.json";
 import axios from "axios";
+import CustomDateModal from "../shared/customDateModal";
 
 const BLOCKCHAIN_API_URL = "http://localhost:9005/blockchain";
 const USER_API_URL = "http://127.0.0.1:4000/users";
 
+// Helper function to format dates for the API (YYYY-MM-DD)
+const formatDateForAPI = (date) => {
+  const year = date.getFullYear();
+  const month = String(date.getMonth() + 1).padStart(2, '0');
+  const day = String(date.getDate()).padStart(2, '0');
+  return `${year}-${month}-${day}`;
+};
+
+// Helper to get the display text for the selected period
+const getPeriodText = (tab, customStart = null, customEnd = null) => {
+  const today = new Date();
+  switch (tab) {
+    case "today":
+      return `Date: ${today.toLocaleDateString('en-US', { year: 'numeric', month: 'short', day: 'numeric' })}`;
+    case "yesterday": {
+      const yesterday = new Date(today);
+      yesterday.setDate(today.getDate() - 1);
+      return `Date: ${yesterday.toLocaleDateString('en-US', { year: 'numeric', month: 'short', day: 'numeric' })}`;
+    }
+    case "week": {
+      const weekAgo = new Date(today);
+      weekAgo.setDate(today.getDate() - 7);
+      return `Last 7 Days`;
+    }
+    case "month": {
+      const monthAgo = new Date(today);
+      monthAgo.setMonth(today.getMonth() - 1);
+      return `Last 30 Days`;
+    }
+    case "custom": {
+      if (customStart && customEnd) {
+        const startDate = new Date(customStart + 'T00:00:00');
+        const endDate = new Date(customEnd + 'T00:00:00');
+        const start = startDate.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
+        const end = endDate.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
+        return `Date Period: ${start} - ${end}`;
+      }
+      return "Date Period: None Selected";
+    }
+    default:
+      return "All Time";
+  }
+};
+
 function BlockchainActivityLogs() {
+  const [activeTab, setActiveTab] = useState("activity");
   const [searchTerm, setSearchTerm] = useState("");
   const [isFilterOpen, setIsFilterOpen] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
   const [serviceFilter, setServiceFilter] = useState("");
   const [entityTypeFilter, setEntityTypeFilter] = useState("");
   const [actionFilter, setActionFilter] = useState("");
+  const [dateFilter, setDateFilter] = useState("all");
+  const [isCustomModalOpen, setIsCustomModalOpen] = useState(false);
+  const [customRange, setCustomRange] = useState({ start: null, end: null });
+  const [currentPeriodText, setCurrentPeriodText] = useState(getPeriodText("all"));
   const [groupedLogs, setGroupedLogs] = useState([]);
   const [error, setError] = useState(null);
   
   // State to store the mapping of username -> FullName
   const [actorNameMap, setActorNameMap] = useState({});
 
+  // Update the period display text when the date filter or custom range changes
+  useEffect(() => {
+    setCurrentPeriodText(getPeriodText(dateFilter, customRange.start, customRange.end));
+  }, [dateFilter, customRange]);
+
   // Fetch blockchain logs
   useEffect(() => {
     fetchLogs();
-  }, [serviceFilter, entityTypeFilter, actionFilter]);
+  }, [serviceFilter, entityTypeFilter, actionFilter, dateFilter, customRange]);
 
   // Fetch actor full names when logs are loaded
   useEffect(() => {
@@ -110,6 +165,52 @@ function BlockchainActivityLogs() {
       if (serviceFilter) params.service = serviceFilter;
       if (entityTypeFilter) params.entity_type = entityTypeFilter;
       if (actionFilter) params.action = actionFilter;
+      
+      // Add date filtering
+      if (dateFilter !== "all") {
+        const today = new Date();
+        let startDate, endDate;
+
+        switch (dateFilter) {
+          case "today":
+            startDate = formatDateForAPI(today);
+            endDate = formatDateForAPI(today);
+            break;
+          case "yesterday": {
+            const yesterday = new Date(today);
+            yesterday.setDate(today.getDate() - 1);
+            startDate = formatDateForAPI(yesterday);
+            endDate = formatDateForAPI(yesterday);
+            break;
+          }
+          case "week": {
+            const weekAgo = new Date(today);
+            weekAgo.setDate(today.getDate() - 7);
+            startDate = formatDateForAPI(weekAgo);
+            endDate = formatDateForAPI(today);
+            break;
+          }
+          case "month": {
+            const monthAgo = new Date(today);
+            monthAgo.setMonth(today.getMonth() - 1);
+            startDate = formatDateForAPI(monthAgo);
+            endDate = formatDateForAPI(today);
+            break;
+          }
+          case "custom":
+            if (customRange.start && customRange.end) {
+              startDate = customRange.start;
+              endDate = customRange.end;
+            }
+            break;
+        }
+
+        if (startDate && endDate) {
+          params.start_date = startDate;
+          params.end_date = endDate;
+        }
+      }
+      
       params.limit = 100;
 
       const response = await axios.get(`${BLOCKCHAIN_API_URL}/logs`, {
@@ -169,6 +270,22 @@ function BlockchainActivityLogs() {
     setServiceFilter("");
     setEntityTypeFilter("");
     setActionFilter("");
+    setDateFilter("all");
+    setCustomRange({ start: null, end: null });
+  };
+
+  // Reset filters when switching tabs
+  useEffect(() => {
+    handleClearFilters();
+  }, [activeTab]);
+
+  // Handler for applying a custom date range from the modal
+  const handleCustomApply = (startDate, endDate) => {
+    const startStr = formatDateForAPI(new Date(startDate));
+    const endStr = formatDateForAPI(new Date(endDate));
+    setCustomRange({ start: startStr, end: endStr });
+    setDateFilter("custom");
+    setIsCustomModalOpen(false);
   };
 
   const getServiceIcon = (service) => {
@@ -271,184 +388,256 @@ function BlockchainActivityLogs() {
     );
   });
 
+  const renderContent = () => {
+    if (activeTab === "activity") {
+      return (
+        <>
+          {/* Loading State */}
+          {isLoading ? (
+            <div className="loading-container">
+              <div className="loading-bg">
+                <Lottie
+                  animationData={loadingAnimation}
+                  loop={true}
+                  className="loading-animation"
+                />
+              </div>
+            </div>
+          ) : (
+            /* Timeline */
+            <div className="activityLogs-timeline">
+              {/* Error State */}
+              {error ? (
+                <div className="activityLogs-error">
+                  <p>{error}</p>
+                  <button onClick={fetchLogs}>Retry</button>
+                </div>
+              ) : filteredGroups.length === 0 ? (
+                <div className="activityLogs-empty-inline">
+                  <p>No activity logs found</p>
+                </div>
+              ) : (
+                <>
+                  <div className="activityLogs-timeline-line"></div>
+
+                  {filteredGroups.map((group) => (
+                    <div key={group.id} className="activityLogs-activity-item">
+                      {/* Main Activity Header */}
+                      <div className="activityLogs-activity-header">
+                        {/* Icon Circle */}
+                        <div
+                          className="activityLogs-icon-circle"
+                          style={{
+                            backgroundColor: getServiceColor(group.service),
+                          }}
+                        >
+                          {getServiceIcon(group.service)}
+                        </div>
+
+                        {/* Content */}
+                        <div className="activityLogs-activity-content">
+                          <div className="activityLogs-activity-title-row">
+                            <span className="activityLogs-timestamp">
+                              {formatTimestamp(group.firstTimestamp)}
+                            </span>
+                            <h3 className="activityLogs-activity-title">
+                              {getEntityTitle(group)}
+                            </h3>
+                          </div>
+
+                          {/* Chain of Events */}
+                          {group.events.map((event, eventIndex) => (
+                            <div key={eventIndex} className="activityLogs-event-item">
+                              <div className="activityLogs-event-dot"></div>
+                              <div className="activityLogs-event-content">
+                                <div className="activityLogs-event-timestamp">
+                                  {formatTimestamp(event.created_at)}
+                                </div>
+                                <div
+                                  className={`activityLogs-event-message ${getActionClass(
+                                    event.action
+                                  )}`}
+                                >
+                                  {getActionIcon(event.action)}
+                                  <div className="activityLogs-event-text">
+                                    <strong>
+                                      {actorNameMap[event.actor_username] ||
+                                        event.actor_username}
+                                    </strong>{" "}
+                                    {event.action === "AUTO_CANCEL" 
+                                      ? "auto-cancelled" 
+                                      : `${event.action.toLowerCase()}d`}:{" "}
+                                    {event.change_description}
+                                  </div>
+                                </div>
+                              </div>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    </div>
+                  ))}
+                </>
+              )}
+            </div>
+          )}
+        </>
+      );
+    } else if (activeTab === "transaction") {
+      return (
+        <div className="activityLogs-timeline">
+          <div className="activityLogs-empty-inline">
+            <p>Transaction logs content will be displayed here</p>
+          </div>
+        </div>
+      );
+    }
+  };
+
   return (
     <div className="activityLogs">
       <Sidebar />
       <div className="activityLogs-container">
-        <Header pageTitle="Blockchain Activity Logs" />
+        <Header pageTitle="Blockchain Logs" />
 
         <div className="activityLogs-content-wrapper">
           <div className="activityLogs-content">
-            {/* Filter Bar */}
-            <div
-              className={`activityLogs-filterBar ${
-                isFilterOpen ? "open" : "collapsed"
-              }`}
-            >
-              <button
-                className="activityLogs-filter-toggle-btn"
-                onClick={() => setIsFilterOpen(!isFilterOpen)}
-              >
-                <FaFilter />
-              </button>
-
-              <div className="activityLogs-filter-item">
-                <div className="activityLogs-search-wrapper">
-                  <FaSearch className="activityLogs-search-icon" />
-                  <input
-                    type="text"
-                    placeholder="Search activities..."
-                    value={searchTerm}
-                    onChange={(e) => setSearchTerm(e.target.value)}
-                    className="activityLogs-search-input"
-                  />
-                </div>
-              </div>
-
-              <div className="activityLogs-filter-item">
-                <span>Service:</span>
-                <select
-                  value={serviceFilter}
-                  onChange={(e) => setServiceFilter(e.target.value)}
-                  className="activityLogs-select"
+            {/* Tabs and Filter Wrapper */}
+            <div className="activityLogs-tabs-filter-wrapper">
+              {/* Tabs - Left Side */}
+              <div className="activityLogs-tabs">
+                <button
+                  className={`activityLogs-tab ${
+                    activeTab === "activity" ? "activityLogs-tab--active" : ""
+                  }`}
+                  onClick={() => setActiveTab("activity")}
                 >
-                  <option value="">All Services</option>
-                  <option value="DISCOUNTS_SERVICE">Discounts</option>
-                  <option value="POS_SALES">POS Sales</option>
-                  <option value="POS_SALES_AUTO_CANCEL">Auto Cancel</option>
-                  <option value="PRODUCTS_SERVICE">Products</option>
-                  <option value="INVENTORY_SERVICE">Inventory</option>
-                </select>
-              </div>
-
-              <div className="activityLogs-filter-item">
-                <span>Entity:</span>
-                <select
-                  value={entityTypeFilter}
-                  onChange={(e) => setEntityTypeFilter(e.target.value)}
-                  className="activityLogs-select"
+                  Activity Logs
+                </button>
+                <button
+                  className={`activityLogs-tab ${
+                    activeTab === "transaction" ? "activityLogs-tab--active" : ""
+                  }`}
+                  onClick={() => setActiveTab("transaction")}
                 >
-                  <option value="">All Types</option>
-                  <option value="Discount">Discount</option>
-                  <option value="Sale">Sale</option>
-                  <option value="Product">Product</option>
-                  <option value="Inventory">Inventory</option>
-                </select>
+                  Transaction Logs
+                </button>
               </div>
 
-              <div className="activityLogs-filter-item">
-                <span>Action:</span>
-                <select
-                  value={actionFilter}
-                  onChange={(e) => setActionFilter(e.target.value)}
-                  className="activityLogs-select"
-                >
-                  <option value="">All Actions</option>
-                  <option value="CREATE">Create</option>
-                  <option value="UPDATE">Update</option>
-                  <option value="DELETE">Delete</option>
-                  <option value="AUTO_CANCEL">Auto Cancel</option>
-                </select>
-              </div>
+              {/* Filter Bar - Right Side */}
+              {!isLoading && (
+                <div className={`activityLogs-filterBar ${isFilterOpen ? "open" : "collapsed"}`}>
+                  <button
+                    className="activityLogs-filter-toggle-btn"
+                    onClick={() => setIsFilterOpen(!isFilterOpen)}
+                  >
+                    <FaFilter />
+                    <span className="activityLogs-period-text">{currentPeriodText}</span>
+                  </button>
 
-              <button
-                className="activityLogs-clearBtn"
-                onClick={handleClearFilters}
-              >
-                Clear Filters
-              </button>
-            </div>
+                  <div className="activityLogs-filter-item">
+                    <span>Period:</span>
+                    <select
+                      className="activityLogs-select"
+                      value={dateFilter}
+                      onChange={(e) => {
+                        const value = e.target.value;
+                        if (value === "custom") {
+                          setIsCustomModalOpen(true);
+                        } else {
+                          setDateFilter(value);
+                        }
+                      }}
+                    >
+                      <option value="all">All Time</option>
+                      <option value="today">Today</option>
+                      <option value="yesterday">Yesterday</option>
+                      <option value="week">Last 7 Days</option>
+                      <option value="month">Last 30 Days</option>
+                      <option value="custom">Custom</option>
+                    </select>
+                  </div>
 
-            {/* Error State */}
-            {error && (
-              <div className="activityLogs-error">
-                <p>{error}</p>
-                <button onClick={fetchLogs}>Retry</button>
-              </div>
-            )}
-
-            {/* Loading State */}
-            {isLoading ? (
-              <div className="loading-container">
-                <div className="loading-bg">
-                  <Lottie
-                    animationData={loadingAnimation}
-                    loop={true}
-                    className="loading-animation"
-                  />
-                </div>
-              </div>
-            ) : filteredGroups.length === 0 ? (
-              <div className="activityLogs-empty">
-                <p>No activity logs found</p>
-              </div>
-            ) : (
-              /* Timeline */
-              <div className="activityLogs-timeline">
-                <div className="activityLogs-timeline-line"></div>
-
-                {filteredGroups.map((group) => (
-                  <div key={group.id} className="activityLogs-activity-item">
-                    {/* Main Activity Header */}
-                    <div className="activityLogs-activity-header">
-                      {/* Icon Circle */}
-                      <div
-                        className="activityLogs-icon-circle"
-                        style={{
-                          backgroundColor: getServiceColor(group.service),
-                        }}
-                      >
-                        {getServiceIcon(group.service)}
-                      </div>
-
-                      {/* Content */}
-                      <div className="activityLogs-activity-content">
-                        <div className="activityLogs-activity-title-row">
-                          <span className="activityLogs-timestamp">
-                            {formatTimestamp(group.firstTimestamp)}
-                          </span>
-                          <h3 className="activityLogs-activity-title">
-                            {getEntityTitle(group)}
-                          </h3>
-                        </div>
-
-                        {/* Chain of Events */}
-                        {group.events.map((event, eventIndex) => (
-                          <div key={eventIndex} className="activityLogs-event-item">
-                            <div className="activityLogs-event-dot"></div>
-                            <div className="activityLogs-event-content">
-                              <div className="activityLogs-event-timestamp">
-                                {formatTimestamp(event.created_at)}
-                              </div>
-                              <div
-                                className={`activityLogs-event-message ${getActionClass(
-                                  event.action
-                                )}`}
-                              >
-                                {getActionIcon(event.action)}
-                                <div className="activityLogs-event-text">
-                                  <strong>
-                                    {actorNameMap[event.actor_username] ||
-                                      event.actor_username}
-                                  </strong>{" "}
-                                  {event.action === "AUTO_CANCEL" 
-                                    ? "auto-cancelled" 
-                                    : `${event.action.toLowerCase()}d`}:{" "}
-                                  {event.change_description}
-                                </div>
-                              </div>
-                            </div>
-                          </div>
-                        ))}
-                      </div>
+                  <div className="activityLogs-filter-item">
+                    <div className="activityLogs-search-wrapper">
+                      <FaSearch className="activityLogs-search-icon" />
+                      <input
+                        type="text"
+                        placeholder="Search activities..."
+                        value={searchTerm}
+                        onChange={(e) => setSearchTerm(e.target.value)}
+                        className="activityLogs-search-input"
+                      />
                     </div>
                   </div>
-                ))}
-              </div>
-            )}
+
+                  <div className="activityLogs-filter-item">
+                    <span>Service:</span>
+                    <select
+                      value={serviceFilter}
+                      onChange={(e) => setServiceFilter(e.target.value)}
+                      className="activityLogs-select"
+                    >
+                      <option value="">All Services</option>
+                      <option value="DISCOUNTS_SERVICE">Discounts</option>
+                      <option value="POS_SALES">POS Sales</option>
+                      <option value="POS_SALES_AUTO_CANCEL">Auto Cancel</option>
+                      <option value="PRODUCTS_SERVICE">Products</option>
+                      <option value="INVENTORY_SERVICE">Inventory</option>
+                    </select>
+                  </div>
+
+                  <div className="activityLogs-filter-item">
+                    <span>Entity:</span>
+                    <select
+                      value={entityTypeFilter}
+                      onChange={(e) => setEntityTypeFilter(e.target.value)}
+                      className="activityLogs-select"
+                    >
+                      <option value="">All Types</option>
+                      <option value="Discount">Discount</option>
+                      <option value="Sale">Sale</option>
+                      <option value="Product">Product</option>
+                      <option value="Inventory">Inventory</option>
+                    </select>
+                  </div>
+
+                  <div className="activityLogs-filter-item">
+                    <span>Action:</span>
+                    <select
+                      value={actionFilter}
+                      onChange={(e) => setActionFilter(e.target.value)}
+                      className="activityLogs-select"
+                    >
+                      <option value="">All Actions</option>
+                      <option value="CREATE">Create</option>
+                      <option value="UPDATE">Update</option>
+                      <option value="DELETE">Delete</option>
+                      <option value="AUTO_CANCEL">Auto Cancel</option>
+                    </select>
+                  </div>
+
+                  <button
+                    className="activityLogs-clearBtn"
+                    onClick={handleClearFilters}
+                  >
+                    Clear Filters
+                  </button>
+                </div>
+              )}
+            </div>
+
+            {/* Render Content Based on Active Tab */}
+            {renderContent()}
           </div>
         </div>
       </div>
+      
+      <CustomDateModal 
+        show={isCustomModalOpen} 
+        onClose={() => setIsCustomModalOpen(false)} 
+        onApply={handleCustomApply} 
+      />
     </div>
   );
 }

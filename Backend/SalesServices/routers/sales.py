@@ -246,81 +246,88 @@ async def get_current_session_sales_metrics(
             product_type_condition = get_product_type_condition(request.productType)
             
             sql = f"""
-                WITH SaleItemTotals AS (
+                WITH CompletedSales AS (
                     SELECT 
                         s.SaleID,
                         s.PaymentMethod,
-                        si.SaleItemID,
-                        si.Quantity,
-                        (si.UnitPrice * si.Quantity) AS ItemSubtotal,
+                        s.CreatedAt,
+                        -- Calculate the actual amount paid (FinalAmount from Sales table)
+                        (
+                            SELECT SUM(si2.UnitPrice * si2.Quantity)
+                            FROM SaleItems si2
+                            WHERE si2.SaleID = s.SaleID
+                        ) + 
                         ISNULL((
                             SELECT SUM(a.Price * sia.Quantity)
-                            FROM SaleItemAddons sia 
+                            FROM SaleItems si2
+                            JOIN SaleItemAddons sia ON si2.SaleItemID = sia.SaleItemID
                             JOIN Addons a ON sia.AddonID = a.AddonID
-                            WHERE sia.SaleItemID = si.SaleItemID
-                        ), 0) AS AddonsTotal,
-                        ISNULL(s.TotalDiscountAmount, 0) + ISNULL(s.PromotionalDiscountAmount, 0) AS TotalSaleDiscount
-                    FROM Sales s 
-                    JOIN SaleItems si ON s.SaleID = si.SaleID
+                            WHERE si2.SaleID = s.SaleID
+                        ), 0) - 
+                        ISNULL(s.TotalDiscountAmount, 0) - 
+                        ISNULL(s.PromotionalDiscountAmount, 0) AS AmountPaid
+                    FROM Sales s
                     WHERE s.Status = 'completed' 
                         AND s.CashierName = ? 
                         AND s.CreatedAt >= ?
                         {order_type_condition}
+                ),
+                PartiallyRefundedSales AS (
+                    SELECT 
+                        s.SaleID,
+                        s.PaymentMethod,
+                        -- For partially refunded sales, use the refund amount from RefundedOrders
+                        ISNULL(ro.RefundAmount, 0) AS RefundAmount
+                    FROM Sales s
+                    LEFT JOIN RefundedOrders ro ON s.SaleID = ro.SaleID
+                    WHERE s.Status IN ('completed')
+                        AND s.CashierName = ?
+                        AND s.CreatedAt >= ?
+                        AND ro.RefundID IS NOT NULL
+                        {order_type_condition}
+                ),
+                SaleItemsDetail AS (
+                    SELECT 
+                        si.SaleItemID,
+                        si.SaleID,
+                        si.Quantity,
+                        ISNULL(ri.RefundedQuantity, 0) AS RefundedQty
+                    FROM SaleItems si
+                    LEFT JOIN RefundedItems ri ON si.SaleItemID = ri.SaleItemID
+                    JOIN Sales s ON si.SaleID = s.SaleID
+                    WHERE s.Status = 'completed'
+                        AND s.CashierName = ?
+                        AND s.CreatedAt >= ?
+                        {order_type_condition}
                         {product_type_condition}
-                ),
-                RefundedAmounts AS (
-                    SELECT 
-                        ri.SaleItemID,
-                        SUM(ri.RefundAmount) AS TotalRefunded,
-                        SUM(ri.RefundedQuantity) AS RefundedQty
-                    FROM RefundedItems ri
-                    GROUP BY ri.SaleItemID
-                ),
-                SaleTotalsBeforeDiscount AS (
-                    SELECT 
-                        SaleID, 
-                        SUM(ItemSubtotal + AddonsTotal) AS GrossTotal
-                    FROM SaleItemTotals 
-                    GROUP BY SaleID
-                ),
-                FinalSaleItems AS (
-                    SELECT 
-                        sit.SaleID,
-                        sit.PaymentMethod,
-                        sit.SaleItemID,
-                        sit.Quantity,
-                        (sit.ItemSubtotal + sit.AddonsTotal) - 
-                        (
-                            CASE 
-                                WHEN stbd.GrossTotal > 0 
-                                THEN ((sit.ItemSubtotal + sit.AddonsTotal) / stbd.GrossTotal) * sit.TotalSaleDiscount
-                                ELSE 0
-                            END
-                        ) AS LineTotalAfterDiscount,
-                        ISNULL(ra.TotalRefunded, 0) AS RefundedAmount,
-                        ISNULL(ra.RefundedQty, 0) AS RefundedQty
-                    FROM SaleItemTotals sit
-                    JOIN SaleTotalsBeforeDiscount stbd ON sit.SaleID = stbd.SaleID
-                    LEFT JOIN RefundedAmounts ra ON sit.SaleItemID = ra.SaleItemID
                 ),
                 NetSales AS (
                     SELECT 
-                        SaleID,
-                        PaymentMethod,
-                        SaleItemID,
-                        Quantity - RefundedQty AS NetQuantity,
-                        LineTotalAfterDiscount - RefundedAmount AS NetAmount
-                    FROM FinalSaleItems
-                    WHERE (LineTotalAfterDiscount - RefundedAmount) > 0
+                        cs.PaymentMethod,
+                        cs.AmountPaid - ISNULL(pr.RefundAmount, 0) AS NetAmount
+                    FROM CompletedSales cs
+                    LEFT JOIN PartiallyRefundedSales pr ON cs.SaleID = pr.SaleID
+                    WHERE (cs.AmountPaid - ISNULL(pr.RefundAmount, 0)) > 0
+                ),
+                ItemsSoldCalc AS (
+                    SELECT 
+                        SUM(Quantity - RefundedQty) AS ItemsSold
+                    FROM SaleItemsDetail
                 )
                 SELECT 
-                    ISNULL(SUM(NetAmount), 0) AS TotalSales,
-                    ISNULL(SUM(CASE WHEN PaymentMethod = 'Cash' THEN NetAmount ELSE 0 END), 0) AS CashSales,
-                    ISNULL(SUM(CASE WHEN PaymentMethod IN ('GCash', 'E-Wallet') THEN NetAmount ELSE 0 END), 0) AS GcashSales,
-                    ISNULL(SUM(NetQuantity), 0) AS ItemsSold
-                FROM NetSales
+                    ISNULL((SELECT SUM(NetAmount) FROM NetSales), 0) AS TotalSales,
+                    ISNULL((SELECT SUM(NetAmount) FROM NetSales WHERE PaymentMethod = 'Cash'), 0) AS CashSales,
+                    ISNULL((SELECT SUM(NetAmount) FROM NetSales WHERE PaymentMethod IN ('GCash', 'E-Wallet')), 0) AS GcashSales,
+                    ISNULL((SELECT ItemsSold FROM ItemsSoldCalc), 0) AS ItemsSold
             """
-            params = (request.cashierName, session_start_time)
+            
+            # Need to pass cashierName and session_start_time multiple times for each CTE
+            params = (
+                request.cashierName, session_start_time,  # CompletedSales
+                request.cashierName, session_start_time,  # PartiallyRefundedSales
+                request.cashierName, session_start_time   # SaleItemsDetail
+            )
+            
             await cursor.execute(sql, params)
             row = await cursor.fetchone()
             if row: 
@@ -469,79 +476,76 @@ async def get_sales_metrics_by_date(
             product_type_condition = get_product_type_condition(request.productType)
 
             sql = f"""
-                WITH SaleItemTotals AS (
+                WITH CompletedSales AS (
                     SELECT 
                         s.SaleID,
                         s.PaymentMethod,
-                        si.SaleItemID,
-                        si.Quantity,
-                        (si.UnitPrice * si.Quantity) AS ItemSubtotal,
-                        ISNULL((
-                            SELECT SUM(a.Price * sia.Quantity)
-                            FROM SaleItemAddons sia 
-                            JOIN Addons a ON sia.AddonID = a.AddonID
-                            WHERE sia.SaleItemID = si.SaleItemID
-                        ), 0) AS AddonsTotal,
-                        ISNULL(s.TotalDiscountAmount, 0) + ISNULL(s.PromotionalDiscountAmount, 0) AS TotalSaleDiscount
-                    FROM Sales s 
-                    JOIN SaleItems si ON s.SaleID = si.SaleID
+                        s.CreatedAt
+                    FROM Sales s
                     WHERE s.Status = 'completed' 
                         AND s.CashierName = ? 
                         AND CAST(s.CreatedAt AS DATE) = ?
                         {order_type_condition}
+                ),
+                SaleWithRefunds AS (
+                    SELECT 
+                        cs.SaleID,
+                        cs.PaymentMethod,
+                        -- Calculate original sale total (items + addons - discounts)
+                        ISNULL((
+                            SELECT SUM(si2.UnitPrice * si2.Quantity)
+                            FROM SaleItems si2
+                            WHERE si2.SaleID = cs.SaleID
+                        ), 0) + 
+                        ISNULL((
+                            SELECT SUM(a.Price * sia.Quantity)
+                            FROM SaleItems si2
+                            JOIN SaleItemAddons sia ON si2.SaleItemID = sia.SaleItemID
+                            JOIN Addons a ON sia.AddonID = a.AddonID
+                            WHERE si2.SaleID = cs.SaleID
+                        ), 0) - 
+                        ISNULL((SELECT TotalDiscountAmount FROM Sales WHERE SaleID = cs.SaleID), 0) - 
+                        ISNULL((SELECT PromotionalDiscountAmount FROM Sales WHERE SaleID = cs.SaleID), 0) AS GrossAmount,
+                        -- Get total refund amount for this sale
+                        ISNULL((
+                            SELECT SUM(ro.RefundAmount)
+                            FROM RefundedOrders ro
+                            WHERE ro.SaleID = cs.SaleID
+                        ), 0) AS RefundAmount
+                    FROM CompletedSales cs
+                ),
+                SaleItemsDetail AS (
+                    SELECT 
+                        si.SaleItemID,
+                        si.SaleID,
+                        si.Quantity,
+                        ISNULL((
+                            SELECT SUM(ri.RefundedQuantity)
+                            FROM RefundedItems ri
+                            WHERE ri.SaleItemID = si.SaleItemID
+                        ), 0) AS RefundedQty
+                    FROM SaleItems si
+                    JOIN CompletedSales cs ON si.SaleID = cs.SaleID
+                    WHERE 1=1
                         {product_type_condition}
-                ),
-                RefundedAmounts AS (
-                    SELECT 
-                        ri.SaleItemID,
-                        SUM(ri.RefundAmount) AS TotalRefunded,
-                        SUM(ri.RefundedQuantity) AS RefundedQty
-                    FROM RefundedItems ri
-                    GROUP BY ri.SaleItemID
-                ),
-                SaleTotalsBeforeDiscount AS (
-                    SELECT 
-                        SaleID, 
-                        SUM(ItemSubtotal + AddonsTotal) AS GrossTotal
-                    FROM SaleItemTotals 
-                    GROUP BY SaleID
-                ),
-                FinalSaleItems AS (
-                    SELECT 
-                        sit.SaleID,
-                        sit.PaymentMethod,
-                        sit.SaleItemID,
-                        sit.Quantity,
-                        (sit.ItemSubtotal + sit.AddonsTotal) - 
-                        (
-                            CASE 
-                                WHEN stbd.GrossTotal > 0 
-                                THEN ((sit.ItemSubtotal + sit.AddonsTotal) / stbd.GrossTotal) * sit.TotalSaleDiscount
-                                ELSE 0
-                            END
-                        ) AS LineTotalAfterDiscount,
-                        ISNULL(ra.TotalRefunded, 0) AS RefundedAmount,
-                        ISNULL(ra.RefundedQty, 0) AS RefundedQty
-                    FROM SaleItemTotals sit
-                    JOIN SaleTotalsBeforeDiscount stbd ON sit.SaleID = stbd.SaleID
-                    LEFT JOIN RefundedAmounts ra ON sit.SaleItemID = ra.SaleItemID
                 ),
                 NetSales AS (
                     SELECT 
-                        SaleID,
-                        PaymentMethod,
-                        SaleItemID,
-                        Quantity - RefundedQty AS NetQuantity,
-                        LineTotalAfterDiscount - RefundedAmount AS NetAmount
-                    FROM FinalSaleItems
-                    WHERE (LineTotalAfterDiscount - RefundedAmount) > 0
+                        swr.PaymentMethod,
+                        swr.GrossAmount - swr.RefundAmount AS NetAmount
+                    FROM SaleWithRefunds swr
+                    WHERE (swr.GrossAmount - swr.RefundAmount) > 0
+                ),
+                ItemsSoldCalc AS (
+                    SELECT 
+                        SUM(Quantity - RefundedQty) AS ItemsSold
+                    FROM SaleItemsDetail
                 )
                 SELECT 
-                    ISNULL(SUM(NetAmount), 0) AS TotalSales,
-                    ISNULL(SUM(CASE WHEN PaymentMethod = 'Cash' THEN NetAmount ELSE 0 END), 0) AS CashSales,
-                    ISNULL(SUM(CASE WHEN PaymentMethod IN ('GCash', 'E-Wallet') THEN NetAmount ELSE 0 END), 0) AS GcashSales,
-                    ISNULL(SUM(NetQuantity), 0) AS ItemsSold
-                FROM NetSales
+                    ISNULL((SELECT SUM(NetAmount) FROM NetSales), 0) AS TotalSales,
+                    ISNULL((SELECT SUM(NetAmount) FROM NetSales WHERE PaymentMethod = 'Cash'), 0) AS CashSales,
+                    ISNULL((SELECT SUM(NetAmount) FROM NetSales WHERE PaymentMethod IN ('GCash', 'E-Wallet')), 0) AS GcashSales,
+                    ISNULL((SELECT ItemsSold FROM ItemsSoldCalc), 0) AS ItemsSold
             """
             
             params = (request.cashierName, request.date)

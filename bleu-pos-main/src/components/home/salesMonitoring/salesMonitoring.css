@@ -529,10 +529,29 @@ body {
     margin: 0 0 16px 0;
     display: flex;
     align-items: center;
+    justify-content: space-between;
     gap: 10px;
     flex-shrink: 0;
     padding-bottom: 12px;
     border-bottom: 2px solid #e5e7eb;
+}
+
+.salesMon-view-all-btn {
+  background: none;
+  border: none;
+  color: #4B929D;
+  font-size: 14px;
+  font-weight: 600;
+  cursor: pointer;
+  padding: 0;
+  text-decoration: none;
+  transition: color 0.2s ease;
+  white-space: nowrap;
+  text-decoration: underline;
+}
+
+.salesMon-view-all-btn:hover {
+  color: #367680;
 }
 
 .salesMonTableWrapper {
