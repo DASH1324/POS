@@ -177,11 +177,13 @@ async def calculate_totals_and_discounts(sale_data: Sale, cursor):
 
     total_discount_amount = Decimal('0.0')
     applied_discounts_details = []
+    discount_names_with_amounts = []
+    
     if not sale_data.appliedDiscounts:
-        return subtotal, total_discount_amount, applied_discounts_details
+        return subtotal, total_discount_amount, applied_discounts_details, discount_names_with_amounts
 
     placeholders = ','.join(['?' for _ in sale_data.appliedDiscounts])
-    sql_fetch_discounts = f"SELECT id, discount_type, discount_value, minimum_spend FROM discounts WHERE name IN ({placeholders}) AND status = 'active'"
+    sql_fetch_discounts = f"SELECT id, name, discount_type, discount_value, minimum_spend FROM discounts WHERE name IN ({placeholders}) AND status = 'active'"
     await cursor.execute(sql_fetch_discounts, sale_data.appliedDiscounts)
     valid_discounts = await cursor.fetchall()
 
@@ -195,9 +197,60 @@ async def calculate_totals_and_discounts(sale_data: Sale, cursor):
                 discount_value = Decimal(str(discount.discount_value))
             total_discount_amount += discount_value
             applied_discounts_details.append({"id": discount.id, "amount": discount_value})
+            discount_names_with_amounts.append({
+                "name": discount.name,
+                "type": discount.discount_type,
+                "amount": float(discount_value)
+            })
     
     final_discount = min(total_discount_amount, subtotal)
-    return subtotal, final_discount, applied_discounts_details
+    return subtotal, final_discount, applied_discounts_details, discount_names_with_amounts
+
+# --- Helper function to build detailed change description ---
+def build_detailed_change_description(
+    items_data: list,
+    final_total: float,
+    payment_method: str,
+    discount_names: list,
+    promo_discount: float
+) -> str:
+    """Build a detailed human-readable description for blockchain logging"""
+    
+    # Build items summary
+    items_summary = []
+    for item in items_data:
+        item_desc = f"{item['quantity']}x {item['name']} (₱{item['price']:.2f})"
+        
+        # Add addons if present
+        if item.get('addons') and len(item['addons']) > 0:
+            addon_parts = []
+            for addon in item['addons']:
+                addon_parts.append(f"{addon['quantity']}x {addon['addon_name']} (₱{addon['price']:.2f})")
+            item_desc += f" with Add-ons: {', '.join(addon_parts)}"
+        
+        items_summary.append(item_desc)
+    
+    # Build discount/promotion summary
+    discount_summary = []
+    if discount_names:
+        for disc in discount_names:
+            discount_summary.append(f"Discount Applied: {disc['name']} (-₱{disc['amount']:.2f})")
+    
+    if promo_discount > 0:
+        discount_summary.append(f"Promotion Applied: Promotional Discount (-₱{promo_discount:.2f})")
+    
+    # Combine all parts
+    description_parts = [
+        f"New sale created with {len(items_data)} item(s):",
+        " | ".join(items_summary)
+    ]
+    
+    if discount_summary:
+        description_parts.append(" | ".join(discount_summary))
+    
+    description_parts.append(f"Total: ₱{final_total:.2f} | Payment: {payment_method}")
+    
+    return " | ".join(description_parts)
 
 @router_sales.post("/", status_code=status.HTTP_201_CREATED)
 async def create_sale(
@@ -215,7 +268,7 @@ async def create_sale(
         conn.autocommit = False 
         
         async with conn.cursor() as cursor:
-            subtotal, manual_discount, discount_details = await calculate_totals_and_discounts(sale, cursor)
+            subtotal, manual_discount, discount_details, discount_names = await calculate_totals_and_discounts(sale, cursor)
             promo_discount = Decimal(str(sale.promotionalDiscountAmount or 0.0))
             cashier_name = current_user.get("username", "SystemUser")
 
@@ -313,6 +366,15 @@ async def create_sale(
         total_combined_discount = manual_discount + promo_discount
         final_total = subtotal - total_combined_discount
         
+        # Build detailed change description
+        detailed_description = build_detailed_change_description(
+            items_data=items_data,
+            final_total=float(final_total),
+            payment_method=sale.paymentMethod,
+            discount_names=discount_names,
+            promo_discount=float(promo_discount)
+        )
+        
         blockchain_data = {
             "sale_id": sale_id,
             "order_type": sale.orderType,
@@ -326,7 +388,8 @@ async def create_sale(
             "final_total": float(final_total),
             "gcash_reference": sale.gcashReference,
             "status": "processing",
-            "applied_discounts": sale.appliedDiscounts,
+            "applied_discounts": discount_names,
+            "promotional_discount_applied": float(promo_discount) > 0,
             "total_items": len(sale.cartItems),
             "total_quantity": sum(item.quantity for item in sale.cartItems)
         }
@@ -335,7 +398,7 @@ async def create_sale(
         products, merchandise = separate_cart_items_by_type(sale.cartItems)
         background_tasks.add_task(process_inventory_deductions_background, products, merchandise, current_user['access_token'])
         
-        # Schedule blockchain logging as background task
+        # Schedule blockchain logging as background task with detailed description
         background_tasks.add_task(
             log_to_blockchain,
             service_identifier="POS_SALES",
@@ -343,7 +406,7 @@ async def create_sale(
             entity_type="Sale",
             entity_id=sale_id,
             actor_username=cashier_name,
-            change_description=f"New sale created: {len(items_data)} items, Total: ₱{final_total:.2f}, Payment: {sale.paymentMethod}",
+            change_description=detailed_description,
             data=blockchain_data,
             token=current_user['access_token']
         )

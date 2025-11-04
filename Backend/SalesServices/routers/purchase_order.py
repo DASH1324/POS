@@ -25,6 +25,8 @@ from database import get_db_connection
 oauth2_scheme = OAuth2PasswordBearer(tokenUrl="http://127.0.0.1:4000/auth/token")
 USER_SERVICE_ME_URL = "http://localhost:4000/auth/users/me"
 NOTIFICATION_SERVICE_URL = "http://localhost:9004/notifications/"
+BLOCKCHAIN_LOG_URL = "http://localhost:9005/blockchain/log"
+
 
 # --- Define the new router ---
 router_purchase_order = APIRouter(
@@ -100,6 +102,130 @@ async def process_inventory_restock_background(order_id: str, items_to_restock: 
     
     except Exception as e:
         logger.error(f"Background inventory restock error for order {order_id}: {e}", exc_info=True)
+
+# --- Blockchain Logging Helper ---
+async def log_to_blockchain(
+    service_identifier: str,
+    action: str,
+    entity_type: str,
+    entity_id: Union[int, str],
+    actor_username: str,
+    change_description: str,
+    data: dict,
+    token: str
+):
+    """Send activity logs to the blockchain service asynchronously."""
+    try:
+        async with httpx.AsyncClient(timeout=30.0) as client:
+            payload = {
+                "service_identifier": service_identifier,
+                "action": action,
+                "entity_type": entity_type,
+                "entity_id": entity_id,
+                "actor_username": actor_username,
+                "change_description": change_description,
+                "data": data
+            }
+            headers = {
+                "Authorization": f"Bearer {token}",
+                "Content-Type": "application/json"
+            }
+            response = await client.post(BLOCKCHAIN_LOG_URL, json=payload, headers=headers)
+            response.raise_for_status()
+            result = response.json()
+            logger.info(f"✅ Blockchain log created: TX {result.get('transaction_hash')} for {entity_type} ID {entity_id}")
+    except Exception as e:
+        logger.error(f"❌ Blockchain logging failed for {entity_type} {entity_id}: {e}", exc_info=True)
+
+async def build_detailed_update_description(
+    cursor,
+    order_id: int,
+    old_status: str,
+    new_status: str,
+    actor_username: str
+) -> str:
+    """
+    Builds a detailed, human-readable description for a status update,
+    including items, add-ons, and discounts.
+    """
+    # 1. Fetch items and their add-ons in one go
+    sql_items = """
+        SELECT
+            si.SaleItemID, si.ItemName, si.Quantity,
+            a.AddonName, sia.Quantity AS AddonQuantity
+        FROM SaleItems si
+        LEFT JOIN SaleItemAddons sia ON si.SaleItemID = sia.SaleItemID
+        LEFT JOIN Addons a ON sia.AddonID = a.AddonID
+        WHERE si.SaleID = ?
+        ORDER BY si.SaleItemID
+    """
+    await cursor.execute(sql_items, order_id)
+    item_rows = await cursor.fetchall()
+
+    # Group add-ons by item
+    items_dict = {}
+    for row in item_rows:
+        if row.SaleItemID not in items_dict:
+            items_dict[row.SaleItemID] = {
+                "name": row.ItemName,
+                "quantity": row.Quantity,
+                "addons": []
+            }
+        if row.AddonName:
+            items_dict[row.SaleItemID]["addons"].append(f"{row.AddonQuantity}x {row.AddonName}")
+
+    # Format the item strings
+    item_strings = []
+    for item in items_dict.values():
+        item_str = f"{item['quantity']}x {item['name']}"
+        if item['addons']:
+            addons_str = ", ".join(item['addons'])
+            item_str += f" (with: {addons_str})"
+        item_strings.append(item_str)
+    
+    product_list_str = " | ".join(item_strings)
+
+    # 2. Fetch applied discounts (both regular and promotional)
+    sql_discounts = """
+        SELECT
+            s.PromotionalDiscountAmount,
+            d.name AS DiscountName,
+            sd.DiscountAppliedAmount
+        FROM Sales s
+        LEFT JOIN SaleDiscounts sd ON s.SaleID = sd.SaleID
+        LEFT JOIN Discounts d ON sd.DiscountID = d.id
+        WHERE s.SaleID = ?
+    """
+    await cursor.execute(sql_discounts, order_id)
+    discount_rows = await cursor.fetchall()
+    
+    discount_parts = []
+    if discount_rows:
+        # Handle promotional discount first
+        promo_amount = discount_rows[0].PromotionalDiscountAmount or Decimal('0.0')
+        if promo_amount > 0:
+            discount_parts.append(f"Promotion -₱{promo_amount:.2f}")
+
+        # Handle itemized discounts, avoiding duplicates
+        seen_discounts = set()
+        for row in discount_rows:
+            if row.DiscountName and row.DiscountAppliedAmount:
+                part = f"{row.DiscountName} -₱{row.DiscountAppliedAmount:.2f}"
+                if part not in seen_discounts:
+                    discount_parts.append(part)
+                    seen_discounts.add(part)
+
+    discount_str = ""
+    if discount_parts:
+        discount_str = f" (Discounts: {', '.join(discount_parts)})"
+
+    # 3. Combine all parts into the final description
+    final_description = (
+        f"\"{product_list_str}\"{discount_str} status changed: "
+        f"{old_status} -> {new_status} by {actor_username}."
+    )
+    
+    return final_description
 
 # --- Pydantic Models ---
 class AddonItem(BaseModel):
@@ -311,6 +437,7 @@ async def get_processing_orders(
 )
 async def save_online_order(
     order_data: OnlineOrderRequest,
+    background_tasks: BackgroundTasks,
     current_user: dict = Depends(get_current_active_user)
 ):
     allowed_roles = ["cashier", "admin", "manager", "user"]
@@ -466,6 +593,29 @@ async def save_online_order(
                     await cursor.execute(sql_insert_sale_item_addon, new_sale_item_id, correct_pos_addon_id, 1)
 
             await conn.commit()
+            # --- Blockchain Logging (CREATE) ---
+            blockchain_payload = {
+                "sale_id": new_sale_id,
+                "order_type": order_data.order_type,
+                "payment_method": corrected_payment_method,
+                "cashier_name": order_data.cashier_name,
+                "customer_name": order_data.customer_name,
+                "status": pos_order_status,
+                "reference_number": final_reference_number,
+                "items": [item.dict() for item in order_data.items]
+            }
+            background_tasks.add_task(
+                log_to_blockchain,
+                service_identifier="PURCHASE_ORDER_SERVICE",
+                action="CREATE",
+                entity_type="PurchaseOrder",
+                entity_id=new_sale_id,
+                actor_username=current_user.get("username"),
+                change_description=f"Created purchase order {new_sale_id} ({pos_order_status}) for {order_data.customer_name}.",
+                data=blockchain_payload,
+                token=current_user['access_token']
+            )
+
             
             log_msg = f"✅ Successfully saved online order"
             if order_data.online_order_id:
@@ -628,53 +778,75 @@ async def update_order_status(
     conn = await get_db_connection()
     try:
         async with conn.cursor() as cursor:
+            # Step 1: Check if the order exists and get its current status
+            await cursor.execute("SELECT Status FROM Sales WHERE SaleID = ?", parsed_id)
+            current_order = await cursor.fetchone()
+            if not current_order:
+                raise HTTPException(status_code=404, detail=f"Order '{order_id}' not found.")
+            
+            old_status = current_order.Status
+            actor = current_user.get("username")
+            action_type = "UPDATE"
+            
+            # Step 2: Generate the detailed description BEFORE committing the database changes
+            detailed_description = await build_detailed_update_description(
+                cursor,
+                parsed_id,
+                old_status,
+                request.newStatus,
+                actor
+            )
+            
+            # Step 3: Perform the database update
             if request.newStatus == 'cancelled':
+                if current_user.get("userRole") not in ["admin", "manager"]:
+                     raise HTTPException(status_code=403, detail="Only managers or admins can cancel orders.")
                 if not request.cancelDetails or not request.cancelDetails.managerUsername:
                     raise HTTPException(status_code=400, detail="Manager username required for cancellation.")
                 
-                items_to_restock = []
+                # Handle cancellation transaction
+                await conn.autocommit(False)
                 try:
-                    # Update status and save cancellation
                     await cursor.execute("UPDATE Sales SET Status = ?, UpdatedAt = GETDATE() WHERE SaleID = ?", (request.newStatus, parsed_id))
-                    if cursor.rowcount == 0:
-                        raise HTTPException(status_code=404, detail=f"Order '{order_id}' not found.")
-                    
                     await cursor.execute("INSERT INTO CancelledOrders (SaleID, ManagerUsername, CancelledAt) VALUES (?, ?, GETDATE())", (parsed_id, request.cancelDetails.managerUsername))
+                    await conn.commit()
                     
-                    # Get items to restock
+                    # Fetch items to restock after commit
                     await cursor.execute("SELECT ItemName, Quantity, Category FROM SaleItems WHERE SaleID = ?", parsed_id)
                     items_rows = await cursor.fetchall()
-                    items_to_restock = [
-                        {'ItemName': row.ItemName, 'Quantity': row.Quantity, 'Category': row.Category} 
-                        for row in items_rows
-                    ]
+                    items_to_restock = [{'ItemName': r.ItemName, 'Quantity': r.Quantity, 'Category': r.Category} for r in items_rows]
+                    if items_to_restock:
+                        background_tasks.add_task(process_inventory_restock_background, order_id, items_to_restock, current_user['access_token'])
                     
-                    await conn.commit()
-                    logger.info(f"Order {order_id} successfully cancelled by {request.cancelDetails.managerUsername}.")
-                
+                    action_type = "CANCEL"
+                    message = "Order has been cancelled. Inventory restock initiated."
+
                 except Exception as db_exc:
                     await conn.rollback()
-                    logger.error(f"DB error during cancellation for order {order_id}: {db_exc}", exc_info=True)
+                    logger.error(f"DB error during cancellation for {order_id}: {db_exc}", exc_info=True)
                     raise HTTPException(status_code=500, detail="Failed to save cancellation to DB.")
-                
-                # Schedule inventory restocking as background task
-                if items_to_restock:
-                    background_tasks.add_task(
-                        process_inventory_restock_background,
-                        order_id,
-                        items_to_restock,
-                        current_user['access_token']
-                    )
-                
-                return {"message": "Order has been cancelled. Inventory restock initiated in background."}
-            
+                finally:
+                    await conn.autocommit(True)
             else:
-                # Other status updates
+                # Handle all other status updates
                 await cursor.execute("UPDATE Sales SET Status = ?, UpdatedAt = GETDATE() WHERE SaleID = ?", (request.newStatus, parsed_id))
-                if cursor.rowcount == 0:
-                    raise HTTPException(status_code=404, detail=f"Order '{order_id}' not found.")
                 await conn.commit()
-                return {"message": f"Order status successfully updated to '{request.newStatus}'."}
+                message = f"Order status successfully updated to '{request.newStatus}'."
+
+            # Step 4: Schedule the blockchain log with the detailed description
+            background_tasks.add_task(
+                log_to_blockchain,
+                service_identifier="PURCHASE_ORDER_SERVICE",
+                action=action_type,
+                entity_type="PurchaseOrder",
+                entity_id=parsed_id,
+                actor_username=actor,
+                change_description=detailed_description,  # Use the detailed description here
+                data={"old_status": old_status, "new_status": request.newStatus, "manager_authorizer": request.cancelDetails.managerUsername if request.newStatus == 'cancelled' else None},
+                token=current_user['access_token']
+            )
+            
+            return {"message": message}
     
     finally:
         if conn: await conn.close()
@@ -941,7 +1113,25 @@ async def refund_order(
                     """, refund_id, detail['sale_item_id'], detail['quantity'], detail['refund_amount'])
                 
                 await conn.commit()
-                
+                # --- Blockchain Logging (FULL REFUND) ---
+                refund_data = {
+                    "refund_id": refund_id,
+                    "refund_type": "full",
+                    "total_amount": float(total_refund_amount),
+                    "refunded_items": refund_details,
+                    "manager": request.managerUsername
+                }
+                await log_to_blockchain(
+                    service_identifier="PURCHASE_ORDER_SERVICE",
+                    action="REFUND",
+                    entity_type="PurchaseOrder",
+                    entity_id=order_id,
+                    actor_username=request.managerUsername,
+                    change_description=f"Full refund processed for order {order_id} by {request.managerUsername}.",
+                    data=refund_data,
+                    token=current_user['access_token']
+                )
+
                 logger.info(
                     f"Full refund processed for order {order_id} by {request.managerUsername}. "
                     f"Refund ID: {refund_id}, Total Amount: {total_refund_amount}, Items: {len(refund_details)}"
@@ -1187,7 +1377,25 @@ async def partial_refund_order(
                 status_message = "Partial refund processed successfully."
             
             await conn.commit()
-            
+            # --- Blockchain Logging (PARTIAL REFUND) ---
+            refund_data = {
+                "refund_id": refund_id,
+                "refund_type": "partial",
+                "total_amount": float(total_refund_amount),
+                "refunded_items": refund_details,
+                "manager": request.managerUsername
+            }
+            await log_to_blockchain(
+                service_identifier="PURCHASE_ORDER_SERVICE",
+                action="REFUND",
+                entity_type="PurchaseOrder",
+                entity_id=order_id,
+                actor_username=request.managerUsername,
+                change_description=f"Partial refund processed for order {order_id} by {request.managerUsername}.",
+                data=refund_data,
+                token=current_user['access_token']
+            )
+
             logger.info(f"Partial refund processed for order {order_id} by {request.managerUsername}. Refund ID: {refund_id}, Amount: {total_refund_amount}")
             
             return {
@@ -1237,6 +1445,7 @@ async def partial_refund_order(
 async def partial_refund_order_today(
     order_id: str,
     request: PartialRefundOrderRequest,
+    background_tasks: BackgroundTasks,
     current_user: dict = Depends(get_current_active_user)
 ):
     """
@@ -1335,7 +1544,24 @@ async def partial_refund_order_today(
 
             await cursor.execute("UPDATE Sales SET UpdatedAt = GETDATE() WHERE SaleID = ?", parsed_id)
             await conn.commit()
-            
+            refund_data = {
+                "refund_id": refund_id,
+                "refund_type": "partial",
+                "total_amount": float(total_refund_amount),
+                "refunded_items": refund_details,
+                "manager": request.managerUsername
+            }
+            await log_to_blockchain(
+                service_identifier="PURCHASE_ORDER_SERVICE",
+                action="REFUND",
+                entity_type="PurchaseOrder",
+                entity_id=order_id,
+                actor_username=request.managerUsername,
+                change_description=f"Same-day refund processed for order {order_id} by {request.managerUsername}.",
+                data={"refund_type": "same-day"},
+                token=current_user['access_token']
+            )
+
             logger.info(f"Partial refund (today) processed for order {order_id} by {request.managerUsername}.")
             return {"message": "Partial refund processed successfully.", "order_id": order_id}
 
@@ -1436,7 +1662,34 @@ async def refund_order_today(
                     """, refund_id, item.SaleItemID, item.Quantity, item_total)
                 
                 await conn.commit()
-                
+                # --- Blockchain Logging (FULL SAME-DAY REFUND) ---
+                refund_data = {
+                    "refund_id": refund_id,
+                    "refund_type": "full",
+                    "total_amount": float(total_refund_amount),
+                    "refunded_items": [
+                        {
+                            "sale_item_id": item.SaleItemID,
+                            "item_name": item.ItemName,
+                            "quantity": item.Quantity,
+                            "refund_amount": float((item.UnitPrice * item.Quantity) + item.AddonTotal)
+                        }
+                        for item in order_items
+                    ],
+                    "manager": request.managerUsername
+                }
+                await log_to_blockchain(
+                    service_identifier="PURCHASE_ORDER_SERVICE",
+                    action="REFUND",
+                    entity_type="PurchaseOrder",
+                    entity_id=order_id,
+                    actor_username=request.managerUsername,
+                    change_description=f"Same-day full refund processed for order {order_id} by {request.managerUsername}.",
+                    data=refund_data,
+                    token=current_user['access_token']
+                )
+
+
                 logger.info(f"Full refund (today) processed for order {order_id} by {request.managerUsername}.")
                 
                 return {"message": "Order has been successfully refunded (full refund).", "order_id": order_id}
