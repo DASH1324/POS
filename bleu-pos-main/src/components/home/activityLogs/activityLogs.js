@@ -13,6 +13,8 @@ import {
   FaFilter,
   FaSearch,
   FaCube,
+  FaUndo,
+  FaBan,
 } from "react-icons/fa";
 import Lottie from "lottie-react";
 import loadingAnimation from "../../../assets/animation/loading.json";
@@ -42,13 +44,9 @@ const getPeriodText = (tab, customStart = null, customEnd = null) => {
       return `Date: ${yesterday.toLocaleDateString('en-US', { year: 'numeric', month: 'short', day: 'numeric' })}`;
     }
     case "week": {
-      const weekAgo = new Date(today);
-      weekAgo.setDate(today.getDate() - 7);
       return `Last 7 Days`;
     }
     case "month": {
-      const monthAgo = new Date(today);
-      monthAgo.setMonth(today.getMonth() - 1);
       return `Last 30 Days`;
     }
     case "custom": {
@@ -91,8 +89,12 @@ function BlockchainActivityLogs() {
 
   // Fetch blockchain logs
   useEffect(() => {
-    fetchLogs();
-  }, [serviceFilter, entityTypeFilter, actionFilter, dateFilter, customRange]);
+    if (activeTab === "activity") {
+      fetchLogs();
+    } else if (activeTab === "transaction") {
+      fetchTransactionLogs();
+    }
+  }, [serviceFilter, entityTypeFilter, actionFilter, dateFilter, customRange, activeTab]);
 
   // Fetch actor full names when logs are loaded
   useEffect(() => {
@@ -229,11 +231,132 @@ function BlockchainActivityLogs() {
     }
   };
 
+  const fetchTransactionLogs = async () => {
+    setIsLoading(true);
+    setError(null);
+
+    try {
+      const token = localStorage.getItem("authToken");
+
+      const params = {
+        // Filter for transaction-related services and actions
+        service: serviceFilter || undefined,
+        entity_type: entityTypeFilter || undefined,
+        action: actionFilter || undefined,
+      };
+      
+      // Add date filtering
+      if (dateFilter !== "all") {
+        const today = new Date();
+        let startDate, endDate;
+
+        switch (dateFilter) {
+          case "today":
+            startDate = formatDateForAPI(today);
+            endDate = formatDateForAPI(today);
+            break;
+          case "yesterday": {
+            const yesterday = new Date(today);
+            yesterday.setDate(today.getDate() - 1);
+            startDate = formatDateForAPI(yesterday);
+            endDate = formatDateForAPI(yesterday);
+            break;
+          }
+          case "week": {
+            const weekAgo = new Date(today);
+            weekAgo.setDate(today.getDate() - 7);
+            startDate = formatDateForAPI(weekAgo);
+            endDate = formatDateForAPI(today);
+            break;
+          }
+          case "month": {
+            const monthAgo = new Date(today);
+            monthAgo.setMonth(today.getMonth() - 1);
+            startDate = formatDateForAPI(monthAgo);
+            endDate = formatDateForAPI(today);
+            break;
+          }
+          case "custom":
+            if (customRange.start && customRange.end) {
+              startDate = customRange.start;
+              endDate = customRange.end;
+            }
+            break;
+        }
+
+        if (startDate && endDate) {
+          params.start_date = startDate;
+          params.end_date = endDate;
+        }
+      }
+      
+      params.limit = 100;
+
+      const response = await axios.get(`${BLOCKCHAIN_API_URL}/logs`, {
+        headers: { Authorization: `Bearer ${token}` },
+        params,
+      });
+
+      // Filter for transaction-related logs (Sales, Refunds, Cancellations)
+      const transactionLogs = response.data.filter(log => {
+        const isTransactionService = ['POS_SALES', 'PURCHASE_ORDER_SERVICE', 'POS_SALES_AUTO_CANCEL'].includes(log.service_identifier);
+        const isTransactionAction = ['CREATE', 'REFUND', 'CANCEL', 'AUTO_CANCEL'].includes(log.action);
+        return isTransactionService && isTransactionAction;
+      });
+
+      // Group logs by individual transaction (don't group multiple transactions together)
+      const grouped = groupTransactionLogs(transactionLogs);
+      setGroupedLogs(grouped);
+    } catch (err) {
+      console.error("Error fetching transaction logs:", err);
+      setError(err.response?.data?.detail || "Failed to fetch transaction logs");
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
   // Group logs by service + entity_type + entity_id
   const groupLogsByEntity = (logs) => {
     const groups = {};
 
     logs.forEach((log) => {
+      const key = `${log.service_identifier}_${log.entity_type}_${log.entity_id}`;
+
+      if (!groups[key]) {
+        groups[key] = {
+          id: key,
+          service: log.service_identifier,
+          entityType: log.entity_type,
+          entityId: log.entity_id,
+          firstTimestamp: log.created_at,
+          events: [],
+        };
+      }
+
+      groups[key].events.push(log);
+    });
+
+    // Sort events within each group by timestamp
+    Object.values(groups).forEach((group) => {
+      group.events.sort(
+        (a, b) => new Date(a.created_at) - new Date(b.created_at)
+      );
+      // Update first timestamp to earliest event
+      group.firstTimestamp = group.events[0]?.created_at;
+    });
+
+    // Convert to array and sort by first timestamp (newest first)
+    return Object.values(groups).sort(
+      (a, b) => new Date(b.firstTimestamp) - new Date(a.firstTimestamp)
+    );
+  };
+
+  // Group transaction logs - group by entity_id to show all events for same order
+  const groupTransactionLogs = (logs) => {
+    const groups = {};
+
+    logs.forEach((log) => {
+      // Group by entity_id (SaleID) to show all transactions for the same order together
       const key = `${log.service_identifier}_${log.entity_type}_${log.entity_id}`;
 
       if (!groups[key]) {
@@ -293,8 +416,11 @@ function BlockchainActivityLogs() {
       case "DISCOUNTS_SERVICE":
         return <FaTag className="activityLogs-icon-white" />;
       case "POS_SALES":
-      case "POS_SALES_AUTO_CANCEL":
         return <FaShoppingCart className="activityLogs-icon-white" />;
+      case "PURCHASE_ORDER_SERVICE":
+        return <FaShoppingCart className="activityLogs-icon-white" />;
+      case "POS_SALES_AUTO_CANCEL":
+        return <FaBan className="activityLogs-icon-white" />;
       case "PRODUCTS_SERVICE":
         return <FaBox className="activityLogs-icon-white" />;
       case "INVENTORY_SERVICE":
@@ -308,6 +434,7 @@ function BlockchainActivityLogs() {
     const colors = {
       DISCOUNTS_SERVICE: "#3b82f6",
       POS_SALES: "#10b981",
+      PURCHASE_ORDER_SERVICE: "#10b981",
       POS_SALES_AUTO_CANCEL: "#ef4444",
       PRODUCTS_SERVICE: "#f59e0b",
       INVENTORY_SERVICE: "#8b5cf6",
@@ -323,8 +450,12 @@ function BlockchainActivityLogs() {
         return <FaEdit className="activityLogs-action-icon" />;
       case "DELETE":
         return <FaTrash className="activityLogs-action-icon" />;
+      case "REFUND":
+        return <FaUndo className="activityLogs-action-icon" />;
+      case "CANCEL":
+        return <FaBan className="activityLogs-action-icon" />;
       case "AUTO_CANCEL":
-        return <FaTrash className="activityLogs-action-icon" />;
+        return <FaBan className="activityLogs-action-icon" />;
       default:
         return null;
     }
@@ -338,10 +469,33 @@ function BlockchainActivityLogs() {
         return "activityLogs-event-info";
       case "DELETE":
         return "activityLogs-event-error";
+      case "REFUND":
+        return "activityLogs-event-warning";
+      case "CANCEL":
+        return "activityLogs-event-error";
       case "AUTO_CANCEL":
         return "activityLogs-event-error";
       default:
         return "";
+    }
+  };
+
+  const getActionText = (action) => {
+    switch (action) {
+      case "CREATE":
+        return "created";
+      case "UPDATE":
+        return "updated";
+      case "DELETE":
+        return "deleted";
+      case "REFUND":
+        return "refunded";
+      case "CANCEL":
+        return "cancelled";
+      case "AUTO_CANCEL":
+        return "auto-cancelled";
+      default:
+        return action.toLowerCase();
     }
   };
 
@@ -365,12 +519,42 @@ function BlockchainActivityLogs() {
     return `${group.entityType}: ${entityName}`;
   };
 
+  const getTransactionTitle = (group) => {
+    const event = group.events[0];
+    
+    // Extract order type and items from change_description
+    let description = event.change_description;
+    
+    // Try to extract meaningful info from the description
+    if (description.includes('Received an Online Order:')) {
+      const match = description.match(/Received an Online Order: "(.*?)"/);
+      if (match) return `Online Order: ${match[1]}`;
+    } else if (description.includes('New sale created')) {
+      const match = description.match(/New sale created with \d+ item\(s\): (.*?) \|/);
+      if (match) return `New Sale: ${match[1]}`;
+    } else if (description.includes('Refund')) {
+      const match = description.match(/processed a .*?Refund: "(.*?)"/);
+      if (match) return `Refund: ${match[1]}`;
+    } else if (description.includes('updated orders:')) {
+      const match = description.match(/updated orders: "(.*?)"/);
+      if (match) return `Order Update: ${match[1]}`;
+    } else if (description.includes('cancelled')) {
+      return `Cancelled Order`;
+    } else if (description.includes('auto-cancelled')) {
+      return `Auto-Cancelled Order`;
+    }
+    
+    return `Transaction`;
+  };
+
   // Filter groups by search term
   const filteredGroups = groupedLogs.filter((group) => {
     if (!searchTerm) return true;
 
     const searchLower = searchTerm.toLowerCase();
-    const entityTitle = getEntityTitle(group).toLowerCase();
+    const entityTitle = activeTab === "transaction" 
+      ? getTransactionTitle(group).toLowerCase()
+      : getEntityTitle(group).toLowerCase();
     
     // Search by full name as well
     const actorNames = group.events
@@ -464,9 +648,7 @@ function BlockchainActivityLogs() {
                                       {actorNameMap[event.actor_username] ||
                                         event.actor_username}
                                     </strong>{" "}
-                                    {event.action === "AUTO_CANCEL" 
-                                      ? "auto-cancelled" 
-                                      : `${event.action.toLowerCase()}d`}:{" "}
+                                    {getActionText(event.action)}:{" "}
                                     {event.change_description}
                                   </div>
                                 </div>
@@ -485,11 +667,97 @@ function BlockchainActivityLogs() {
       );
     } else if (activeTab === "transaction") {
       return (
-        <div className="activityLogs-timeline">
-          <div className="activityLogs-empty-inline">
-            <p>Transaction logs content will be displayed here</p>
-          </div>
-        </div>
+        <>
+          {/* Loading State */}
+          {isLoading ? (
+            <div className="loading-container">
+              <div className="loading-bg">
+                <Lottie
+                  animationData={loadingAnimation}
+                  loop={true}
+                  className="loading-animation"
+                />
+              </div>
+            </div>
+          ) : (
+            /* Timeline */
+            <div className="activityLogs-timeline">
+              {/* Error State */}
+              {error ? (
+                <div className="activityLogs-error">
+                  <p>{error}</p>
+                  <button onClick={fetchTransactionLogs}>Retry</button>
+                </div>
+              ) : filteredGroups.length === 0 ? (
+                <div className="activityLogs-empty-inline">
+                  <p>No transaction logs found</p>
+                </div>
+              ) : (
+                <>
+                  <div className="activityLogs-timeline-line"></div>
+
+                  {filteredGroups.map((group) => {
+                    return (
+                      <div key={group.id} className="activityLogs-activity-item">
+                        {/* Main Transaction Header */}
+                        <div className="activityLogs-activity-header">
+                          {/* Icon Circle */}
+                          <div
+                            className="activityLogs-icon-circle"
+                            style={{
+                              backgroundColor: getServiceColor(group.service),
+                            }}
+                          >
+                            {getServiceIcon(group.service)}
+                          </div>
+
+                          {/* Content */}
+                          <div className="activityLogs-activity-content">
+                            <div className="activityLogs-activity-title-row">
+                              <span className="activityLogs-timestamp">
+                                {formatTimestamp(group.firstTimestamp)}
+                              </span>
+                              <h3 className="activityLogs-activity-title">
+                                {getTransactionTitle(group)}
+                              </h3>
+                            </div>
+
+                            {/* Chain of Transaction Events */}
+                            {group.events.map((event, eventIndex) => (
+                              <div key={eventIndex} className="activityLogs-event-item">
+                                <div className="activityLogs-event-dot"></div>
+                                <div className="activityLogs-event-content">
+                                  <div className="activityLogs-event-timestamp">
+                                    {formatTimestamp(event.created_at)}
+                                  </div>
+                                  <div
+                                    className={`activityLogs-event-message ${getActionClass(
+                                      event.action
+                                    )}`}
+                                  >
+                                    {getActionIcon(event.action)}
+                                    <div className="activityLogs-event-text">
+                                      <strong>
+                                        {actorNameMap[event.actor_username] ||
+                                          event.actor_username}
+                                      </strong>{" "}
+                                      {getActionText(event.action)}:{" "}
+                                      {event.change_description}
+                                    </div>
+                                  </div>
+                                </div>
+                              </div>
+                            ))}
+                          </div>
+                        </div>
+                      </div>
+                    );
+                  })}
+                </>
+              )}
+            </div>
+          )}
+        </>
       );
     }
   };
@@ -563,7 +831,7 @@ function BlockchainActivityLogs() {
                       <FaSearch className="activityLogs-search-icon" />
                       <input
                         type="text"
-                        placeholder="Search activities..."
+                        placeholder="Search..."
                         value={searchTerm}
                         onChange={(e) => setSearchTerm(e.target.value)}
                         className="activityLogs-search-input"
@@ -571,51 +839,55 @@ function BlockchainActivityLogs() {
                     </div>
                   </div>
 
-                  <div className="activityLogs-filter-item">
-                    <span>Service:</span>
-                    <select
-                      value={serviceFilter}
-                      onChange={(e) => setServiceFilter(e.target.value)}
-                      className="activityLogs-select"
-                    >
-                      <option value="">All Services</option>
-                      <option value="DISCOUNTS_SERVICE">Discounts</option>
-                      <option value="POS_SALES">POS Sales</option>
-                      <option value="POS_SALES_AUTO_CANCEL">Auto Cancel</option>
-                      <option value="PRODUCTS_SERVICE">Products</option>
-                      <option value="INVENTORY_SERVICE">Inventory</option>
-                    </select>
-                  </div>
+                  {activeTab === "transaction" && (
+                    <>
+                      <div className="activityLogs-filter-item">
+                        <span>Service:</span>
+                        <select
+                          value={serviceFilter}
+                          onChange={(e) => setServiceFilter(e.target.value)}
+                          className="activityLogs-select"
+                        >
+                          <option value="">All Services</option>
+                          <option value="DISCOUNTS_SERVICE">Discounts</option>
+                          <option value="POS_SALES">POS Sales</option>
+                          <option value="POS_SALES_AUTO_CANCEL">Auto Cancel</option>
+                          <option value="PRODUCTS_SERVICE">Products</option>
+                          <option value="INVENTORY_SERVICE">Inventory</option>
+                        </select>
+                      </div>
 
-                  <div className="activityLogs-filter-item">
-                    <span>Entity:</span>
-                    <select
-                      value={entityTypeFilter}
-                      onChange={(e) => setEntityTypeFilter(e.target.value)}
-                      className="activityLogs-select"
-                    >
-                      <option value="">All Types</option>
-                      <option value="Discount">Discount</option>
-                      <option value="Sale">Sale</option>
-                      <option value="Product">Product</option>
-                      <option value="Inventory">Inventory</option>
-                    </select>
-                  </div>
+                      <div className="activityLogs-filter-item">
+                        <span>Entity:</span>
+                        <select
+                          value={entityTypeFilter}
+                          onChange={(e) => setEntityTypeFilter(e.target.value)}
+                          className="activityLogs-select"
+                        >
+                          <option value="">All Types</option>
+                          <option value="Discount">Discount</option>
+                          <option value="Sale">Sale</option>
+                          <option value="Product">Product</option>
+                          <option value="Inventory">Inventory</option>
+                        </select>
+                      </div>
 
-                  <div className="activityLogs-filter-item">
-                    <span>Action:</span>
-                    <select
-                      value={actionFilter}
-                      onChange={(e) => setActionFilter(e.target.value)}
-                      className="activityLogs-select"
-                    >
-                      <option value="">All Actions</option>
-                      <option value="CREATE">Create</option>
-                      <option value="UPDATE">Update</option>
-                      <option value="DELETE">Delete</option>
-                      <option value="AUTO_CANCEL">Auto Cancel</option>
-                    </select>
-                  </div>
+                      <div className="activityLogs-filter-item">
+                        <span>Action:</span>
+                        <select
+                          value={actionFilter}
+                          onChange={(e) => setActionFilter(e.target.value)}
+                          className="activityLogs-select"
+                        >
+                          <option value="">All Actions</option>
+                          <option value="CREATE">Create</option>
+                          <option value="UPDATE">Update</option>
+                          <option value="DELETE">Delete</option>
+                          <option value="AUTO_CANCEL">Auto Cancel</option>
+                        </select>
+                      </div>
+                    </>
+                  )}
 
                   <button
                     className="activityLogs-clearBtn"

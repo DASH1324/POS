@@ -1,8 +1,14 @@
+from dotenv import load_dotenv
+import os
+
+# Load environment variables BEFORE any other imports
+load_dotenv()
+
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from contextlib import asynccontextmanager
 
-# Import blockchain router
+# Import blockchain router (this will now have access to .env variables)
 from routers.blockchain import router as blockchain_router
 
 @asynccontextmanager

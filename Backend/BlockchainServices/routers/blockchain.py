@@ -1,5 +1,5 @@
 """
-Blockchain Activity Logging Router
+Blockchain Activity Logging Router - FIXED VERSION
 Handles logging all POST and PATCH operations to BuildBear Blockchain
 """
 from fastapi import APIRouter, HTTPException, status, Depends
@@ -14,6 +14,8 @@ import hashlib
 import logging
 import httpx
 import os
+from dotenv import load_dotenv
+load_dotenv()
 
 from database import get_db_connection
 
@@ -27,11 +29,11 @@ oauth2_scheme = OAuth2PasswordBearer(tokenUrl="http://localhost:4000/auth/token"
 # --- Auth Configuration ---
 USER_SERVICE_ME_URL = "http://localhost:4000/auth/users/me"
 
-BUILDBEAR_RPC_URL = os.getenv("BUILDBEAR_RPC_URL", "https://rpc.buildbear.io/nutty-darkphoenix-eda50421")
-PRIVATE_KEY = os.getenv("PRIVATE_KEY", "3f2eb6735d6d2ff3ee4c3db83d2f84867f7530de32b07c7ecee5e37713c536bd")
-CONTRACT_ADDRESS = os.getenv("CONTRACT_ADDRESS", "0x14B5BB91Ea29056F2BECEC93fFeCEcaA26AC467B")  # Will be set after deployment
+BUILDBEAR_RPC_URL = os.getenv("BUILDBEAR_RPC_URL", "https://rpc.buildbear.io/intimate-warmachine-5f7e8f8e")
+PRIVATE_KEY = os.getenv("PRIVATE_KEY", "f0554b4fc4374dce18af629ab73e0d0729e56b1ae6077d2f393d34a83330a9a0")
+CONTRACT_ADDRESS = os.getenv("CONTRACT_ADDRESS", "0x14B5BB91Ea29056F2BECEC93fFeCEcaA26AC467B")
 
-# Smart Contract ABI for Activity Logging
+# COMPLETE Smart Contract ABI - This matches your Solidity contract exactly
 ACTIVITY_LOG_ABI = [
     {
         "inputs": [
@@ -46,6 +48,38 @@ ACTIVITY_LOG_ABI = [
         "name": "logActivity",
         "outputs": [{"internalType": "uint256", "name": "", "type": "uint256"}],
         "stateMutability": "nonpayable",
+        "type": "function"
+    },
+    {
+        "inputs": [],
+        "name": "getLogCount",
+        "outputs": [{"internalType": "uint256", "name": "", "type": "uint256"}],
+        "stateMutability": "view",
+        "type": "function"
+    },
+    {
+        "inputs": [{"internalType": "uint256", "name": "_logId", "type": "uint256"}],
+        "name": "getLog",
+        "outputs": [
+            {
+                "components": [
+                    {"internalType": "uint256", "name": "logId", "type": "uint256"},
+                    {"internalType": "string", "name": "serviceIdentifier", "type": "string"},
+                    {"internalType": "string", "name": "action", "type": "string"},
+                    {"internalType": "string", "name": "entityType", "type": "string"},
+                    {"internalType": "uint256", "name": "entityId", "type": "uint256"},
+                    {"internalType": "string", "name": "actorUsername", "type": "string"},
+                    {"internalType": "address", "name": "actorAddress", "type": "address"},
+                    {"internalType": "string", "name": "changeDescription", "type": "string"},
+                    {"internalType": "string", "name": "dataHash", "type": "string"},
+                    {"internalType": "uint256", "name": "timestamp", "type": "uint256"}
+                ],
+                "internalType": "struct ActivityLogger.ActivityLog",
+                "name": "",
+                "type": "tuple"
+            }
+        ],
+        "stateMutability": "view",
         "type": "function"
     },
     {
@@ -68,7 +102,7 @@ ACTIVITY_LOG_ABI = [
     },
     {
         "inputs": [],
-        "name": "getLogCount",
+        "name": "logCount",
         "outputs": [{"internalType": "uint256", "name": "", "type": "uint256"}],
         "stateMutability": "view",
         "type": "function"
@@ -79,7 +113,8 @@ ACTIVITY_LOG_ABI = [
             {"indexed": True, "internalType": "uint256", "name": "logId", "type": "uint256"},
             {"indexed": False, "internalType": "string", "name": "serviceIdentifier", "type": "string"},
             {"indexed": False, "internalType": "string", "name": "action", "type": "string"},
-            {"indexed": True, "internalType": "address", "name": "actorAddress", "type": "address"}
+            {"indexed": True, "internalType": "address", "name": "actorAddress", "type": "address"},
+            {"indexed": False, "internalType": "uint256", "name": "timestamp", "type": "uint256"}
         ],
         "name": "ActivityLogged",
         "type": "event"
@@ -98,9 +133,21 @@ try:
     
     # Initialize contract if address is provided
     if CONTRACT_ADDRESS and CONTRACT_ADDRESS.strip():
-        contract_checksum = Web3.to_checksum_address(CONTRACT_ADDRESS)
-        contract = w3.eth.contract(address=contract_checksum, abi=ACTIVITY_LOG_ABI)
-        logger.info(f"✅ Contract initialized at: {contract_checksum}")
+        try:
+            contract_checksum = Web3.to_checksum_address(CONTRACT_ADDRESS)
+            contract = w3.eth.contract(address=contract_checksum, abi=ACTIVITY_LOG_ABI)
+            logger.info(f"✅ Contract initialized at: {contract_checksum}")
+            
+            # Test contract connection
+            try:
+                log_count = contract.functions.logCount().call()
+                logger.info(f"✅ Contract verified. Current log count: {log_count}")
+            except Exception as e:
+                logger.error(f"⚠️  Contract call test failed: {e}")
+                contract = None
+        except Exception as e:
+            logger.error(f"⚠️  Invalid contract address: {e}")
+            contract = None
     else:
         logger.warning("⚠️  Contract address not set. Please deploy contract and set CONTRACT_ADDRESS environment variable.")
         
@@ -148,7 +195,7 @@ class BlockchainLogQueryResponse(BaseModel):
     block_number: Optional[int] = None
 
 # ========================================
-# AUTHORIZATION HELPER - FIXED
+# AUTHORIZATION HELPER
 # ========================================
 async def get_current_active_user(token: str = Depends(oauth2_scheme)):
     """Verify user token with auth service"""
@@ -218,7 +265,7 @@ async def save_to_database(
         await conn.close()
 
 # ========================================
-# BLOCKCHAIN INTERACTION FUNCTIONS
+# BLOCKCHAIN INTERACTION FUNCTIONS - FIXED
 # ========================================
 async def log_to_blockchain(log_data: ActivityLogRequest) -> ActivityLogResponse:
     """Send activity log to BuildBear blockchain"""
@@ -256,12 +303,27 @@ async def log_to_blockchain(log_data: ActivityLogRequest) -> ActivityLogResponse
 
         # Send transaction
         tx_hash = w3.eth.send_raw_transaction(signed_tx.raw_transaction)
+        logger.info(f"📤 Transaction sent: {tx_hash.hex()}")
         
         # Wait for transaction receipt
         tx_receipt = w3.eth.wait_for_transaction_receipt(tx_hash, timeout=120)
+        logger.info(f"✅ Transaction confirmed in block {tx_receipt['blockNumber']}")
         
-        # Get the log ID from the transaction logs
-        log_id = contract.functions.getLogCount().call() - 1
+        # FIXED: Parse the event from the receipt to get the log ID
+        log_id = None
+        try:
+            # Get ActivityLogged event from receipt
+            event_logs = contract.events.ActivityLogged().process_receipt(tx_receipt)
+            if event_logs:
+                log_id = event_logs[0]['args']['logId']
+                logger.info(f"✅ Log ID from event: {log_id}")
+        except Exception as e:
+            logger.warning(f"⚠️  Could not parse event, using logCount instead: {e}")
+        
+        # Fallback: Get log ID from contract state
+        if log_id is None:
+            log_id = contract.functions.logCount().call() - 1
+            logger.info(f"✅ Log ID from logCount: {log_id}")
         
         # Save to database
         await save_to_database(
@@ -304,24 +366,6 @@ async def create_activity_log(
     """
     Log an activity to the blockchain.
     This should be called by other microservices after successful POST/PATCH operations.
-    
-    Example usage from other services:
-    ```python
-    async with httpx.AsyncClient() as client:
-        await client.post(
-            "http://localhost:9005/blockchain/log",
-            json={
-                "service_identifier": "POS_SALES",
-                "action": "CREATE",
-                "entity_type": "Sale",
-                "entity_id": sale_id,
-                "actor_username": current_user["username"],
-                "change_description": "New sale created",
-                "data": sale_data
-            },
-            headers={"Authorization": f"Bearer {token}"}
-        )
-    ```
     """
     # Ensure actor username matches authenticated user
     if log_data.actor_username != current_user.get("username"):
@@ -333,7 +377,7 @@ async def create_activity_log(
     return result
     
 # ========================================
-# API ENDPOINTS - FIXED AUTHENTICATION
+# API ENDPOINTS - FIXED
 # ========================================
 @router.get("/logs", response_model=List[BlockchainLogQueryResponse])
 async def get_activity_logs(
@@ -379,109 +423,14 @@ async def get_activity_logs(
                 query += " AND Action = ?"
                 params.append(action)
             
-            # --- START: FIX ---
-            
-            # DO NOT add ORDER BY to the base query variable
-            # query += " ORDER BY CreatedAt DESC"  <-- REMOVE THIS LINE
-            
+            # Apply limit with proper SQL syntax
             final_query = ""
-            
-            # Apply limit
             if limit and limit > 0:
-                # Apply TOP, and move ORDER BY to the OUTER query
-                # Use T.CreatedAt to reference the column from the subquery alias 'T'
                 final_query = f"SELECT TOP {limit} * FROM ({query}) AS T ORDER BY T.CreatedAt DESC"
             else:
-                # If no limit, just add the ORDER BY to the main query
                 final_query = f"{query} ORDER BY CreatedAt DESC"
             
             await cursor.execute(final_query, tuple(params))
-            
-            # --- END: FIX ---
-            
-            rows = await cursor.fetchall()
-            
-            results = []
-            for row in rows:
-                results.append(BlockchainLogQueryResponse(
-                    log_id=row.BlockchainLogID,
-                    service_identifier=row.ServiceIdentifier,
-                    action=row.Action,
-                    entity_type=row.EntityType,
-                    entity_id=row.EntityID,
-                    actor_username=row.ActorUsername,
-                    actor_address=row.ActorAddress,
-                    change_description=row.ChangeDescription,
-                    data_hash=row.DataHash,
-                    timestamp=int(row.CreatedAt.timestamp()),
-                    created_at=row.CreatedAt.isoformat(),
-                    transaction_hash=row.TransactionHash,
-                    block_number=row.BlockNumber
-                ))
-            
-            return results
-    
-    except Exception as e:
-        logger.error(f"❌ Failed to query logs: {e}", exc_info=True)
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Failed to retrieve logs: {str(e)}"
-        )
-    finally:
-        await conn.close()
-
-@router.get("/logs", response_model=List[BlockchainLogQueryResponse])
-async def get_activity_logs(
-    service: Optional[str] = None,
-    entity_type: Optional[str] = None,
-    actor_username: Optional[str] = None,
-    action: Optional[str] = None,
-    limit: int = 50,
-    current_user: dict = Depends(get_current_active_user)
-):
-    """
-    Query activity logs from the database.
-    Filters: service, entity_type, actor_username, action
-    """
-    conn = await get_db_connection()
-    try:
-        async with conn.cursor() as cursor:
-            # Build dynamic query
-            query = """
-                SELECT 
-                    BlockchainLogID, TransactionHash, BlockNumber,
-                    ServiceIdentifier, Action, EntityType, EntityID,
-                    ActorUsername, ActorAddress, ChangeDescription,
-                    DataHash, CreatedAt
-                FROM BlockchainActivityLogs
-                WHERE 1=1
-            """
-            params = []
-            
-            if service:
-                query += " AND ServiceIdentifier = ?"
-                params.append(service)
-            
-            if entity_type:
-                query += " AND EntityType = ?"
-                params.append(entity_type)
-            
-            if actor_username:
-                query += " AND ActorUsername = ?"
-                params.append(actor_username)
-            
-            if action:
-                query += " AND Action = ?"
-                params.append(action)
-            
-            query += " ORDER BY CreatedAt DESC"
-            
-            # Apply limit
-            if limit and limit > 0:
-                await cursor.execute(f"SELECT TOP {limit} * FROM ({query}) AS T", tuple(params))
-            else:
-                await cursor.execute(query, tuple(params))
-            
             rows = await cursor.fetchall()
             
             results = []
@@ -526,8 +475,8 @@ async def get_activity_log_by_id(
         )
     
     try:
-        # Query from blockchain
-        log_data = contract.functions.activityLogs(log_id).call()
+        # Query from blockchain using the getLog function
+        log_data = contract.functions.getLog(log_id).call()
         
         # Query transaction details from database
         conn = await get_db_connection()
@@ -582,7 +531,7 @@ async def verify_log_integrity(
     
     try:
         # Get log from blockchain
-        log_data = contract.functions.activityLogs(log_id).call()
+        log_data = contract.functions.getLog(log_id).call()
         blockchain_hash = log_data[8]  # dataHash field
         
         # Calculate hash of provided data
@@ -620,6 +569,14 @@ async def blockchain_status():
         block_number = w3.eth.block_number if is_connected else None
         balance = w3.eth.get_balance(account.address) if is_connected else None
         
+        # Try to get log count if contract is initialized
+        log_count = None
+        if contract:
+            try:
+                log_count = contract.functions.logCount().call()
+            except Exception as e:
+                logger.warning(f"Could not get log count: {e}")
+        
         return {
             "status": "connected" if is_connected else "disconnected",
             "connected": is_connected,
@@ -629,7 +586,8 @@ async def blockchain_status():
             "balance_eth": str(w3.from_wei(balance, 'ether')) if balance else None,
             "latest_block": block_number,
             "contract_address": CONTRACT_ADDRESS if contract else None,
-            "contract_deployed": bool(contract)
+            "contract_deployed": bool(contract),
+            "total_logs": log_count
         }
     except Exception as e:
         return {

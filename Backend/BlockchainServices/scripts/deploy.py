@@ -1,28 +1,27 @@
 """
-Automated Smart Contract Deployment Script for BuildBear
-This will compile and deploy the ActivityLog contract automatically
+Quick Deployment Script for ActivityLogger Contract
+Run this in a NEW terminal while your service is running
 """
 from web3 import Web3
 from eth_account import Account
-from solcx import compile_source, install_solc
+from solcx import compile_source, install_solc, get_installed_solc_versions
 import json
-import os
 
-# ============================================
-# CONFIGURATION
-# ============================================
-BUILDBEAR_RPC_URL = "https://rpc.buildbear.io/nutty-darkphoenix-eda50421"
-PRIVATE_KEY = "3f2eb6735d6d2ff3ee4c3db83d2f84867f7530de32b07c7ecee5e37713c536bd"
+print("\n" + "="*70)
+print("🚀 DEPLOYING ACTIVITYLOGGER CONTRACT")
+print("="*70 + "\n")
 
-# ============================================
-# SMART CONTRACT SOURCE CODE
-# ============================================
+# Configuration
+BUILDBEAR_RPC_URL = "https://rpc.buildbear.io/intimate-warmachine-5f7e8f8e"
+PRIVATE_KEY = "f0554b4fc4374dce18af629ab73e0d0729e56b1ae6077d2f393d34a83330a9a0"
+
+# Your contract source
 CONTRACT_SOURCE = '''
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.0;
 
-contract ActivityLog {
-    struct Log {
+contract ActivityLogger {
+    struct ActivityLog {
         uint256 logId;
         string serviceIdentifier;
         string action;
@@ -34,17 +33,18 @@ contract ActivityLog {
         string dataHash;
         uint256 timestamp;
     }
-
-    mapping(uint256 => Log) public activityLogs;
-    uint256 private logCounter;
-
+    
+    mapping(uint256 => ActivityLog) public activityLogs;
+    uint256 public logCount;
+    
     event ActivityLogged(
         uint256 indexed logId,
         string serviceIdentifier,
         string action,
-        address indexed actorAddress
+        address indexed actorAddress,
+        uint256 timestamp
     );
-
+    
     function logActivity(
         string memory _serviceIdentifier,
         string memory _action,
@@ -54,9 +54,8 @@ contract ActivityLog {
         string memory _changeDescription,
         string memory _dataHash
     ) public returns (uint256) {
-        uint256 newLogId = logCounter;
-        
-        activityLogs[newLogId] = Log({
+        uint256 newLogId = logCount;
+        activityLogs[newLogId] = ActivityLog({
             logId: newLogId,
             serviceIdentifier: _serviceIdentifier,
             action: _action,
@@ -68,182 +67,157 @@ contract ActivityLog {
             dataHash: _dataHash,
             timestamp: block.timestamp
         });
-
-        emit ActivityLogged(newLogId, _serviceIdentifier, _action, msg.sender);
-        
-        logCounter++;
+        logCount++;
+        emit ActivityLogged(newLogId, _serviceIdentifier, _action, msg.sender, block.timestamp);
         return newLogId;
     }
-
+    
     function getLogCount() public view returns (uint256) {
-        return logCounter;
+        return logCount;
+    }
+    
+    function getLog(uint256 _logId) public view returns (ActivityLog memory) {
+        require(_logId < logCount, "Log does not exist");
+        return activityLogs[_logId];
+    }
+    
+    function getLogsByService(string memory _serviceIdentifier, uint256 _limit) 
+        public view returns (ActivityLog[] memory) 
+    {
+        uint256 matchCount = 0;
+        for (uint256 i = 0; i < logCount && matchCount < _limit; i++) {
+            if (keccak256(bytes(activityLogs[i].serviceIdentifier)) == keccak256(bytes(_serviceIdentifier))) {
+                matchCount++;
+            }
+        }
+        ActivityLog[] memory result = new ActivityLog[](matchCount);
+        uint256 resultIndex = 0;
+        for (uint256 i = 0; i < logCount && resultIndex < matchCount; i++) {
+            if (keccak256(bytes(activityLogs[i].serviceIdentifier)) == keccak256(bytes(_serviceIdentifier))) {
+                result[resultIndex] = activityLogs[i];
+                resultIndex++;
+            }
+        }
+        return result;
+    }
+    
+    function getLogsByActor(string memory _actorUsername, uint256 _limit) 
+        public view returns (ActivityLog[] memory) 
+    {
+        uint256 matchCount = 0;
+        for (uint256 i = 0; i < logCount && matchCount < _limit; i++) {
+            if (keccak256(bytes(activityLogs[i].actorUsername)) == keccak256(bytes(_actorUsername))) {
+                matchCount++;
+            }
+        }
+        ActivityLog[] memory result = new ActivityLog[](matchCount);
+        uint256 resultIndex = 0;
+        for (uint256 i = 0; i < logCount && resultIndex < matchCount; i++) {
+            if (keccak256(bytes(activityLogs[i].actorUsername)) == keccak256(bytes(_actorUsername))) {
+                result[resultIndex] = activityLogs[i];
+                resultIndex++;
+            }
+        }
+        return result;
+    }
+    
+    function verifyLogIntegrity(uint256 _logId, string memory _dataHash) 
+        public view returns (bool) 
+    {
+        require(_logId < logCount, "Log does not exist");
+        return keccak256(bytes(activityLogs[_logId].dataHash)) == keccak256(bytes(_dataHash));
     }
 }
 '''
 
-# ============================================
-# DEPLOYMENT SCRIPT
-# ============================================
-def deploy_contract():
-    print("=" * 60)
-    print("🚀 DEPLOYING ACTIVITYLOG CONTRACT TO BUILDBEAR")
-    print("=" * 60)
-    
-    # Step 1: Connect to BuildBear
-    print("\n📡 Step 1: Connecting to BuildBear...")
+try:
+    # Connect
+    print("📡 Connecting to BuildBear...")
     w3 = Web3(Web3.HTTPProvider(BUILDBEAR_RPC_URL))
-    
     if not w3.is_connected():
-        print("❌ Failed to connect to BuildBear!")
-        return
+        print("❌ Connection failed!")
+        exit(1)
     
     account = Account.from_key(PRIVATE_KEY)
     balance = w3.eth.get_balance(account.address)
+    print(f"✅ Connected! Account: {account.address}")
+    print(f"💰 Balance: {w3.from_wei(balance, 'ether')} ETH\n")
     
-    print(f"✅ Connected to BuildBear")
-    print(f"   Account: {account.address}")
-    print(f"   Balance: {w3.from_wei(balance, 'ether')} ETH")
+    # Install solc
+    print("🔧 Setting up Solidity compiler...")
+    installed = get_installed_solc_versions()
+    if '0.8.0' not in [str(v) for v in installed]:
+        print("   Installing Solidity 0.8.0...")
+        install_solc('0.8.0')
+    print("✅ Compiler ready\n")
     
-    if balance == 0:
-        print("⚠️  Warning: Account has 0 balance. You may need to fund it.")
+    # Compile
+    print("⚙️  Compiling contract...")
+    compiled = compile_source(CONTRACT_SOURCE, output_values=['abi', 'bin'], solc_version='0.8.0')
+    _, contract_interface = compiled.popitem()
+    bytecode = contract_interface['bin']
+    abi = contract_interface['abi']
+    print("✅ Compiled!\n")
     
-    # Step 2: Install and compile Solidity
-    print("\n🔧 Step 2: Installing Solidity compiler...")
-    try:
-        # Try to install 0.8.0, if it fails, try other versions
-        try:
-            install_solc('0.8.0')
-            print("✅ Solidity compiler 0.8.0 installed")
-        except Exception as e:
-            print(f"⚠️  0.8.0 installation failed, trying 0.8.19...")
-            try:
-                install_solc('0.8.19')
-                print("✅ Solidity compiler 0.8.19 installed")
-            except Exception as e2:
-                print(f"⚠️  0.8.19 installation failed, trying latest available...")
-                # Get available versions and install the latest
-                available_versions = install_solc.get_installable_solc_versions()
-                if available_versions:
-                    latest_version = max(available_versions)
-                    install_solc(latest_version)
-                    print(f"✅ Solidity compiler {latest_version} installed")
-                else:
-                    raise Exception("No Solidity versions available for installation")
-    except Exception as e:
-        print(f"❌ Failed to install Solidity compiler: {e}")
-        return
+    # Deploy
+    print("📤 Deploying to blockchain...")
+    Contract = w3.eth.contract(abi=abi, bytecode=bytecode)
+    nonce = w3.eth.get_transaction_count(account.address)
     
-    print("\n⚙️  Step 3: Compiling smart contract...")
-    try:
-        # Try compiling with the installed version
-        compiled_sol = compile_source(CONTRACT_SOURCE, output_values=['abi', 'bin'])
-        contract_id, contract_interface = compiled_sol.popitem()
-        bytecode = contract_interface['bin']
-        abi = contract_interface['abi']
-        print("✅ Contract compiled successfully")
-    except Exception as e:
-        print(f"❌ Compilation failed: {e}")
-        print("ℹ️  Trying to install and use a different Solidity version...")
-        try:
-            # Try installing a different version and compile again
-            install_solc('0.8.19')
-            compiled_sol = compile_source(CONTRACT_SOURCE, output_values=['abi', 'bin'])
-            contract_id, contract_interface = compiled_sol.popitem()
-            bytecode = contract_interface['bin']
-            abi = contract_interface['abi']
-            print("✅ Contract compiled successfully with 0.8.19")
-        except Exception as e2:
-            print(f"❌ Compilation still failed: {e2}")
-            return
+    tx = Contract.constructor().build_transaction({
+        'from': account.address,
+        'nonce': nonce,
+        'gas': 3000000,
+        'gasPrice': w3.eth.gas_price
+    })
     
-    # Step 4: Deploy contract
-    print("\n📤 Step 4: Deploying contract to blockchain...")
-    try:
-        Contract = w3.eth.contract(abi=abi, bytecode=bytecode)
-        
-        # Get nonce
-        nonce = w3.eth.get_transaction_count(account.address)
-        
-        # Build transaction
-        transaction = Contract.constructor().build_transaction({
-            'from': account.address,
-            'nonce': nonce,
-            'gas': 3000000,
-            'gasPrice': w3.eth.gas_price
-        })
-        
-        # Sign transaction
-        signed_txn = account.sign_transaction(transaction)
-
-        # Send transaction
-        print("   Sending transaction...")
-        tx_hash = w3.eth.send_raw_transaction(signed_txn.raw_transaction)
-        print(f"   Transaction hash: {tx_hash.hex()}")
-        
-        # Wait for receipt
-        print("   Waiting for confirmation...")
-        tx_receipt = w3.eth.wait_for_transaction_receipt(tx_hash, timeout=120)
-        
-        contract_address = tx_receipt.contractAddress
-        
-        print("\n" + "=" * 60)
-        print("🎉 CONTRACT DEPLOYED SUCCESSFULLY!")
-        print("=" * 60)
-        print(f"\n📍 Contract Address: {contract_address}")
-        print(f"🔗 Transaction Hash: {tx_hash.hex()}")
-        print(f"📦 Block Number: {tx_receipt.blockNumber}")
-        print(f"⛽ Gas Used: {tx_receipt.gasUsed}")
-        
-        # Step 5: Save to .env file
-        print("\n💾 Step 5: Saving to .env file...")
-        env_content = f"""
-# BuildBear Blockchain Configuration
-BUILDBEAR_RPC_URL={BUILDBEAR_RPC_URL}
+    signed = account.sign_transaction(tx)
+    tx_hash = w3.eth.send_raw_transaction(signed.raw_transaction)
+    print(f"📝 TX: {tx_hash.hex()}")
+    print("⏳ Waiting for confirmation...")
+    
+    receipt = w3.eth.wait_for_transaction_receipt(tx_hash, timeout=120)
+    contract_address = receipt.contractAddress
+    
+    print("\n" + "="*70)
+    print("🎉 SUCCESS!")
+    print("="*70)
+    print(f"\n📍 Contract Address: {contract_address}")
+    print(f"🔗 TX Hash: {tx_hash.hex()}")
+    print(f"📦 Block: {receipt.blockNumber}")
+    print(f"⛽ Gas: {receipt.gasUsed}")
+    
+    # Test
+    print("\n🧪 Testing contract...")
+    deployed = w3.eth.contract(address=contract_address, abi=abi)
+    count = deployed.functions.logCount().call()
+    print(f"✅ Log count: {count}")
+    
+    # Save to .env
+    print("\n💾 Updating .env file...")
+    env_content = f"""BUILDBEAR_RPC_URL={BUILDBEAR_RPC_URL}
 PRIVATE_KEY={PRIVATE_KEY}
 CONTRACT_ADDRESS={contract_address}
 """
-        
-        with open('.env', 'w') as f:
-            f.write(env_content.strip())
-        
-        print("✅ Configuration saved to .env file")
-        
-        # Step 6: Save ABI
-        print("\n💾 Step 6: Saving contract ABI...")
-        with open('contract_abi.json', 'w') as f:
-            json.dump(abi, f, indent=2)
-        print("✅ ABI saved to contract_abi.json")
-        
-        print("\n" + "=" * 60)
-        print("✨ DEPLOYMENT COMPLETE!")
-        print("=" * 60)
-        print("\n📋 Next Steps:")
-        print("1. Set environment variable:")
-        print(f"   $env:CONTRACT_ADDRESS = '{contract_address}'")
-        print("\n2. Or restart your service to load from .env file")
-        print("\n3. Test the blockchain service:")
-        print("   python main.py")
-        
-        return contract_address
-        
-    except Exception as e:
-        print(f"❌ Deployment failed: {e}")
-        import traceback
-        traceback.print_exc()
-        return None
-
-# ============================================
-# MAIN EXECUTION
-# ============================================
-if __name__ == "__main__":
-    print("\n⚠️  IMPORTANT: Make sure you have installed required packages:")
-    print("   pip install web3 py-solc-x eth-account")
-    print("\nPress Enter to continue or Ctrl+C to cancel...")
-    input()
+    with open('.env', 'w') as f:
+        f.write(env_content)
+    print("✅ .env updated!")
     
-    contract_address = deploy_contract()
+    # Save ABI
+    with open('contract_abi.json', 'w') as f:
+        json.dump(abi, f, indent=2)
+    print("✅ ABI saved!")
     
-    if contract_address:
-        print("\n✅ You can now use your blockchain service!")
-    else:
-        print("\n❌ Deployment failed. Please check the errors above.")
+    print("\n" + "="*70)
+    print("✨ DEPLOYMENT COMPLETE!")
+    print("="*70)
+    print("\n📋 Next step: Your FastAPI service will auto-reload")
+    print("   and detect the new contract address!")
+    print("\n🌐 View on Explorer:")
+    print(f"   https://explorer.buildbear.io/intimate-warmachine-5f7e8f8e/address/{contract_address}")
+    print("\n" + "="*70 + "\n")
+    
+except Exception as e:
+    print(f"\n❌ Error: {e}")
+    import traceback
+    traceback.print_exc()
