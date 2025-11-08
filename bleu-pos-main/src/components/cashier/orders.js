@@ -9,6 +9,72 @@ const SALES_API_BASE_URL = 'http://127.0.0.1:9000';
 const ONLINE_API_BASE_URL = 'http://127.0.0.1:7004';
 const AUTH_API_BASE_URL = 'http://127.0.0.1:4000';
 const INVENTORY_API_BASE_URL = 'http://127.0.0.1:8002';
+const NOTIFICATION_API_BASE_URL = 'http://127.0.0.1:9004'; // Email service
+
+// Helper function to send order emails
+const sendOrderEmail = async (order, emailType, token) => {
+  try {
+    console.log(`📧 Preparing to send ${emailType} email for order ${order.id}`);
+
+    // Prepare email payload - customer_name will be used to fetch email from backend
+    const emailPayload = {
+      customer_name: order.customerName,  // Backend will use this to fetch email
+      order_id: String(order.id),
+      order_type: order.orderType,
+      status: order.status,
+      items: order.orderItems.map(item => ({
+        name: item.name,
+        quantity: item.quantity,
+        price: item.price,
+        addons: (item.addons || []).map(addon => ({
+          addon_id: addon.addon_id || addon.AddonID || 0,
+          addon_name: addon.addon_name || addon.AddonName || addon.name || '',
+          price: addon.price || addon.Price || 0
+        }))
+      })),
+      total: order.total,
+      payment_method: order.paymentMethod,
+      delivery_address: order.deliveryAddress || null,
+      phone_number: order.phoneNumber || null,
+      reference_number: order.reference_number || null
+    };
+
+    console.log('📧 Email Payload:', JSON.stringify(emailPayload, null, 2));
+
+    // Determine endpoint
+    const endpoint = emailType === 'accepted' 
+      ? '/email/send-order-accepted' 
+      : '/email/send-order-update';
+
+    // Send email with token in Authorization header (non-blocking)
+    const response = await fetch(`${NOTIFICATION_API_BASE_URL}${endpoint}`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${token}`  // Token will be forwarded to auth service
+      },
+      body: JSON.stringify(emailPayload)
+    });
+
+    if (response.ok) {
+      const result = await response.json();
+      if (result.success) {
+        console.log(`✅ Email sent successfully:`, result);
+        return { success: true };
+      } else {
+        console.warn(`⚠️ Email not sent: ${result.message}`);
+        return { success: false, reason: result.message };
+      }
+    } else {
+      const errorData = await response.json();
+      console.error(`❌ Failed to send email (${response.status}):`, errorData);
+      return { success: false, reason: errorData.detail || 'Unknown error' };
+    }
+  } catch (error) {
+    console.error(`❌ Error sending email:`, error);
+    return { success: false, reason: error.message };
+  }
+};
 
 function Orders() {
   const [activeTab, setActiveTab] = useState("store");
@@ -22,6 +88,7 @@ function Orders() {
   const [onlineOrders, setOnlineOrders] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
+  const [isUpdatingStatus, setIsUpdatingStatus] = useState(false);
 
   useEffect(() => {
     const storedUsername = localStorage.getItem('username');
@@ -45,6 +112,11 @@ function Orders() {
   const getTodayLocalDate = useCallback(() => getLocalDateString(new Date()), [getLocalDateString]);
 
   const fetchOrders = useCallback(async () => {
+    if (isUpdatingStatus) {
+      console.log('Skipping fetch - status update in progress');
+      return;
+    }
+
     if (storeOrders.length === 0 && onlineOrders.length === 0) {
       setLoading(true);
     }
@@ -74,35 +146,36 @@ function Orders() {
           const data = await storeResponse.value.json();
           const orders = Array.isArray(data) ? data : [];
           const mappedOrders = orders.map(order => {
-  return {
-    id: order.id, 
-    customerName: 'In-Store', 
-    date: new Date(order.date), 
-    orderType: order.orderType,
-    paymentMethod: order.paymentMethod || 'N/A', 
-    total: order.total, 
-    status: order.status ? order.status.toUpperCase() : 'UNKNOWN',
-    items: order.orderItems ? order.orderItems.reduce((acc, item) => acc + item.quantity, 0) : 0,
-    orderItems: order.orderItems ? order.orderItems.map(item => ({
-      saleItemId: item.saleItemId,
-      name: item.name,
-      quantity: item.quantity,
-      price: item.price,
-      category: item.category,
-      size: item.size || 'Standard', 
-      addons: item.addons || []
-    })) : [],
-    source: 'store',
-    subtotal: order.subtotal || 0,
-    promotionalDiscount: order.promotionalDiscount || 0,
-    manualDiscount: order.manualDiscount || 0,
-    appliedDiscounts: order.appliedDiscounts || [],
-    addOns: order.addOns || order.appliedAddOns || order.addons || 0,
-    cashierName: order.cashierName || 'Unknown',
-    reference_number: order.GCashReferenceNumber || null,
-    updatedAt: order.updatedAt || order.date
-  };
-}).filter(o => o.orderType === 'Dine in' || o.orderType === 'Take out');
+            return {
+              id: order.id, 
+              customerName: 'In-Store', 
+              date: new Date(order.date), 
+              orderType: order.orderType,
+              paymentMethod: order.paymentMethod || 'N/A', 
+              total: order.total, 
+              status: order.status ? order.status.toUpperCase() : 'UNKNOWN',
+              items: order.orderItems ? order.orderItems.reduce((acc, item) => acc + item.quantity, 0) : 0,
+              orderItems: order.orderItems ? order.orderItems.map(item => ({
+                saleItemId: item.saleItemId,
+                name: item.name,
+                quantity: item.quantity,
+                price: item.price,
+                category: item.category,
+                size: item.size || 'Standard', 
+                addons: item.addons || []
+              })) : [],
+              source: 'store',
+              subtotal: order.subtotal || 0,
+              promotionalDiscount: order.promotionalDiscount || 0,
+              manualDiscount: order.manualDiscount || 0,
+              appliedDiscounts: order.appliedDiscounts || [],
+              addOns: order.addOns || order.appliedAddOns || order.addons || 0,
+              cashierName: order.cashierName || 'Unknown',
+              reference_number: order.GCashReferenceNumber || null,
+              updatedAt: order.updatedAt || order.date,
+              email: order.email || order.customer_email || null
+            };
+          }).filter(o => o.orderType === 'Dine in' || o.orderType === 'Take out');
           
           newStoreOrders.push(...mappedOrders);
         } else {
@@ -155,7 +228,10 @@ function Orders() {
             discount: order.discount || order.applied_discount || 0,
             addOns: totalAddOnsCost,
             cashierName: order.cashier_name || 'Unknown',
-            reference_number: order.reference_number || order.gcash_reference_number || null
+            reference_number: order.reference_number || order.gcash_reference_number || null,
+            email: order.emailAddress || order.email || null,
+            phoneNumber: order.phoneNumber || null,
+            deliveryAddress: order.deliveryAddress || null
           };
         });
       } else {
@@ -186,7 +262,7 @@ function Orders() {
     } finally {
       setLoading(false);
     }
-  }, [getLocalDateString, storeOrders.length, onlineOrders.length]);
+  }, [getLocalDateString, storeOrders.length, onlineOrders.length, isUpdatingStatus]);
 
   useEffect(() => {
     fetchOrders();
@@ -254,6 +330,8 @@ function Orders() {
 
     const headers = { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` };
 
+    setIsUpdatingStatus(true);
+
     if (newStatus === 'CANCELLED') {
       if (details && details.pin) {
         try {
@@ -280,6 +358,7 @@ function Orders() {
               const referenceNumber = orderToUpdate.reference_number;
               if (!referenceNumber) {
                 toast.error("Cannot cancel: Missing reference number for the order.");
+                setIsUpdatingStatus(false);
                 return;
               }
 
@@ -305,6 +384,7 @@ function Orders() {
             toast.success("Online order successfully cancelled!");
           }
 
+          // Update local state immediately
           setSelectedOrder(prev => 
             prev && prev.id === orderToUpdate.id 
               ? { ...prev, status: 'CANCELLED' } 
@@ -328,16 +408,17 @@ function Orders() {
               )
             );
           }
-          
-          fetchOrders().catch(err => console.error('Background refresh failed:', err));
 
         } catch (err) {
           console.error("Cancellation Error:", err);
           toast.error(`Error: ${err.message}`);
-          fetchOrders();
+        } finally {
+          setIsUpdatingStatus(false);
+          setTimeout(() => fetchOrders(), 500);
         }
       } else {
         toast.error("Manager PIN is required to cancel orders.");
+        setIsUpdatingStatus(false);
         return;
       }
     
@@ -347,6 +428,7 @@ function Orders() {
         const referenceNumber = orderToUpdate.reference_number;
         if (!referenceNumber) {
           toast.error("Cannot accept: Missing reference number for the order.");
+          setIsUpdatingStatus(false);
           return;
         }
 
@@ -425,19 +507,31 @@ function Orders() {
 
         toast.success("Order accepted and is now being prepared!");
         
+        // Update local state IMMEDIATELY to prevent disappearing
+        const updatedOrder = { ...orderToUpdate, status: 'PREPARING' };
+        
         setSelectedOrder(prev => 
           prev && prev.id === orderToUpdate.id 
-            ? { ...prev, status: 'PREPARING' } 
+            ? updatedOrder
             : null
         );
         
         setOnlineOrders(prevOrders => 
           prevOrders.map(order => 
             order.id === orderToUpdate.id 
-              ? { ...order, status: 'PREPARING' }
+              ? updatedOrder
               : order
           )
         );
+
+        // 🔔 SEND EMAIL NOTIFICATION FOR ORDER ACCEPTANCE (NON-BLOCKING)
+        sendOrderEmail(updatedOrder, 'accepted', token).then(result => {
+          if (result.success) {
+            console.log(`✅ Order acceptance email sent for order ${updatedOrder.id}`);
+          } else {
+            console.warn(`⚠️ Email not sent for order ${updatedOrder.id}: ${result.reason}`);
+          }
+        });
 
         // BACKGROUND: Run inventory deductions asynchronously (non-blocking)
         const performInventoryDeductions = async () => {
@@ -477,7 +571,6 @@ function Orders() {
 
             if (inventoryFailures.length > 0) {
               console.warn('Some inventory deductions failed:', inventoryFailures);
-              // Silently log - don't disrupt user experience
             }
           }
         };
@@ -487,13 +580,12 @@ function Orders() {
           console.error('Background inventory deduction error:', err);
         });
 
-        // Background refresh
-        fetchOrders().catch(err => console.error('Background refresh failed:', err));
-
       } catch (err) {
         console.error("Error accepting order:", err);
         toast.error(`Error: ${err.message}`);
-        fetchOrders();
+      } finally {
+        setIsUpdatingStatus(false);
+        setTimeout(() => fetchOrders(), 1000);
       }
     } else {
       // OTHER STATUS UPDATES
@@ -522,6 +614,7 @@ function Orders() {
             if (!referenceNumber) {
               console.error(`No reference number found for online order ${orderToUpdate.id}`);
               toast.error("Cannot update POS: Missing reference number for the order.");
+              setIsUpdatingStatus(false);
               return;
             }
             
@@ -533,6 +626,7 @@ function Orders() {
           }
         } else {
           toast.error("Cannot update order: Unknown source.");
+          setIsUpdatingStatus(false);
           return;
         }
 
@@ -557,9 +651,15 @@ function Orders() {
         
         toast.success("Order status updated successfully!");
 
+        // Update local state immediately
+        const updatedOrder = { 
+          ...orderToUpdate, 
+          status: newStatus.toUpperCase() 
+        };
+        
         setSelectedOrder(prev => 
           prev && prev.id === orderToUpdate.id 
-            ? { ...prev, status: newStatus.toUpperCase() } 
+            ? updatedOrder
             : null
         );
         
@@ -567,31 +667,55 @@ function Orders() {
           setOnlineOrders(prevOrders => 
             prevOrders.map(order => 
               order.id === orderToUpdate.id 
-                ? { ...order, status: newStatus.toUpperCase() }
+                ? updatedOrder
                 : order
             )
           );
+          
+          // 🔔 SEND EMAIL NOTIFICATION FOR STATUS UPDATE (NON-BLOCKING)
+          // Only send for certain statuses
+          const emailStatuses = [
+            'WAITING FOR PICK UP', 
+            'READY FOR PICK UP',
+            'DELIVERING', 
+            'COMPLETED', 
+            'DELIVERED',
+            'PICKED UP'
+          ];
+          
+          if (emailStatuses.includes(newStatus.toUpperCase())) {
+            console.log(`📧 Triggering email for status update: ${newStatus.toUpperCase()}`);
+            sendOrderEmail(updatedOrder, 'update', token).then(result => {
+              if (result.success) {
+                console.log(`✅ Status update email sent for order ${updatedOrder.id}`);
+              } else {
+                console.warn(`⚠️ Email not sent for order ${updatedOrder.id}: ${result.reason}`);
+              }
+            });
+          } else {
+            console.log(`ℹ️ No email sent for status: ${newStatus.toUpperCase()}`);
+          }
         } else {
           setStoreOrders(prevOrders => 
             prevOrders.map(order => 
               order.id === orderToUpdate.id 
-                ? { ...order, status: newStatus.toUpperCase() }
+                ? updatedOrder
                 : order
             )
           );
         }
-        
-        fetchOrders().catch(err => console.error('Background refresh failed:', err));
 
       } catch (err) {
         console.error("Error updating status:", err);
         toast.error(`Error: ${err.message}`);
-        fetchOrders();
+      } finally {
+        setIsUpdatingStatus(false);
+        setTimeout(() => fetchOrders(), 500);
       }
     }
   };
 
-  // NEW: Handle Full Refund
+  // Handle Full Refund
   const handleFullRefund = async (orderToUpdate, pin) => {
     const token = localStorage.getItem('authToken');
     if (!token) {
@@ -599,10 +723,11 @@ function Orders() {
       return;
     }
 
+    setIsUpdatingStatus(true);
+
     try {
       const headers = { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` };
 
-      // Verify PIN first
       const pinResponse = await fetch(`${AUTH_API_BASE_URL}/users/verify-pin`, {
         method: 'POST',
         headers: headers,
@@ -617,7 +742,6 @@ function Orders() {
       const pinData = await pinResponse.json();
       const managerUsername = pinData.managerUsername;
 
-      // Process refund
       const refundUrl = `${SALES_API_BASE_URL}/auth/purchase_orders/${orderToUpdate.id}/refund`;
       const refundBody = JSON.stringify({
         managerUsername: managerUsername,
@@ -639,7 +763,6 @@ function Orders() {
       
       toast.success(`Order refunded successfully by ${managerUsername}!`);
 
-      // Update local state
       setSelectedOrder(prev => 
         prev && prev.id === orderToUpdate.id 
           ? { ...prev, status: 'REFUNDED' } 
@@ -656,15 +779,16 @@ function Orders() {
         );
       }
 
-      fetchOrders().catch(err => console.error('Background refresh failed:', err));
-
     } catch (err) {
       console.error("Full refund error:", err);
       toast.error(`Error: ${err.message}`);
+    } finally {
+      setIsUpdatingStatus(false);
+      setTimeout(() => fetchOrders(), 500);
     }
   };
 
-  // NEW: Handle Partial Refund
+  // Handle Partial Refund
   const handlePartialRefund = async (orderToUpdate, itemsToRefund, pin) => {
     const token = localStorage.getItem('authToken');
     if (!token) {
@@ -672,10 +796,11 @@ function Orders() {
       return;
     }
 
+    setIsUpdatingStatus(true);
+
     try {
       const headers = { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` };
 
-      // Verify PIN first
       const pinResponse = await fetch(`${AUTH_API_BASE_URL}/users/verify-pin`, {
         method: 'POST',
         headers: headers,
@@ -690,7 +815,6 @@ function Orders() {
       const pinData = await pinResponse.json();
       const managerUsername = pinData.managerUsername;
 
-      // Prepare refund items
       const refundItems = itemsToRefund.map(item => ({
         saleItemId: parseInt(item.saleItemId),
         refundQuantity: parseInt(item.refundQuantity),
@@ -699,7 +823,6 @@ function Orders() {
         unitPrice: parseFloat(item.price)
       }));
 
-      // Process partial refund
       const refundUrl = `${SALES_API_BASE_URL}/auth/purchase_orders/${orderToUpdate.id}/partial-refund`;
       const refundBody = JSON.stringify({
         managerUsername: managerUsername,
@@ -725,12 +848,12 @@ function Orders() {
         `Refund Amount: ₱${result.total_refund_amount.toFixed(2)}`
       );
 
-      // Refresh orders
-      fetchOrders().catch(err => console.error('Background refresh failed:', err));
-
     } catch (err) {
       console.error("Partial refund error:", err);
       toast.error(`Error: ${err.message}`);
+    } finally {
+      setIsUpdatingStatus(false);
+      setTimeout(() => fetchOrders(), 500);
     }
   };
 
@@ -745,6 +868,7 @@ function Orders() {
     const matchesDate = filterDate ? order.localDateString === filterDate : true;
     const matchesStatus = filterStatus ? order.status.toUpperCase() === filterStatus.toUpperCase() : true;
     
+    // Modified filter logic - show PENDING to everyone, otherwise filter by cashier
     const isPending = order.status === 'PENDING';
     const matchesCashier = isPending || order.cashierName === username;
     
@@ -865,7 +989,17 @@ function Orders() {
                   } 
                 }
               ]}
-              onRowClicked={(row) => setSelectedOrder(row)}
+              onRowClicked={(row) => {
+                console.log('=== ROW CLICKED ===');
+                console.log('Order ID:', row.id);
+                console.log('Customer Name:', row.customerName);
+                console.log('Email:', row.email);
+                console.log('Status:', row.status);
+                console.log('Source:', row.source);
+                console.log('Full Order Object:', row);
+                console.log('==================');
+                setSelectedOrder(row);
+              }}
               noDataComponent={
                 <div className="orders-message-container">
                   {`No ${activeTab} orders found for the selected filters.`}
