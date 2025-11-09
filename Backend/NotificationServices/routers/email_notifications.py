@@ -24,6 +24,7 @@ SENDER_EMAIL = os.getenv("SENDER_EMAIL", "")
 SENDER_PASSWORD = os.getenv("SENDER_PASSWORD", "")
 SENDER_NAME = os.getenv("SENDER_NAME", "Bleu Bean Cafe")
 AUTH_API_BASE_URL = os.getenv("AUTH_API_BASE_URL", "http://127.0.0.1:4000")
+DELIVERY_FEE = 50.0  # Delivery fee constant
 
 # --- Pydantic Models ---
 class AddonItem(BaseModel):
@@ -38,7 +39,7 @@ class OrderItem(BaseModel):
     addons: List[AddonItem] = []
 
 class EmailNotificationRequest(BaseModel):
-    customer_name: str  # Customer username to fetch email from
+    customer_name: str
     order_id: str
     order_type: str
     status: str
@@ -80,9 +81,43 @@ async def fetch_user_email(username: str, auth_token: str) -> Optional[str]:
         logger.error(f"❌ Error fetching email for user {username}: {e}")
         return None
 
+# --- Helper Function to Calculate Costs ---
+def calculate_order_breakdown(data: EmailNotificationRequest):
+    """Calculate subtotal, add-ons, delivery fee, and final total"""
+    subtotal = 0.0
+    addons_total = 0.0
+    
+    for item in data.items:
+        # Calculate base item cost
+        subtotal += item.price * item.quantity
+        
+        # Calculate add-ons cost
+        if item.addons:
+            for addon in item.addons:
+                addons_total += addon.price
+    
+    # Determine if delivery fee applies
+    is_delivery = data.order_type.lower() == "delivery"
+    delivery_fee = DELIVERY_FEE if is_delivery else 0.0
+    
+    # Calculate final total
+    final_total = subtotal + addons_total + delivery_fee
+    
+    return {
+        "subtotal": subtotal,
+        "addons_total": addons_total,
+        "delivery_fee": delivery_fee,
+        "final_total": final_total,
+        "is_delivery": is_delivery
+    }
+
 # --- Email Template Functions ---
 def create_order_accepted_email(data: EmailNotificationRequest) -> str:
     """Generate HTML email for order acceptance"""
+    
+    # Calculate breakdown
+    breakdown = calculate_order_breakdown(data)
+    
     items_html = ""
     for item in data.items:
         addons_text = ""
@@ -102,12 +137,13 @@ def create_order_accepted_email(data: EmailNotificationRequest) -> str:
     
     # Only show delivery info if order type is "Delivery" and address exists
     delivery_info = ""
-    if data.order_type.lower() == "delivery" and data.delivery_address:
+    if breakdown["is_delivery"] and data.delivery_address:
         delivery_info = f"""
         <div style='background-color: #f8f9fa; padding: 15px; border-radius: 5px; margin-top: 20px;'>
             <h3 style='color: #4B929D; margin-top: 0;'>Delivery Information</h3>
             <p style='margin: 5px 0;'><strong>Address:</strong> {data.delivery_address}</p>
             <p style='margin: 5px 0;'><strong>Phone:</strong> {data.phone_number or 'N/A'}</p>
+            <p style='margin: 5px 0;'><strong>Delivery Fee:</strong> ₱{breakdown['delivery_fee']:.2f}</p>
         </div>
         """
     
@@ -129,7 +165,9 @@ def create_order_accepted_email(data: EmailNotificationRequest) -> str:
             table {{ width: 100%; border-collapse: collapse; margin: 20px 0; }}
             th {{ background-color: #4B929D; color: white; padding: 12px; text-align: left; }}
             .info-box {{ background-color: #fff3cd; border-left: 4px solid #ffc107; padding: 15px; margin-top: 20px; border-radius: 5px; }}
-            .total {{ font-size: 20px; font-weight: bold; color: #4B929D; text-align: right; padding: 20px 0 10px 0; border-top: 2px solid #4B929D; margin-top: 10px; }}
+            .total-section {{ background-color: #f8f9fa; padding: 15px; border-radius: 5px; margin-top: 20px; }}
+            .total-row {{ display: flex; justify-content: space-between; padding: 8px 0; border-bottom: 1px solid #ddd; }}
+            .total-row.final {{ border-top: 2px solid #4B929D; border-bottom: none; font-weight: bold; font-size: 18px; color: #4B929D; padding-top: 12px; margin-top: 8px; }}
         </style>
     </head>
     <body>
@@ -165,8 +203,17 @@ def create_order_accepted_email(data: EmailNotificationRequest) -> str:
                     </tbody>
                 </table>
                 
-                <div class='total'>
-                    Total Amount: ₱{data.total:.2f}
+                <div class='total-section'>
+                    <div class='total-row'>
+                        <span>Subtotal:</span>
+                        <span>₱{breakdown['subtotal']:.2f}</span>
+                    </div>
+                    {f"<div class='total-row'><span>Add-ons:</span><span>+ ₱{breakdown['addons_total']:.2f}</span></div>" if breakdown['addons_total'] > 0 else ""}
+                    {f"<div class='total-row'><span>Delivery Fee:</span><span>+ ₱{breakdown['delivery_fee']:.2f}</span></div>" if breakdown['is_delivery'] else ""}
+                    <div class='total-row final'>
+                        <span>Total Amount:</span>
+                        <span>₱{breakdown['final_total']:.2f}</span>
+                    </div>
                 </div>
                 
                 {delivery_info}
@@ -194,6 +241,10 @@ def create_order_accepted_email(data: EmailNotificationRequest) -> str:
 
 def create_order_update_email(data: EmailNotificationRequest) -> str:
     """Generate HTML email for order status updates"""
+    
+    # Calculate breakdown
+    breakdown = calculate_order_breakdown(data)
+    
     status_colors = {
         'PREPARING': '#ffc107',
         'WAITING FOR PICK UP': '#17a2b8',
@@ -256,6 +307,9 @@ def create_order_update_email(data: EmailNotificationRequest) -> str:
             .items-box {{ background-color: #f8f9fa; padding: 15px; border-radius: 5px; margin: 15px 0; }}
             .items-box ul {{ margin: 10px 0; padding-left: 20px; }}
             .items-box li {{ margin: 5px 0; color: #333; }}
+            .total-section {{ background-color: #f8f9fa; padding: 15px; border-radius: 5px; margin-top: 15px; }}
+            .total-row {{ display: flex; justify-content: space-between; padding: 5px 0; }}
+            .total-row.final {{ font-weight: bold; font-size: 16px; color: #4B929D; border-top: 2px solid #4B929D; padding-top: 10px; margin-top: 5px; }}
         </style>
     </head>
     <body>
@@ -280,7 +334,18 @@ def create_order_update_email(data: EmailNotificationRequest) -> str:
                     <ul>
                         {items_summary}
                     </ul>
-                    <p style='margin: 10px 0 0 0;'><strong>Total:</strong> ₱{data.total:.2f}</p>
+                    <div class='total-section'>
+                        <div class='total-row'>
+                            <span>Subtotal:</span>
+                            <span>₱{breakdown['subtotal']:.2f}</span>
+                        </div>
+                        {f"<div class='total-row'><span>Add-ons:</span><span>+ ₱{breakdown['addons_total']:.2f}</span></div>" if breakdown['addons_total'] > 0 else ""}
+                        {f"<div class='total-row'><span>Delivery Fee:</span><span>+ ₱{breakdown['delivery_fee']:.2f}</span></div>" if breakdown['is_delivery'] else ""}
+                        <div class='total-row final'>
+                            <span>Total:</span>
+                            <span>₱{breakdown['final_total']:.2f}</span>
+                        </div>
+                    </div>
                 </div>
                 
                 <h3 style='color: #4B929D; border-bottom: 2px solid #4B929D; padding-bottom: 5px; margin-top: 25px;'>Order Information</h3>

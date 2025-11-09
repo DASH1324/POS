@@ -78,6 +78,27 @@ function OrderPanel({ order, onClose, isOpen, isStore, onUpdateStatus, onFullRef
 
   if (!order) return null;
 
+  // Calculate subtotals for online orders
+  const calculateOnlineSubtotals = () => {
+    let baseSubtotal = 0;
+    let addOnsTotal = 0;
+
+    order.orderItems.forEach(item => {
+      baseSubtotal += item.price * item.quantity;
+      
+      if (item.addons && item.addons.length > 0) {
+        item.addons.forEach(addon => {
+          addOnsTotal += (addon.price || addon.Price || 0);
+        });
+      }
+    });
+
+    return { baseSubtotal, addOnsTotal };
+  };
+
+  const { baseSubtotal: onlineBaseSubtotal, addOnsTotal: onlineAddOnsTotal } = 
+    !isStore ? calculateOnlineSubtotals() : { baseSubtotal: 0, addOnsTotal: 0 };
+
   const subtotal = order.subtotal || 0;
   const addOnsCost = order.addOns || 0;
   const promotionalDiscount = order.promotionalDiscount || 0;
@@ -539,16 +560,38 @@ function OrderPanel({ order, onClose, isOpen, isStore, onUpdateStatus, onFullRef
                 </span>
             </div>
             <div className="orderpanel-calculation">
-                <div className="orderpanel-calc-row">
-                    <span className="orderpanel-calc-label">Subtotal:</span>
-                    <span className="orderpanel-calc-value">₱{subtotal.toFixed(2)}</span>
-                </div>
-                
-                 {addOnsCost > 0 && (
+                {/* For Store Orders - Use existing logic */}
+                {isStore && (
+                  <>
                     <div className="orderpanel-calc-row">
-                        <span className="orderpanel-calc-label">Add-ons:</span>
-                        <span className="orderpanel-calc-value">+ ₱{addOnsCost.toFixed(2)}</span>
+                        <span className="orderpanel-calc-label">Subtotal:</span>
+                        <span className="orderpanel-calc-value">₱{subtotal.toFixed(2)}</span>
                     </div>
+                    
+                    {addOnsCost > 0 && (
+                        <div className="orderpanel-calc-row">
+                            <span className="orderpanel-calc-label">Add-ons:</span>
+                            <span className="orderpanel-calc-value">+ ₱{addOnsCost.toFixed(2)}</span>
+                        </div>
+                    )}
+                  </>
+                )}
+
+                {/* For Online Orders - Use calculated breakdown */}
+                {!isStore && (
+                  <>
+                    <div className="orderpanel-calc-row">
+                        <span className="orderpanel-calc-label">Subtotal:</span>
+                        <span className="orderpanel-calc-value">₱{onlineBaseSubtotal.toFixed(2)}</span>
+                    </div>
+                    
+                    {onlineAddOnsTotal > 0 && (
+                        <div className="orderpanel-calc-row">
+                            <span className="orderpanel-calc-label">Add-ons:</span>
+                            <span className="orderpanel-calc-value">+ ₱{onlineAddOnsTotal.toFixed(2)}</span>
+                        </div>
+                    )}
+                  </>
                 )}
                 
                 {/* Show refund amount */}
@@ -567,7 +610,7 @@ function OrderPanel({ order, onClose, isOpen, isStore, onUpdateStatus, onFullRef
                         <span className="orderpanel-calc-value">- ₱{promotionalDiscount.toFixed(2)}</span>
                     </div>
                 )}
-                 {manualDiscount > 0 && (
+                {manualDiscount > 0 && (
                     <div className="orderpanel-calc-row">
                         <span className="orderpanel-calc-label">Discount:</span>
                         <span className="orderpanel-calc-value">- ₱{manualDiscount.toFixed(2)}</span>
@@ -586,7 +629,10 @@ function OrderPanel({ order, onClose, isOpen, isStore, onUpdateStatus, onFullRef
                 <div className="orderpanel-calc-row orderpanel-total-row">
                     <span className="orderpanel-calc-label">Total:</span>
                     <span className="orderpanel-calc-value">
-                      ₱{(order.total - getTotalRefundAmount()).toFixed(2)}
+                      ₱{isStore 
+                        ? (order.total - getTotalRefundAmount()).toFixed(2)
+                        : (onlineBaseSubtotal + onlineAddOnsTotal).toFixed(2)
+                      }
                     </span>
                 </div>
             </div>
@@ -734,15 +780,36 @@ function OrderPanel({ order, onClose, isOpen, isStore, onUpdateStatus, onFullRef
                   <div className="orderpanel-receipt-divider">================================</div>
 
                   <div className="orderpanel-receipt-summary">
-                    <div className="orderpanel-receipt-line">
-                      <span>SUBTOTAL:</span>
-                      <span>₱{subtotal.toFixed(2)}</span>
-                    </div>
-                     {addOnsCost > 0 && (
-                      <div className="orderpanel-receipt-line">
-                        <span>ADD-ONS:</span>
-                        <span>₱{addOnsCost.toFixed(2)}</span>
-                      </div>
+                    {/* For Store Orders */}
+                    {isStore && (
+                      <>
+                        <div className="orderpanel-receipt-line">
+                          <span>SUBTOTAL:</span>
+                          <span>₱{subtotal.toFixed(2)}</span>
+                        </div>
+                        {addOnsCost > 0 && (
+                          <div className="orderpanel-receipt-line">
+                            <span>ADD-ONS:</span>
+                            <span>₱{addOnsCost.toFixed(2)}</span>
+                          </div>
+                        )}
+                      </>
+                    )}
+
+                    {/* For Online Orders */}
+                    {!isStore && (
+                      <>
+                        <div className="orderpanel-receipt-line">
+                          <span>SUBTOTAL:</span>
+                          <span>₱{onlineBaseSubtotal.toFixed(2)}</span>
+                        </div>
+                        {onlineAddOnsTotal > 0 && (
+                          <div className="orderpanel-receipt-line">
+                            <span>ADD-ONS:</span>
+                            <span>₱{onlineAddOnsTotal.toFixed(2)}</span>
+                          </div>
+                        )}
+                      </>
                     )}
 
                     {hasRefunds && (
@@ -768,7 +835,10 @@ function OrderPanel({ order, onClose, isOpen, isStore, onUpdateStatus, onFullRef
                     
                     <div className="orderpanel-receipt-line orderpanel-receipt-total">
                       <strong>TOTAL:</strong>
-                      <strong>₱{(order.total - getTotalRefundAmount()).toFixed(2)}</strong>
+                      <strong>₱{isStore 
+                        ? (order.total - getTotalRefundAmount()).toFixed(2)
+                        : (onlineBaseSubtotal + onlineAddOnsTotal).toFixed(2)
+                      }</strong>
                     </div>
                     <div className="orderpanel-receipt-divider">================================</div>
                   </div>

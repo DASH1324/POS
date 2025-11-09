@@ -600,16 +600,43 @@ async def save_online_order(
                     if not addon_id_row:
                         logger.info(f"Addon '{addon.addon_name}' not found in POS. Creating it with price {addon.price}")
                         
-                        sql_insert_addon = "INSERT INTO Addons (AddonName, Price) VALUES (?, ?)"
-                        
-                        await cursor.execute(
-                            sql_insert_addon,
-                            addon.addon_name, Decimal(str(addon.price))
-                        )
-                        
-                        await cursor.execute("SELECT CAST(@@IDENTITY AS INT)")
-                        addon_creation_result = await cursor.fetchone()
-                        correct_pos_addon_id = int(addon_creation_result[0]) if addon_creation_result and addon_creation_result[0] else None
+                        # ✅ FIXED: Use OUTPUT clause method like the Sale creation
+                        try:
+                            sql_insert_addon = """
+                                SET NOCOUNT ON;
+                                DECLARE @InsertedAddonID TABLE (AddonID INT);
+                                
+                                INSERT INTO Addons (AddonName, Price)
+                                OUTPUT INSERTED.AddonID INTO @InsertedAddonID
+                                VALUES (?, ?);
+                                
+                                SELECT AddonID FROM @InsertedAddonID;
+                            """
+                            
+                            await cursor.execute(
+                                sql_insert_addon,
+                                addon.addon_name, Decimal(str(addon.price))
+                            )
+                            
+                            addon_id_row = await cursor.fetchone()
+                            correct_pos_addon_id = addon_id_row[0] if addon_id_row else None
+                            
+                        except Exception as output_error:
+                            # ✅ Fallback method if OUTPUT doesn't work
+                            logger.warning(f"OUTPUT method failed for addon creation: {output_error}. Trying @@IDENTITY method.")
+                            
+                            sql_insert_addon_fallback = """
+                                INSERT INTO Addons (AddonName, Price) VALUES (?, ?);
+                                SELECT CAST(@@IDENTITY AS INT) AS AddonID;
+                            """
+                            
+                            await cursor.execute(
+                                sql_insert_addon_fallback,
+                                addon.addon_name, Decimal(str(addon.price))
+                            )
+                            
+                            addon_creation_result = await cursor.fetchone()
+                            correct_pos_addon_id = int(addon_creation_result[0]) if addon_creation_result and addon_creation_result[0] else None
                         
                         if not correct_pos_addon_id:
                             await conn.rollback()
@@ -619,10 +646,9 @@ async def save_online_order(
                     else:
                         correct_pos_addon_id = addon_id_row.AddonID
 
-                    sql_insert_sale_item_addon = "INSERT INTO SaleItemAddons (SaleItemID, AddonID, Quantity) VALUES (?, ?, ?)"
-                    await cursor.execute(sql_insert_sale_item_addon, new_sale_item_id, correct_pos_addon_id, 1)
-
-            await conn.commit()
+            # Insert into SaleItemAddons
+            sql_insert_sale_item_addon = "INSERT INTO SaleItemAddons (SaleItemID, AddonID, Quantity) VALUES (?, ?, ?)"
+            await cursor.execute(sql_insert_sale_item_addon, new_sale_item_id, correct_pos_addon_id, 1)
             
             # Get customer's full name for blockchain logging
             customer_full_name = await get_full_name_from_username(
