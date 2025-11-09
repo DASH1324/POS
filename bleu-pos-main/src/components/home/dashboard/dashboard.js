@@ -14,230 +14,8 @@ import {
 } from '@fortawesome/free-solid-svg-icons';
 import { jwtDecode } from 'jwt-decode';
 
-// Static data for demonstration purposes
-const revenueData = {
-  Daily: [
-    { name: 'Mon', income: 2500, expense: 1800 },
-    { name: 'Tue', income: 2800, expense: 2000 },
-    { name: 'Wed', income: 3200, expense: 2200 },
-    { name: 'Thu', income: 2900, expense: 1900 },
-    { name: 'Fri', income: 3500, expense: 2400 },
-    { name: 'Sat', income: 4200, expense: 2800 },
-    { name: 'Sun', income: 3800, expense: 2600 },
-  ],
-  Weekly: [
-    { name: 'Week 1', income: 18000, expense: 12000 },
-    { name: 'Week 2', income: 22000, expense: 15000 },
-    { name: 'Week 3', income: 19500, expense: 13500 },
-    { name: 'Week 4', income: 24000, expense: 16000 },
-  ],
-  Monthly: [
-    { name: 'Jan', income: 5000, expense: 3000 },
-    { name: 'Feb', income: 14000, expense: 10000 },
-    { name: 'Mar', income: 15000, expense: 12000 },
-    { name: 'Apr', income: 11000, expense: 9000 },
-    { name: 'May', income: 13000, expense: 7000 },
-    { name: 'June', income: 18000, expense: 10000 },
-    { name: 'July', income: 18000, expense: 13000 },
-  ],
-  Yearly: [
-    { name: '2021', income: 120000, expense: 85000 },
-    { name: '2022', income: 145000, expense: 98000 },
-    { name: '2023', income: 168000, expense: 112000 },
-    { name: '2024', income: 195000, expense: 128000 },
-  ]
-};
-
-const bestSellingItemsData = {
-  'Today': [
-    { name: 'Caramel Latte', sales: 45 },
-    { name: 'Iced Americano', sales: 38 },
-    { name: 'Cappuccino', sales: 32 },
-    { name: 'Espresso', sales: 28 },
-    { name: 'Mocha', sales: 25 },
-  ],
-  'Last 7 Days': [
-    { name: 'Caramel Latte', sales: 245 },
-    { name: 'Iced Americano', sales: 198 },
-    { name: 'Cappuccino', sales: 176 },
-    { name: 'Espresso', sales: 154 },
-    { name: 'Mocha', sales: 132 },
-  ],
-  'Last 30 Days': [
-    { name: 'Caramel Latte', sales: 1050 },
-    { name: 'Iced Americano', sales: 890 },
-    { name: 'Cappuccino', sales: 780 },
-    { name: 'Espresso', sales: 680 },
-    { name: 'Mocha', sales: 620 },
-  ],
-  'Last 90 Days': [
-    { name: 'Caramel Latte', sales: 3200 },
-    { name: 'Iced Americano', sales: 2850 },
-    { name: 'Cappuccino', sales: 2400 },
-    { name: 'Espresso', sales: 2100 },
-    { name: 'Mocha', sales: 1950 },
-  ],
-  'All-Time': [
-    { name: 'Caramel Latte', sales: 8500 },
-    { name: 'Iced Americano', sales: 7200 },
-    { name: 'Cappuccino', sales: 6800 },
-    { name: 'Espresso', sales: 5900 },
-    { name: 'Mocha', sales: 5400 },
-  ]
-};
-
-const shiftPerformanceData = {
-  'Today': [
-    { cashier: 'Cashier 1', sales: 920, orders: 135 },
-    { cashier: 'Cashier 2', sales: 680, orders: 95 },
-    { cashier: 'Cashier 3', sales: 1210, orders: 112 },
-    { cashier: 'Cashier 4', sales: 850, orders: 128 },
-    { cashier: 'Cashier 5', sales: 690, orders: 85 },
-  ],
-  'Yesterday': [
-    { cashier: 'Cashier 1', sales: 880, orders: 128 },
-    { cashier: 'Cashier 2', sales: 720, orders: 102 },
-    { cashier: 'Cashier 3', sales: 1150, orders: 108 },
-    { cashier: 'Cashier 4', sales: 910, orders: 135 },
-    { cashier: 'Cashier 5', sales: 740, orders: 92 },
-  ],
-  'This Week': [
-    { cashier: 'Cashier 1', sales: 6200, orders: 920 },
-    { cashier: 'Cashier 2', sales: 4800, orders: 680 },
-    { cashier: 'Cashier 3', sales: 8400, orders: 780 },
-    { cashier: 'Cashier 4', sales: 5900, orders: 890 },
-    { cashier: 'Cashier 5', sales: 4900, orders: 610 },
-  ],
-  'Last Week': [
-    { cashier: 'Cashier 1', sales: 5900, orders: 880 },
-    { cashier: 'Cashier 2', sales: 4600, orders: 650 },
-    { cashier: 'Cashier 3', sales: 8100, orders: 750 },
-    { cashier: 'Cashier 4', sales: 5700, orders: 860 },
-    { cashier: 'Cashier 5', sales: 4700, orders: 590 },
-  ],
-  'This Month': [
-    { cashier: 'Cashier 1', sales: 25000, orders: 3800 },
-    { cashier: 'Cashier 2', sales: 19500, orders: 2700 },
-    { cashier: 'Cashier 3', sales: 34000, orders: 3200 },
-    { cashier: 'Cashier 4', sales: 24000, orders: 3600 },
-    { cashier: 'Cashier 5', sales: 20000, orders: 2500 },
-  ]
-};
-
-const activeOrdersData = {
-  'Real-time': [
-    { time: '8am', pending: 3, inProgress: 5 },
-    { time: '10am', pending: 5, inProgress: 8 },
-    { time: '12pm', pending: 8, inProgress: 12 },
-    { time: '2pm', pending: 4, inProgress: 6 },
-    { time: '4pm', pending: 6, inProgress: 9 },
-    { time: '6pm', pending: 2, inProgress: 4 },
-  ],
-  'Last 4 Hours': [
-    { time: '2pm', pending: 4, inProgress: 6 },
-    { time: '3pm', pending: 5, inProgress: 7 },
-    { time: '4pm', pending: 6, inProgress: 9 },
-    { time: '5pm', pending: 5, inProgress: 8 },
-    { time: '6pm', pending: 2, inProgress: 4 },
-  ],
-  'Full Day': [
-    { time: '8am', pending: 3, inProgress: 5 },
-    { time: '9am', pending: 4, inProgress: 6 },
-    { time: '10am', pending: 5, inProgress: 8 },
-    { time: '11am', pending: 6, inProgress: 10 },
-    { time: '12pm', pending: 8, inProgress: 12 },
-    { time: '1pm', pending: 6, inProgress: 9 },
-    { time: '2pm', pending: 4, inProgress: 6 },
-    { time: '3pm', pending: 5, inProgress: 7 },
-    { time: '4pm', pending: 6, inProgress: 9 },
-    { time: '5pm', pending: 5, inProgress: 8 },
-    { time: '6pm', pending: 2, inProgress: 4 },
-  ]
-};
-
-const completedOrdersData = {
-  'Today': [
-    { hour: '8-9', orders: 15 },
-    { hour: '9-10', orders: 28 },
-    { hour: '10-11', orders: 45 },
-    { hour: '11-12', orders: 52 },
-    { hour: '12-1', orders: 68 },
-    { hour: '1-2', orders: 42 },
-    { hour: '2-3', orders: 35 },
-    { hour: '3-4', orders: 48 },
-  ],
-  'Average Last 7 Days': [
-    { hour: '8-9', orders: 18 },
-    { hour: '9-10', orders: 32 },
-    { hour: '10-11', orders: 48 },
-    { hour: '11-12', orders: 55 },
-    { hour: '12-1', orders: 72 },
-    { hour: '1-2', orders: 45 },
-    { hour: '2-3', orders: 38 },
-    { hour: '3-4', orders: 52 },
-  ],
-  'Last Same Day': [
-    { hour: '8-9', orders: 12 },
-    { hour: '9-10', orders: 25 },
-    { hour: '10-11', orders: 42 },
-    { hour: '11-12', orders: 48 },
-    { hour: '12-1', orders: 65 },
-    { hour: '1-2', orders: 38 },
-    { hour: '2-3', orders: 32 },
-    { hour: '3-4', orders: 45 },
-  ]
-};
-
-const canceledOrdersTrendData = {
-  'By Cashier': [
-    { name: 'Cashier 1', canceled: 2 },
-    { name: 'Cashier 2', canceled: 4 },
-    { name: 'Cashier 3', canceled: 1 },
-    { name: 'Cashier 4', canceled: 3 },
-    { name: 'Cashier 5', canceled: 1 },
-  ],
-  'By Product Category': [
-    { name: 'Coffee', canceled: 5 },
-    { name: 'Pastries', canceled: 3 },
-    { name: 'Sandwiches', canceled: 2 },
-    { name: 'Beverages', canceled: 1 },
-  ],
-  'By Cancellation Reason': [
-    { name: 'Wrong Order', canceled: 4 },
-    { name: 'Out of Stock', canceled: 3 },
-    { name: 'Customer Request', canceled: 2 },
-    { name: 'Payment Issue', canceled: 2 },
-  ]
-};
-
-const spillageData = {
-  'By Product Type': {
-    stats: { cost: 2450, incidents: 8, target: -12.5 },
-    items: [
-      { name: 'Coffee', cost: 1200, incidents: 4 },
-      { name: 'Milk', cost: 650, incidents: 2 },
-      { name: 'Pastry', cost: 400, incidents: 1 },
-      { name: 'Syrup', cost: 200, incidents: 1 },
-    ]
-  },
-  'By Cashier/Shift': {
-    stats: { cost: 2450, incidents: 8, target: -12.5 },
-    items: [
-      { name: 'Morning Shift', cost: 980, incidents: 3 },
-      { name: 'Afternoon Shift', cost: 850, incidents: 3 },
-      { name: 'Evening Shift', cost: 620, incidents: 2 },
-    ]
-  },
-  'By Incident Reason': {
-    stats: { cost: 2450, incidents: 8, target: -12.5 },
-    items: [
-      { name: 'Preparation Error', cost: 1100, incidents: 4 },
-      { name: 'Equipment Malfunction', cost: 750, incidents: 2 },
-      { name: 'Customer Complaint', cost: 400, incidents: 1 },
-      { name: 'Expired Product', cost: 200, incidents: 1 },
-    ]
-  }
-};
+// API Configuration
+const API_BASE_URL = process.env.REACT_APP_API_URL || 'http://localhost:9000';
 
 const formatValue = (value, format) => {
   return format === "currency"
@@ -250,6 +28,7 @@ const Dashboard = () => {
   const [bestSellingFilter, setBestSellingFilter] = useState("Last 30 Days");
   const [shiftPerformanceFilter, setShiftPerformanceFilter] = useState("Today");
   const [totalSalesFilter, setTotalSalesFilter] = useState("Today");
+  const [bestProductFilter, setBestProductFilter] = useState("Today"); // ← ADDED THIS
   const [completedOrdersFilter, setCompletedOrdersFilter] = useState("Today");
   const [canceledOrdersFilter, setCanceledOrdersFilter] = useState("By Cashier");
   const [activeOrdersFilter, setActiveOrdersFilter] = useState("Real-time");
@@ -257,6 +36,43 @@ const Dashboard = () => {
   const [userRole, setUserRole] = useState('');
   const [isLoading, setIsLoading] = useState(true);
 
+  // Data states
+  const [summaryCardsData, setSummaryCardsData] = useState({});
+  const [revenueData, setRevenueData] = useState([]);
+  const [bestSellingItemsData, setBestSellingItemsData] = useState([]);
+  const [shiftPerformanceData, setShiftPerformanceData] = useState([]);
+  const [activeOrdersData, setActiveOrdersData] = useState([]);
+  const [completedOrdersData, setCompletedOrdersData] = useState([]);
+  const [canceledOrdersData, setCanceledOrdersData] = useState([]);
+  const [spillageData, setSpillageData] = useState({ cost: 0, incidents: 0, target: 0, items: [] });
+
+  // Fetch API with error handling
+  const fetchAPI = async (endpoint, params = {}) => {
+  try {
+    const queryString = new URLSearchParams(params).toString();
+    const url = `${API_BASE_URL}${endpoint}${queryString ? `?${queryString}` : ''}`;
+    
+    // Get auth token from localStorage
+    const authToken = localStorage.getItem('authToken');
+    
+    const response = await fetch(url, {
+      headers: {
+        'Content-Type': 'application/json',
+        ...(authToken && { 'Authorization': `Bearer ${authToken}` })
+      }
+    });
+
+    if (!response.ok) {
+      throw new Error(`HTTP error! status: ${response.status}`);
+    }
+
+    return await response.json();
+  } catch (error) {
+    console.error(`Error fetching ${endpoint}:`, error);
+    return null;
+  }
+};
+  // Initialize user role
   useEffect(() => {
     let roleToSet = '';
     
@@ -278,25 +94,121 @@ const Dashboard = () => {
     } else {
       setUserRole('guest');
     }
-
-    setTimeout(() => {
-      setIsLoading(false);
-    }, 1500);
   }, []);
 
-  const getTotalSalesData = () => {
-    const salesByFilter = {
-      'Today': { current: 28123, previous: 25000 },
-      'Yesterday': { current: 25000, previous: 24500 },
-      'This Week': { current: 165000, previous: 158000 },
-      'This Month': { current: 650000, previous: 620000 }
-    };
-    return salesByFilter[totalSalesFilter] || salesByFilter['Today'];
+  // Fetch admin dashboard data
+  const fetchAdminData = async () => {
+    try {
+      // Fetch summary cards data
+      const [totalSales, cashVariance, bestProduct, refunds] = await Promise.all([
+        fetchAPI('/api/dashboard/admin/total-sales', { filter: totalSalesFilter }),
+        fetchAPI('/api/dashboard/admin/cash-variance'),
+        fetchAPI('/api/dashboard/admin/best-selling-product', { filter: bestProductFilter }), // ← ADDED FILTER
+        fetchAPI('/api/dashboard/admin/total-refunds')
+      ]);
+
+      setSummaryCardsData({
+        totalSales: totalSales || { current: 0, previous: 0 },
+        cashVariance: cashVariance || { current: 0, previous: 0 },
+        bestProduct: bestProduct || { current: 0, previous: 0, subtext: 'N/A' },
+        refunds: refunds || { current: 0, previous: 0, subtext: '0% of total sales' }
+      });
+
+      // Fetch chart data
+      const [revenue, bestSelling, shiftPerf] = await Promise.all([
+        fetchAPI('/api/dashboard/admin/sales-overview', { filter: revenueFilter }),
+        fetchAPI('/api/dashboard/admin/best-selling-items', { filter: bestSellingFilter }),
+        fetchAPI('/api/dashboard/admin/shift-performance', { filter: shiftPerformanceFilter })
+      ]);
+
+      setRevenueData(revenue || []);
+      setBestSellingItemsData(bestSelling || []);
+      setShiftPerformanceData(shiftPerf || []);
+
+    } catch (error) {
+      console.error('Error fetching admin data:', error);
+    }
   };
+
+  // Fetch manager dashboard data
+  const fetchManagerData = async () => {
+    try {
+      // Fetch summary cards data
+      const [activeOrders, completedOrders, canceledOrders, spillageCost] = await Promise.all([
+        fetchAPI('/api/dashboard/manager/active-orders'),
+        fetchAPI('/api/dashboard/manager/completed-orders'),
+        fetchAPI('/api/dashboard/manager/canceled-orders'),
+        fetchAPI('/api/dashboard/manager/spillage-cost')
+      ]);
+
+      setSummaryCardsData({
+        activeOrders: activeOrders || { current: 0, previous: 0 },
+        completedOrders: completedOrders || { current: 0, previous: 0 },
+        canceledOrders: canceledOrders || { current: 0, previous: 0 },
+        spillageCost: spillageCost || { current: 0, previous: 0, subtext: '0 incidents today' }
+      });
+
+      // Fetch chart data
+      const [spillage, activeOrdersMonitor, completedPeak, canceledAnalysis] = await Promise.all([
+        fetchAPI('/api/dashboard/manager/spillage-overview', { filter: spillageFilter }),
+        fetchAPI('/api/dashboard/manager/active-orders-monitor', { filter: activeOrdersFilter }),
+        fetchAPI('/api/dashboard/manager/completed-orders-peak', { filter: completedOrdersFilter }),
+        fetchAPI('/api/dashboard/manager/canceled-orders-analysis', { filter: canceledOrdersFilter })
+      ]);
+
+      setSpillageData(spillage || { cost: 0, incidents: 0, target: 0, items: [] });
+      setActiveOrdersData(activeOrdersMonitor || []);
+      setCompletedOrdersData(completedPeak || []);
+      setCanceledOrdersData(canceledAnalysis || []);
+
+    } catch (error) {
+      console.error('Error fetching manager data:', error);
+    }
+  };
+
+  // Load data when role or filters change
+  useEffect(() => {
+    if (!userRole || userRole === 'guest') return;
+
+    const loadData = async () => {
+      setIsLoading(true);
+      
+      if (userRole === 'admin') {
+        await fetchAdminData();
+      } else if (userRole === 'manager') {
+        await fetchManagerData();
+      }
+
+      setIsLoading(false);
+    };
+
+    loadData();
+  }, [userRole, totalSalesFilter, bestProductFilter, revenueFilter, bestSellingFilter, shiftPerformanceFilter, // ← ADDED bestProductFilter
+      activeOrdersFilter, completedOrdersFilter, canceledOrdersFilter, spillageFilter]);
+
+  // Refresh data periodically (every 30 seconds for real-time updates)
+  useEffect(() => {
+    if (!userRole || userRole === 'guest') return;
+
+    const interval = setInterval(() => {
+      if (userRole === 'admin') {
+        fetchAdminData();
+      } else if (userRole === 'manager') {
+        fetchManagerData();
+      }
+    }, 30000); // 30 seconds
+
+    return () => clearInterval(interval);
+  }, [userRole, totalSalesFilter, bestProductFilter, revenueFilter, bestSellingFilter, shiftPerformanceFilter, // ← ADDED bestProductFilter
+      activeOrdersFilter, completedOrdersFilter, canceledOrdersFilter, spillageFilter]);
 
   const getSummaryCards = () => {
     if (userRole === 'admin') {
-      const salesData = getTotalSalesData();
+      const salesData = summaryCardsData.totalSales || { current: 0, previous: 0 };
+      const cashData = summaryCardsData.cashVariance || { current: 0, previous: 0 };
+      const productData = summaryCardsData.bestProduct || { current: 0, previous: 0, subtext: 'N/A' };
+      const refundsData = summaryCardsData.refunds || { current: 0, previous: 0, subtext: '0% of total sales' };
+
       return [
         {
           title: `Total Sales (${totalSalesFilter})`,
@@ -312,69 +224,74 @@ const Dashboard = () => {
         },
         {
           title: "Cash Drawer Variance",
-          current: 60,
-          previous: 45,
+          current: cashData.current,
+          previous: cashData.previous,
           format: "currency",
           icon: faMoneyBillWave,
           type: "posDashboardCashVariance",
-          subtext: "Across all shifts"
+          subtext: cashData.subtext || "Across all shifts"
         },
         {
           title: "Best-Selling Product",
-          current: 245,
-          previous: 220,
+          current: productData.current,
+          previous: productData.previous,
           format: "number",
           icon: faChartLine,
           type: "posDashboardBestSelling",
-          subtext: "Caramel Latte"
+          subtext: productData.subtext
         },
         {
           title: "Total Refunds",
-          current: 5,
-          previous: 7,
+          current: refundsData.current,
+          previous: refundsData.previous,
           format: "number",
           icon: faUndo,
           type: "posDashboardRefunds",
-          subtext: "2.1% of total sales"
+          subtext: refundsData.subtext
         }
       ];
     } else if (userRole === 'manager') {
+      const activeData = summaryCardsData.activeOrders || { current: 0, previous: 0 };
+      const completedData = summaryCardsData.completedOrders || { current: 0, previous: 0 };
+      const canceledData = summaryCardsData.canceledOrders || { current: 0, previous: 0 };
+      const spillageData = summaryCardsData.spillageCost || { current: 0, previous: 0, subtext: '0 incidents today' };
+
       return [
         {
           title: "Active Orders",
-          current: 12,
-          previous: 10,
+          current: activeData.current,
+          previous: activeData.previous,
           format: "number",
           icon: faClock,
           type: "posDashboardActiveOrders",
-          subtext: "Real-time count"
+          subtext: activeData.subtext || "Real-time count"
         },
         {
           title: "Completed Orders",
-          current: 45,
-          previous: 50,
+          current: completedData.current,
+          previous: completedData.previous,
           format: "number",
           icon: faShoppingCart,
           type: "posDashboardOrders",
-          subtext: "Daily total"
+          subtext: completedData.subtext || "Daily total"
         },
         {
           title: "Canceled Orders",
-          current: 11,
-          previous: 8,
+          current: canceledData.current,
+          previous: canceledData.previous,
           format: "number",
           icon: faTimesCircle,
           type: "posDashboardCanceled",
-          subtext: "Today's cancellations"
+          subtext: canceledData.subtext || "Today's cancellations"
         },
         {
           title: "Spillage Cost",
-          current: 2450,
-          previous: 2800,
+          current: spillageData.current,
+          previous: spillageData.previous,
           format: "currency",
           icon: faExclamationTriangle,
           type: "posDashboardSpillage",
-          subtext: "8 incidents today"
+          subtext: spillageData.subtext
         }
       ];
     }
@@ -382,8 +299,6 @@ const Dashboard = () => {
   };
 
   const summaryCards = getSummaryCards();
-  const currentSpillageData = spillageData[spillageFilter];
-  const currentShiftData = shiftPerformanceData[shiftPerformanceFilter];
 
   if (isLoading) {
     return <Loading />;
@@ -454,15 +369,17 @@ const Dashboard = () => {
                       <div className="posDashboardSpillageStats">
                         <div className="posDashboardSpillageStat">
                           <div className="posDashboardSpillageLabel">Total Cost Today</div>
-                          <div className="posDashboardSpillageValue">₱{currentSpillageData.stats.cost.toLocaleString()}</div>
+                          <div className="posDashboardSpillageValue">₱{spillageData.cost.toLocaleString()}</div>
                         </div>
                         <div className="posDashboardSpillageStat">
                           <div className="posDashboardSpillageLabel">Incidents</div>
-                          <div className="posDashboardSpillageValue">{currentSpillageData.stats.incidents}</div>
+                          <div className="posDashboardSpillageValue">{spillageData.incidents}</div>
                         </div>
                         <div className="posDashboardSpillageStat">
                           <div className="posDashboardSpillageLabel">vs Target</div>
-                          <div className="posDashboardSpillageValue posDashboardGreen">{currentSpillageData.stats.target}%</div>
+                          <div className={`posDashboardSpillageValue ${spillageData.target >= 0 ? 'posDashboardGreen' : 'posDashboardRed'}`}>
+                            {spillageData.target}%
+                          </div>
                         </div>
                       </div>
                       <div className="posDashboardSpillageRing">
@@ -476,24 +393,32 @@ const Dashboard = () => {
                             stroke="#dc3545" 
                             strokeWidth="20"
                             strokeDasharray="502.4"
-                            strokeDashoffset="125.6"
+                            strokeDashoffset={502.4 * (1 - Math.min(spillageData.cost / 3000, 1))}
                             strokeLinecap="round"
                             transform="rotate(-90 100 100)"
                           />
-                          <text x="100" y="95" textAnchor="middle" fontSize="32" fontWeight="bold" fill="#333">75%</text>
+                          <text x="100" y="95" textAnchor="middle" fontSize="32" fontWeight="bold" fill="#333">
+                            {Math.round((spillageData.cost / 3000) * 100)}%
+                          </text>
                           <text x="100" y="120" textAnchor="middle" fontSize="14" fill="#666">of budget</text>
                         </svg>
                       </div>
                       <div className="posDashboardSpillageBreakdown">
                         <div className="posDashboardSpillageBreakdownTitle">Breakdown</div>
-                        {currentSpillageData.items.map((item, idx) => (
-                          <div key={idx} className="posDashboardSpillageItem">
-                            <span className="posDashboardSpillageItemName">{item.name}</span>
-                            <span className="posDashboardSpillageItemValue">
-                              ₱{item.cost.toLocaleString()} ({item.incidents} {item.incidents === 1 ? 'incident' : 'incidents'})
-                            </span>
+                        {spillageData.items.length > 0 ? (
+                          spillageData.items.map((item, idx) => (
+                            <div key={idx} className="posDashboardSpillageItem">
+                              <span className="posDashboardSpillageItemName">{item.name}</span>
+                              <span className="posDashboardSpillageItemValue">
+                                ₱{item.cost.toLocaleString()} ({item.incidents} {item.incidents === 1 ? 'incident' : 'incidents'})
+                              </span>
+                            </div>
+                          ))
+                        ) : (
+                          <div style={{ textAlign: 'center', padding: '20px', color: '#999' }}>
+                            No spillage incidents today
                           </div>
-                        ))}
+                        )}
                       </div>
                     </div>
                   </div>
@@ -512,7 +437,7 @@ const Dashboard = () => {
                       </select>
                     </div>
                     <ResponsiveContainer width="100%" height={350}>
-                      <AreaChart data={activeOrdersData[activeOrdersFilter]}>
+                      <AreaChart data={activeOrdersData}>
                         <CartesianGrid strokeDasharray="3 3" />
                         <XAxis dataKey="time" />
                         <YAxis />
@@ -539,15 +464,21 @@ const Dashboard = () => {
                         <option value="Last Same Day">Last Same Day</option>
                       </select>
                     </div>
-                    <ResponsiveContainer width="100%" height={350}>
-                      <BarChart data={completedOrdersData[completedOrdersFilter]}>
-                        <CartesianGrid strokeDasharray="3 3" />
-                        <XAxis dataKey="hour" />
-                        <YAxis />
-                        <Tooltip />
-                        <Bar dataKey="orders" fill="#28a745" />
-                      </BarChart>
-                    </ResponsiveContainer>
+                    {completedOrdersData.length > 0 ? (
+                      <ResponsiveContainer width="100%" height={350}>
+                        <BarChart data={completedOrdersData}>
+                          <CartesianGrid strokeDasharray="3 3" />
+                          <XAxis dataKey="hour" />
+                          <YAxis />
+                          <Tooltip />
+                          <Bar dataKey="orders" fill="#28a745" />
+                        </BarChart>
+                      </ResponsiveContainer>
+                    ) : (
+                      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', height: 350, color: '#999' }}>
+                        No completed orders for this period
+                      </div>
+                    )}
                   </div>
 
                   <div className="posDashboardChartBox">
@@ -563,15 +494,21 @@ const Dashboard = () => {
                         <option value="By Cancellation Reason">By Cancellation Reason</option>
                       </select>
                     </div>
-                    <ResponsiveContainer width="100%" height={350}>
-                      <BarChart data={canceledOrdersTrendData[canceledOrdersFilter]} layout="vertical">
-                        <CartesianGrid strokeDasharray="3 3" />
-                        <XAxis type="number" />
-                        <YAxis dataKey="name" type="category" width={120} />
-                        <Tooltip />
-                        <Bar dataKey="canceled" fill="#e83e8c" name="Canceled Orders" />
-                      </BarChart>
-                    </ResponsiveContainer>
+                    {canceledOrdersData.length > 0 ? (
+                      <ResponsiveContainer width="100%" height={350}>
+                        <BarChart data={canceledOrdersData} layout="vertical">
+                          <CartesianGrid strokeDasharray="3 3" />
+                          <XAxis type="number" />
+                          <YAxis dataKey="name" type="category" width={120} />
+                          <Tooltip />
+                          <Bar dataKey="canceled" fill="#e83e8c" name="Canceled Orders" />
+                        </BarChart>
+                      </ResponsiveContainer>
+                    ) : (
+                      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', height: 350, color: '#999' }}>
+                        No canceled orders for this period
+                      </div>
+                    )}
                   </div>
                 </div>
               </>
@@ -594,48 +531,57 @@ const Dashboard = () => {
                         <option value="Yearly">Yearly</option>
                       </select>
                     </div>
-                    <ResponsiveContainer width="100%" height={350}>
-                      <LineChart data={revenueData[revenueFilter]}>
-                        <CartesianGrid strokeDasharray="3 3" />
-                        <XAxis dataKey="name" />
-                        <YAxis />
-                        <Tooltip />
-                        <Legend />
-                        <Line type="monotone" dataKey="income" stroke="#00b4d8" strokeWidth={2} name="Income" />
-                        <Line type="monotone" dataKey="expense" stroke="#ff4d6d" strokeWidth={2} name="Expense" />
-                      </LineChart>
-                    </ResponsiveContainer>
+                    {revenueData.length > 0 ? (
+                      <ResponsiveContainer width="100%" height={350}>
+                        <LineChart data={revenueData}>
+                          <CartesianGrid strokeDasharray="3 3" />
+                          <XAxis dataKey="name" />
+                          <YAxis />
+                          <Tooltip />
+                          <Legend />
+                          <Line type="monotone" dataKey="income" stroke="#00b4d8" strokeWidth={2} name="Income" />
+                        </LineChart>
+                      </ResponsiveContainer>
+                    ) : (
+                      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', height: 350, color: '#999' }}>
+                        No sales data available for this period
+                      </div>
+                    )}
                   </div>
 
-                {/* Best Selling Items */}
-                <div className="posDashboardChartBox">
-                  <div className="posDashboardChartHeader">
-                    <span>Best-Selling Items</span>
-                    <select
-                      className="posDashboardChartDropdown"
-                      value={bestSellingFilter}
-                      onChange={(e) => setBestSellingFilter(e.target.value)}
-                    >
-                      <option value="Today">Today</option>
-                      <option value="Last 7 Days">Last 7 Days</option>
-                      <option value="Last 30 Days">Last 30 Days</option>
-                      <option value="Last 90 Days">Last 90 Days</option>
-                      <option value="All-Time">All-Time</option>
-                    </select>
+                  <div className="posDashboardChartBox">
+                    <div className="posDashboardChartHeader">
+                      <span>Best-Selling Items</span>
+                      <select
+                        className="posDashboardChartDropdown"
+                        value={bestSellingFilter}
+                        onChange={(e) => setBestSellingFilter(e.target.value)}
+                      >
+                        <option value="Today">Today</option>
+                        <option value="Last 7 Days">Last 7 Days</option>
+                        <option value="Last 30 Days">Last 30 Days</option>
+                        <option value="Last 90 Days">Last 90 Days</option>
+                        <option value="All-Time">All-Time</option>
+                      </select>
+                    </div>
+                    {bestSellingItemsData.length > 0 ? (
+                      <ResponsiveContainer width="100%" height={350}>
+                        <BarChart data={bestSellingItemsData} layout="vertical">
+                          <CartesianGrid strokeDasharray="3 3" />
+                          <XAxis type="number" />
+                          <YAxis dataKey="name" type="category" width={120} />
+                          <Tooltip />
+                          <Bar dataKey="sales" fill="#00b4d8" />
+                        </BarChart>
+                      </ResponsiveContainer>
+                    ) : (
+                      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', height: 350, color: '#999' }}>
+                        No sales data available for this period
+                      </div>
+                    )}
                   </div>
-                  <ResponsiveContainer width="100%" height={350}>
-                    <BarChart data={bestSellingItemsData[bestSellingFilter]} layout="vertical">
-                      <CartesianGrid strokeDasharray="3 3" />
-                      <XAxis type="number" />
-                      <YAxis dataKey="name" type="category" width={120} />
-                      <Tooltip />
-                      <Bar dataKey="sales" fill="#00b4d8" />
-                    </BarChart>
-                  </ResponsiveContainer>
-                </div>
                 </div>
 
-                {/* Shift Performance Chart - Full width */}
                 <div className="posDashboardChartBox posDashboardShiftBox">
                   <div className="posDashboardChartHeader">
                     <span>Shift Performance</span>
@@ -653,30 +599,36 @@ const Dashboard = () => {
                   </div>
                   <div className="posDashboardShiftContent">
                     <div className="posDashboardShiftChart">
-                      <ResponsiveContainer width="100%" height={400}>
-                        <BarChart data={currentShiftData}>
-                          <CartesianGrid strokeDasharray="3 3" />
-                          <XAxis dataKey="cashier" />
-                          <YAxis yAxisId="left" orientation="left" stroke="#5b93ff" />
-                          <YAxis yAxisId="right" orientation="right" stroke="#a8c5ff" />
-                          <Tooltip />
-                          <Legend />
-                          <Bar yAxisId="left" dataKey="sales" fill="#5b93ff" name="Total Sales" radius={[8, 8, 0, 0]} />
-                          <Bar yAxisId="right" dataKey="orders" fill="#a8c5ff" name="Order Count" radius={[8, 8, 0, 0]} />
-                        </BarChart>
-                      </ResponsiveContainer>
+                      {shiftPerformanceData.length > 0 ? (
+                        <ResponsiveContainer width="100%" height={400}>
+                          <BarChart data={shiftPerformanceData}>
+                            <CartesianGrid strokeDasharray="3 3" />
+                            <XAxis dataKey="cashier" />
+                            <YAxis yAxisId="left" orientation="left" stroke="#5b93ff" />
+                            <YAxis yAxisId="right" orientation="right" stroke="#a8c5ff" />
+                            <Tooltip />
+                            <Legend />
+                            <Bar yAxisId="left" dataKey="sales" fill="#5b93ff" name="Total Sales" radius={[8, 8, 0, 0]} />
+                            <Bar yAxisId="right" dataKey="orders" fill="#a8c5ff" name="Order Count" radius={[8, 8, 0, 0]} />
+                          </BarChart>
+                        </ResponsiveContainer>
+                      ) : (
+                        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', height: 400, color: '#999' }}>
+                          No shift data available for this period
+                        </div>
+                      )}
                     </div>
                     <div className="posDashboardShiftStats">
                       <div className="posDashboardShiftStat">
                         <div className="posDashboardShiftStatLabel">Total Sales</div>
                         <div className="posDashboardShiftStatValue">
-                          ₱{currentShiftData.reduce((sum, c) => sum + c.sales, 0).toLocaleString()}
+                          ₱{shiftPerformanceData.reduce((sum, c) => sum + c.sales, 0).toLocaleString()}
                         </div>
                       </div>
                       <div className="posDashboardShiftStat">
                         <div className="posDashboardShiftStatLabel">Order Count</div>
                         <div className="posDashboardShiftStatValue">
-                          {currentShiftData.reduce((sum, c) => sum + c.orders, 0)}
+                          {shiftPerformanceData.reduce((sum, c) => sum + c.orders, 0)}
                         </div>
                       </div>
                     </div>

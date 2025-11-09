@@ -43,8 +43,10 @@ const getPeriodText = (dateRange, customStart, customEnd) => {
       return today.toLocaleDateString('en-US', options);
     }
     case "thisWeek": {
-      const firstDayOfWeek = startOfWeek(today);
-      const start = firstDayOfWeek.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+      // Last 7 days from today
+      const sevenDaysAgo = new Date(today);
+      sevenDaysAgo.setDate(today.getDate() - 6);
+      const start = sevenDaysAgo.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
       const end = today.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
       return `${start} - ${end}`;
     }
@@ -428,7 +430,10 @@ function TransactionHistory() {
       case "today":
         return [startOfToday(), endOfToday()];
       case "thisWeek":
-        return [startOfWeek(now), now];
+      const sevenDaysAgo = new Date(now);
+      sevenDaysAgo.setDate(now.getDate() - 6); // 6 days ago + today = 7 days
+      sevenDaysAgo.setHours(0, 0, 0, 0);
+      return [sevenDaysAgo, now];
       case "thisMonth":
         return [startOfMonth(now), endOfMonth(now)];
       case "thisYear":

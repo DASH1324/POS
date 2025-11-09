@@ -9,6 +9,7 @@ from routers.top_products import router_top_products
 from routers.transaction_history import router_transaction_history
 from routers.auto_cancel_orders import router_auto_cancel, auto_cancel_expired_orders
 from routers.refund import router_refund  # Import the router instance
+from routers.dashboard import router_dashboard  # Import the router instance
 
 # Global flag for background task
 _auto_cancel_task = None
@@ -62,15 +63,16 @@ app.include_router(cancelled_order.router_cancelled_order)
 app.include_router(router_top_products)
 app.include_router(router_transaction_history)
 app.include_router(sales.router_sales_metrics)
-app.include_router(router_auto_cancel)  # Auto-cancel router
-app.include_router(router_refund)  # ✅ FIXED: Use router_refund instead of refund
-
+app.include_router(router_auto_cancel)  
+app.include_router(router_refund)  
+app.include_router(router_dashboard)  
 
 # --- CORS middleware ---
 app.add_middleware(
     CORSMiddleware,
     allow_origins=[
         "http://localhost:4001",
+        "http://127.0.0.1:4001",  # Add this
         "http://192.168.100.32:4001",
         "http://localhost:3000",
         "http://localhost:4000",

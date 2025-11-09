@@ -439,18 +439,22 @@ function Orders() {
         orderToUpdate.orderItems.forEach(item => {
           const normalizedCategory = (item.category || '').trim().toLowerCase();
           
-          if (normalizedCategory === 'merchandise' || 
-              normalizedCategory === 'all items' || 
-              normalizedCategory === 'allitems') {
+          // Map "All Items" to "Merchandise" category
+          const finalCategory = normalizedCategory === 'all items' || normalizedCategory === 'allitems' 
+            ? 'merchandise' 
+            : normalizedCategory;
+          
+          if (finalCategory === 'merchandise') {
             merchandiseItems.push({
               name: item.name,
-              quantity: item.quantity
+              quantity: item.quantity,
+              category: 'Merchandise'  // Store with proper casing
             });
           } else {
             productItems.push({
               product_name: item.name,
               quantity: item.quantity,
-              category: item.category
+              category: item.category || 'Product'  // Fallback to 'Product' if no category
             });
           }
         });

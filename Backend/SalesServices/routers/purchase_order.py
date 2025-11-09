@@ -562,7 +562,15 @@ async def save_online_order(
             logger.info(f"✅ Created Sale with auto-generated SaleID: {new_sale_id}")
 
             for item in order_data.items:
-                item_category = item.category or 'Online'
+                # Map "All Items" to "Merchandise" category
+                raw_category = (item.category or '').strip().lower()
+                
+                if raw_category in ['all items', 'allitems']:
+                    item_category = 'Merchandise'
+                elif item.category:
+                    item_category = item.category
+                else:
+                    item_category = 'Online'
                 
                 sql_insert_item = """
                     INSERT INTO SaleItems (SaleID, ItemName, Quantity, UnitPrice, Category)
@@ -572,7 +580,7 @@ async def save_online_order(
                 await cursor.execute(
                     sql_insert_item, 
                     new_sale_id, item.name, item.quantity, 
-                    Decimal(str(item.price)), item_category
+                    Decimal(str(item.price)), item_category  # Use mapped category
                 )
                 
                 await cursor.execute("SELECT CAST(@@IDENTITY AS INT)")
@@ -824,8 +832,9 @@ async def update_order_status(
     except (ValueError, IndexError):
         raise HTTPException(status_code=400, detail="Invalid order ID format.")
     
-    conn = await get_db_connection()
+    conn = None
     try:
+        conn = await get_db_connection()
         async with conn.cursor() as cursor:
             # Step 1: Check if the order exists and get its current status
             await cursor.execute("SELECT Status FROM Sales WHERE SaleID = ?", parsed_id)
@@ -838,35 +847,78 @@ async def update_order_status(
             action_type = "UPDATE"
             
             # Step 2: Generate the detailed description BEFORE committing the database changes
-            detailed_description = await build_detailed_update_description(
-                cursor,
-                parsed_id,
-                old_status,
-                request.newStatus,
-                actor,
-                current_user['access_token']
-            )
+            try:
+                detailed_description = await build_detailed_update_description(
+                    cursor,
+                    parsed_id,
+                    old_status,
+                    request.newStatus,
+                    actor,
+                    current_user['access_token']
+                )
+            except Exception as desc_error:
+                logger.error(f"Error building description: {desc_error}", exc_info=True)
+                # Fallback description
+                detailed_description = f"updated order {parsed_id} status from {old_status} to {request.newStatus}"
             
             # Step 3: Perform the database update
             if request.newStatus == 'cancelled':
-                if current_user.get("userRole") not in ["admin", "manager"]:
-                     raise HTTPException(status_code=403, detail="Only managers or admins can cancel orders.")
+                # Allow cancellation if:
+                # 1. User is admin/manager OR
+                # 2. User is cashier but provides valid manager authorization
+                user_role = current_user.get("userRole")
+                
+                if user_role not in ["admin", "manager", "cashier"]:
+                    raise HTTPException(
+                        status_code=403, 
+                        detail="You do not have permission to cancel orders."
+                    )
+                
+                # Cashiers MUST provide manager authorization
+                if user_role == "cashier":
+                    if not request.cancelDetails or not request.cancelDetails.managerUsername:
+                        raise HTTPException(
+                            status_code=400, 
+                            detail="Manager authorization required for cashier to cancel orders."
+                        )
+                
+                # Admins/Managers can cancel without additional authorization, but still need to provide username
                 if not request.cancelDetails or not request.cancelDetails.managerUsername:
-                    raise HTTPException(status_code=400, detail="Manager username required for cancellation.")
+                    raise HTTPException(
+                        status_code=400, 
+                        detail="Manager username required for cancellation."
+                    )
                 
                 # Handle cancellation transaction
-                await conn.autocommit(False)
+                conn.autocommit = False  # ✅ FIXED: Set as property, not call as method
                 try:
-                    await cursor.execute("UPDATE Sales SET Status = ?, UpdatedAt = GETDATE() WHERE SaleID = ?", (request.newStatus, parsed_id))
-                    await cursor.execute("INSERT INTO CancelledOrders (SaleID, ManagerUsername, CancelledAt) VALUES (?, ?, GETDATE())", (parsed_id, request.cancelDetails.managerUsername))
+                    await cursor.execute(
+                        "UPDATE Sales SET Status = ?, UpdatedAt = GETDATE() WHERE SaleID = ?", 
+                        (request.newStatus, parsed_id)
+                    )
+                    await cursor.execute(
+                        "INSERT INTO CancelledOrders (SaleID, ManagerUsername, CancelledAt) VALUES (?, ?, GETDATE())", 
+                        (parsed_id, request.cancelDetails.managerUsername)
+                    )
                     await conn.commit()
                     
                     # Fetch items to restock after commit
-                    await cursor.execute("SELECT ItemName, Quantity, Category FROM SaleItems WHERE SaleID = ?", parsed_id)
+                    await cursor.execute(
+                        "SELECT ItemName, Quantity, Category FROM SaleItems WHERE SaleID = ?", 
+                        parsed_id
+                    )
                     items_rows = await cursor.fetchall()
-                    items_to_restock = [{'ItemName': r.ItemName, 'Quantity': r.Quantity, 'Category': r.Category} for r in items_rows]
+                    items_to_restock = [
+                        {'ItemName': r.ItemName, 'Quantity': r.Quantity, 'Category': r.Category} 
+                        for r in items_rows
+                    ]
                     if items_to_restock:
-                        background_tasks.add_task(process_inventory_restock_background, order_id, items_to_restock, current_user['access_token'])
+                        background_tasks.add_task(
+                            process_inventory_restock_background, 
+                            order_id, 
+                            items_to_restock, 
+                            current_user['access_token']
+                        )
                     
                     action_type = "CANCEL"
                     message = "Order has been cancelled. Inventory restock initiated."
@@ -874,32 +926,63 @@ async def update_order_status(
                 except Exception as db_exc:
                     await conn.rollback()
                     logger.error(f"DB error during cancellation for {order_id}: {db_exc}", exc_info=True)
-                    raise HTTPException(status_code=500, detail="Failed to save cancellation to DB.")
+                    raise HTTPException(
+                        status_code=500, 
+                        detail=f"Failed to save cancellation to DB: {str(db_exc)}"
+                    )
                 finally:
-                    await conn.autocommit(True)
+                    conn.autocommit = True  # ✅ FIXED: Set as property, not call as method
             else:
                 # Handle all other status updates
-                await cursor.execute("UPDATE Sales SET Status = ?, UpdatedAt = GETDATE() WHERE SaleID = ?", (request.newStatus, parsed_id))
-                await conn.commit()
-                message = f"Order status successfully updated to '{request.newStatus}'."
+                try:
+                    await cursor.execute(
+                        "UPDATE Sales SET Status = ?, UpdatedAt = GETDATE() WHERE SaleID = ?", 
+                        (request.newStatus, parsed_id)
+                    )
+                    await conn.commit()
+                    message = f"Order status successfully updated to '{request.newStatus}'."
+                except Exception as update_exc:
+                    await conn.rollback()
+                    logger.error(f"DB error during status update for {order_id}: {update_exc}", exc_info=True)
+                    raise HTTPException(
+                        status_code=500,
+                        detail=f"Failed to update order status: {str(update_exc)}"
+                    )
 
             # Step 4: Schedule the blockchain log with the detailed description
-            background_tasks.add_task(
-                log_to_blockchain,
-                service_identifier="PURCHASE_ORDER_SERVICE",
-                action=action_type,
-                entity_type="PurchaseOrder",
-                entity_id=parsed_id,
-                actor_username=actor,
-                change_description=detailed_description,
-                data={"old_status": old_status, "new_status": request.newStatus, "manager_authorizer": request.cancelDetails.managerUsername if request.newStatus == 'cancelled' else None},
-                token=current_user['access_token']
-            )
+            try:
+                background_tasks.add_task(
+                    log_to_blockchain,
+                    service_identifier="PURCHASE_ORDER_SERVICE",
+                    action=action_type,
+                    entity_type="PurchaseOrder",
+                    entity_id=parsed_id,
+                    actor_username=actor,
+                    change_description=detailed_description,
+                    data={
+                        "old_status": old_status, 
+                        "new_status": request.newStatus, 
+                        "manager_authorizer": request.cancelDetails.managerUsername if request.newStatus == 'cancelled' else None
+                    },
+                    token=current_user['access_token']
+                )
+            except Exception as blockchain_exc:
+                logger.error(f"Failed to schedule blockchain logging: {blockchain_exc}", exc_info=True)
+                # Don't fail the request if blockchain logging fails
             
             return {"message": message}
     
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Unexpected error in update_order_status: {e}", exc_info=True)
+        raise HTTPException(
+            status_code=500,
+            detail=f"An unexpected error occurred: {str(e)}"
+        )
     finally:
-        if conn: await conn.close()
+        if conn: 
+            await conn.close()
 
 @router_purchase_order.patch(
     "/online/{reference_number}/status",
