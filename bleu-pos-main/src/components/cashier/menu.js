@@ -43,6 +43,23 @@ function Menu() {
   // Cache for max quantities to avoid redundant API calls
   const [maxQuantityCache, setMaxQuantityCache] = useState({});
 
+  const formatPromotionValue = (promo) => {
+    if (promo.promotion_type === 'percentage') {
+        return `${promo.promotion_value}%`;
+    } else if (promo.promotion_type === 'fixed') {
+        return `₱${promo.promotion_value}`;
+    } else if (promo.promotion_type === 'bogo') {
+        // For BOGO, format based on bogo_discount_type
+        if (promo.bogo_discount_type === 'percentage') {
+            return `${promo.bogo_discount_value}%`;
+        } else if (promo.bogo_discount_type === 'fixed_amount') {
+            return `₱${promo.bogo_discount_value}`;
+        }
+        return ''; // Free items in BOGO
+    }
+    return `${promo.promotion_value}`;
+  };
+
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
     const urlUsername = params.get('username');
@@ -67,23 +84,116 @@ function Menu() {
     }
 
     // --- FETCH PROMOTIONS ---
-    const fetchPromotions = async (token) => {
-        try {
-            const response = await fetch(`${PROMOTION_BASE_URL}/promotions/`, {
-                headers: { 'Authorization': `Bearer ${token}` }
-            });
-            if (!response.ok) {
-                throw new Error('Failed to fetch promotions.');
-            }
-            const data = await response.json();
-            // Filter for active promotions only
-            const activePromotions = data.filter(p => p.status === 'active');
-            setPromotions(activePromotions);
-            console.log("Active promotions loaded:", activePromotions);
-        } catch (error) {
-            console.error(error.message);
+    // In menu.js, replace the fetchPromotions function (around line 85-110)
+
+const fetchPromotions = async (token) => {
+  try {
+    const response = await fetch(`${PROMOTION_BASE_URL}/promotions/`, {
+      headers: { 'Authorization': `Bearer ${token}` }
+    });
+    if (!response.ok) {
+      throw new Error('Failed to fetch promotions.');
+    }
+    const data = await response.json();
+    
+    console.log("Raw API Response:", data);
+    
+    // Transform the data to match the format your code expects
+    const transformedPromotions = data
+      .filter(p => p.status === 'active')
+      .map(promo => {
+        console.log("Processing promotion:", promo);
+        
+        let promotionType = null;
+        let buyQty = 1;
+        let getQty = 1;
+        let discountValue = 0;
+        let bogoDiscountType = null;
+        
+        // Parse the "type" field - this contains formatted text like "BOGO (1+1)", "PERCENTAGE", etc.
+        const typeStr = (promo.type || '').toUpperCase();
+        
+        if (typeStr.includes('BOGO')) {
+          promotionType = 'bogo';
+          // Extract buy and get quantities from "BOGO (1+1)" format
+          const match = promo.type.match(/\((\d+)\+(\d+)\)/);
+          if (match) {
+            buyQty = parseInt(match[1]);
+            getQty = parseInt(match[2]);
+          }
+        } else if (typeStr.includes('PERCENTAGE') || typeStr.includes('%')) {
+          promotionType = 'percentage';
+        } else if (typeStr.includes('FIXED') || typeStr.includes('₱')) {
+          promotionType = 'fixed';
         }
-    };
+        
+        // Parse the "value" field - this contains formatted values like "50%", "₱100", "50.0% off"
+        if (promo.value) {
+          // Extract numeric value
+          const numMatch = promo.value.match(/(\d+\.?\d*)/);
+          if (numMatch) {
+            discountValue = parseFloat(numMatch[0]);
+          }
+          
+          // For BOGO, determine discount type from value format
+          if (promotionType === 'bogo') {
+            if (promo.value.includes('%')) {
+              bogoDiscountType = 'percentage';
+            } else if (promo.value.includes('₱') || promo.value.toLowerCase().includes('off')) {
+              bogoDiscountType = 'fixed_amount';
+            }
+          }
+        }
+        
+        // Parse products string - handle both comma-separated and "All Products"
+        let productsList = [];
+        let applicationType = 'specific_products';
+        
+        if (promo.products) {
+          if (promo.products.toLowerCase() === 'all products') {
+            applicationType = 'all_products';
+            productsList = [];
+          } else {
+            productsList = promo.products.split(',').map(p => p.trim()).filter(Boolean);
+          }
+        }
+        
+        const transformed = {
+          id: promo.id,
+          name: promo.name,
+          type: promotionType,
+          promotion_type: promotionType,
+          value: promo.value || '0',
+          promotion_value: discountValue,
+          products: promo.products || '',
+          applicable_products: productsList,
+          status: promo.status,
+          validFrom: promo.validFrom,
+          validTo: promo.validTo,
+          valid_from: promo.validFrom,
+          valid_to: promo.validTo,
+          application_type: applicationType,
+          buyQuantity: buyQty,
+          getQuantity: getQty,
+          buy_quantity: buyQty,
+          get_quantity: getQty,
+          bogoDiscountType: bogoDiscountType,
+          bogo_discount_type: bogoDiscountType,
+          bogo_discount_value: promotionType === 'bogo' ? discountValue : null,
+          discountValue: discountValue
+        };
+        
+        console.log("Transformed promotion:", transformed);
+        return transformed;
+      });
+    
+    setPromotions(transformedPromotions);
+    console.log("Active promotions loaded and transformed:", transformedPromotions);
+  } catch (error) {
+    console.error("Error fetching promotions:", error.message);
+  }
+};
+
 
     const initializeData = async (token, username) => {
       setIsLoading(true);
@@ -374,49 +484,68 @@ function Menu() {
       let isFirstAdd = false;
       let wasBogoAlreadyStarted = false;
       const bogoPromo = promotions.find(p => {
-        if (!p.type.startsWith('BOGO')) return false;
+        console.log("Checking promo:", p.name, "Type:", p.type, "Products:", p.products);
+
+        // Must have valid type
+        if (!p.type || p.type !== 'bogo') {
+          console.log("  - Skipped: not BOGO type");
+          return false;
+        }
+
+        // Must have products
+        if (!p.products) {
+          console.log("  - Skipped: no products");
+          return false;
+        }
+
+        // Check if current item is in the applicable products
         const applicableProducts = p.products.split(',').map(name => name.trim());
-        return applicableProducts.includes(item.name);
+        const isApplicable = applicableProducts.includes(item.name);
+
+        console.log("  - Applicable products:", applicableProducts);
+        console.log("  - Current item:", item.name);
+        console.log("  - Is applicable:", isApplicable);
+
+        return isApplicable;
       });
 
+      console.log("Found BOGO promo for", item.name, ":", bogoPromo)
+
       if (bogoPromo) {
-        const matches = bogoPromo.type.match(/(\d+)\+(\d+)/);
-        if (matches) {
-          const buyQuantity = parseInt(matches[1], 10);
-          const getQuantity = parseInt(matches[2], 10);
-          const requiredTotal = buyQuantity + getQuantity;
-          
-          // Parse the BOGO products
-          const applicableProducts = bogoPromo.products.split(',').map(name => name.trim());
-          const buyItemName = applicableProducts[0];
-          const getItemName = applicableProducts.length > 1 ? applicableProducts[1] : buyItemName;
-          
-          // Check if any BOGO product is already in cart
-          const hasBuyItem = cartItems.some(cartItem => cartItem.name === buyItemName);
-          const hasGetItem = cartItems.some(cartItem => cartItem.name === getItemName);
-          wasBogoAlreadyStarted = hasBuyItem || hasGetItem;
-          
-          // Check if this is the first BOGO product being added
-          isFirstAdd = !wasBogoAlreadyStarted;
-          
-          // For same product BOGO
-          if (buyItemName === getItemName) {
-            const currentItemInCart = cartItems.find(cartItem => cartItem.name === item.name);
-            const currentQuantity = currentItemInCart ? currentItemInCart.quantity : 0;
-            previousBogoCompleted = currentQuantity >= requiredTotal;
-          } 
-          // For different products BOGO
-          else {
-            const buyItemsInCart = cartItems.find(cartItem => cartItem.name === buyItemName);
-            const getItemsInCart = cartItems.find(cartItem => cartItem.name === getItemName);
-            const buyQty = buyItemsInCart ? buyItemsInCart.quantity : 0;
-            const getQty = getItemsInCart ? getItemsInCart.quantity : 0;
-            
-            // Check if BOGO was already completed before this add
-            const bogoSets = Math.floor(buyQty / buyQuantity);
-            const eligibleGetItems = bogoSets * getQuantity;
-            previousBogoCompleted = (buyQty >= buyQuantity && getQty >= eligibleGetItems);
-          }
+        const buyQuantity = bogoPromo.buyQuantity;
+        const getQuantity = bogoPromo.getQuantity;
+        const requiredTotal = buyQuantity + getQuantity;
+
+        // Parse the BOGO products
+        const applicableProducts = bogoPromo.products.split(',').map(name => name.trim());
+        const buyItemName = applicableProducts[0];
+        const getItemName = applicableProducts.length > 1 ? applicableProducts[1] : buyItemName;
+
+        // Check if any BOGO product is already in cart
+        const hasBuyItem = cartItems.some(cartItem => cartItem.name === buyItemName);
+        const hasGetItem = cartItems.some(cartItem => cartItem.name === getItemName);
+        wasBogoAlreadyStarted = hasBuyItem || hasGetItem;
+
+        // Check if this is the first BOGO product being added
+        isFirstAdd = !wasBogoAlreadyStarted;
+
+        // For same product BOGO
+        if (buyItemName === getItemName) {
+          const currentItemInCart = cartItems.find(cartItem => cartItem.name === item.name);
+          const currentQuantity = currentItemInCart ? currentItemInCart.quantity : 0;
+          previousBogoCompleted = currentQuantity >= requiredTotal;
+        }
+        // For different products BOGO
+        else {
+          const buyItemsInCart = cartItems.find(cartItem => cartItem.name === buyItemName);
+          const getItemsInCart = cartItems.find(cartItem => cartItem.name === getItemName);
+          const buyQty = buyItemsInCart ? buyItemsInCart.quantity : 0;
+          const getQty = getItemsInCart ? getItemsInCart.quantity : 0;
+
+          // Check if BOGO was already completed before this add
+          const bogoSets = Math.floor(buyQty / buyQuantity);
+          const eligibleGetItems = bogoSets * getQuantity;
+          previousBogoCompleted = (buyQty >= buyQuantity && getQty >= eligibleGetItems);
         }
       }
 
@@ -463,57 +592,54 @@ function Menu() {
 
         // Check if BOGO is NOW completed after this addition using the UPDATED cart
         if (bogoPromo && !previousBogoCompleted) {
-          const matches = bogoPromo.type.match(/(\d+)\+(\d+)/);
-          if (matches) {
-            const buyQuantity = parseInt(matches[1], 10);
-            const getQuantity = parseInt(matches[2], 10);
-            
-            const applicableProducts = bogoPromo.products.split(',').map(name => name.trim());
-            const buyItemName = applicableProducts[0];
-            const getItemName = applicableProducts.length > 1 ? applicableProducts[1] : buyItemName;
-            
-            let isNowCompleted = false;
-            
-            // Check quantities in the UPDATED cart
-            if (buyItemName === getItemName) {
-              // Same product BOGO
-              const requiredTotal = buyQuantity + getQuantity;
-              const currentItemInCart = updatedCart.find(cartItem => cartItem.name === buyItemName);
-              const currentQuantity = currentItemInCart ? currentItemInCart.quantity : 0;
-              
-              if (currentQuantity >= requiredTotal) {
-                isNowCompleted = true;
-              }
-            } else {
-              // Different products BOGO
-              const buyItemsInCart = updatedCart.find(cartItem => cartItem.name === buyItemName);
-              const getItemsInCart = updatedCart.find(cartItem => cartItem.name === getItemName);
-              const buyQty = buyItemsInCart ? buyItemsInCart.quantity : 0;
-              const getQty = getItemsInCart ? getItemsInCart.quantity : 0;
-              
-              // Check if we NOW have the required quantities
-              if (buyQty >= buyQuantity && getQty >= getQuantity) {
-                isNowCompleted = true;
-              }
-            }
+          const buyQuantity = bogoPromo.buyQuantity;
+          const getQuantity = bogoPromo.getQuantity;
 
-            // Show congratulations modal if BOGO just completed
-            if (isNowCompleted) {
-              console.log("BOGO Promotion completed! Showing congratulations modal:", bogoPromo);
-              
-              const valueMatch = bogoPromo.value.match(/(\d+\.?\d*)/);
-              const discountValue = valueMatch ? valueMatch[0] : '0';
-              const isPercentage = bogoPromo.value.includes('%');
-              
-              // Use setTimeout to ensure state update happens after cart update
-              setTimeout(() => {
-                setActiveBogoPromo({
-                  ...bogoPromo,
-                  congratsMessage: `Congratulations! You've completed the ${bogoPromo.type} promotion and received ${discountValue}${isPercentage ? '%' : '₱'} discount!`
-                });
-                setShowBogoCongratsModal(true);
-              }, 100);
+          const applicableProducts = bogoPromo.products.split(',').map(name => name.trim());
+          const buyItemName = applicableProducts[0];
+          const getItemName = applicableProducts.length > 1 ? applicableProducts[1] : buyItemName;
+
+          let isNowCompleted = false;
+
+          // Check quantities in the UPDATED cart
+          if (buyItemName === getItemName) {
+            // Same product BOGO
+            const requiredTotal = buyQuantity + getQuantity;
+            const currentItemInCart = updatedCart.find(cartItem => cartItem.name === buyItemName);
+            const currentQuantity = currentItemInCart ? currentItemInCart.quantity : 0;
+
+            if (currentQuantity >= requiredTotal) {
+              isNowCompleted = true;
             }
+          } else {
+            // Different products BOGO
+            const buyItemsInCart = updatedCart.find(cartItem => cartItem.name === buyItemName);
+            const getItemsInCart = updatedCart.find(cartItem => cartItem.name === getItemName);
+            const buyQty = buyItemsInCart ? buyItemsInCart.quantity : 0;
+            const getQty = getItemsInCart ? getItemsInCart.quantity : 0;
+
+            // Check if we NOW have the required quantities
+            if (buyQty >= buyQuantity && getQty >= getQuantity) {
+              isNowCompleted = true;
+            }
+          }
+
+          // Show congratulations modal if BOGO just completed
+          if (isNowCompleted) {
+            console.log("BOGO Promotion completed! Showing congratulations modal:", bogoPromo);
+
+            const valueMatch = bogoPromo.value.match(/(\d+\.?\d*)/);
+            const discountValue = valueMatch ? valueMatch[0] : '0';
+            const isPercentage = bogoPromo.value.includes('%');
+
+            // Use setTimeout to ensure state update happens after cart update
+            setTimeout(() => {
+              setActiveBogoPromo({
+                ...bogoPromo,
+                congratsMessage: `Congratulations! You've completed the ${bogoPromo.type} promotion and received ${discountValue}${isPercentage ? '%' : '₱'} discount!`
+              });
+              setShowBogoCongratsModal(true);
+            }, 100);
           }
         }
 

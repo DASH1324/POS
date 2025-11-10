@@ -120,7 +120,7 @@ async def get_total_sales(
     filter: Literal["Today", "Yesterday", "This Week", "This Month"] = "Today",
     current_user: dict = Depends(get_current_active_user)
 ):
-    """Get total sales data for admin dashboard"""
+    """Get total sales data for admin dashboard - Net sales after discounts/promotions"""
     # Check authorization
     allowed_roles = ["admin", "manager"]
     if current_user.get("userRole") not in allowed_roles:
@@ -156,9 +156,12 @@ async def get_total_sales(
         
         end_date = now
         
-        # Current period sales
+        # Current period sales - Net sales after discounts and promotions
         await cursor.execute("""
-            SELECT ISNULL(SUM(si.Quantity * si.UnitPrice), 0) as TotalSales
+            SELECT 
+                ISNULL(SUM(si.Quantity * si.UnitPrice), 0) 
+                - ISNULL(SUM(s.TotalDiscountAmount), 0) 
+                - ISNULL(SUM(s.PromotionalDiscountAmount), 0) as NetSales
             FROM Sales s
             INNER JOIN SaleItems si ON s.SaleID = si.SaleID
             WHERE s.Status = 'completed' 
@@ -166,9 +169,12 @@ async def get_total_sales(
         """, start_date, end_date)
         current = float((await cursor.fetchone())[0] or 0)
         
-        # Previous period sales
+        # Previous period sales - Net sales after discounts and promotions
         await cursor.execute("""
-            SELECT ISNULL(SUM(si.Quantity * si.UnitPrice), 0) as TotalSales
+            SELECT 
+                ISNULL(SUM(si.Quantity * si.UnitPrice), 0) 
+                - ISNULL(SUM(s.TotalDiscountAmount), 0) 
+                - ISNULL(SUM(s.PromotionalDiscountAmount), 0) as NetSales
             FROM Sales s
             INNER JOIN SaleItems si ON s.SaleID = si.SaleID
             WHERE s.Status = 'completed' 
@@ -364,7 +370,7 @@ async def get_sales_overview(
     filter: Literal["Daily", "Weekly", "Monthly", "Yearly"] = "Monthly",
     current_user: dict = Depends(get_current_active_user)
 ):
-    """Get sales overview data - returns empty array if no data"""
+    """Get sales overview data - Net sales after discounts and promotions"""
     allowed_roles = ["admin", "manager"]
     if current_user.get("userRole") not in allowed_roles:
         raise HTTPException(
@@ -383,7 +389,9 @@ async def get_sales_overview(
                 SELECT 
                     DATENAME(weekday, s.CreatedAt) as Period,
                     CAST(s.CreatedAt AS DATE) as SortDate,
-                    ISNULL(SUM(si.Quantity * si.UnitPrice), 0) as Income
+                    ISNULL(SUM(si.Quantity * si.UnitPrice), 0) 
+                    - ISNULL(SUM(s.TotalDiscountAmount), 0) 
+                    - ISNULL(SUM(s.PromotionalDiscountAmount), 0) as Income
                 FROM Sales s
                 INNER JOIN SaleItems si ON s.SaleID = si.SaleID
                 WHERE s.Status = 'completed'
@@ -396,7 +404,9 @@ async def get_sales_overview(
                 SELECT 
                     'Week ' + CAST(DATEPART(week, s.CreatedAt) - DATEPART(week, DATEADD(month, -1, GETDATE())) + 1 AS VARCHAR) as Period,
                     DATEPART(week, s.CreatedAt) as WeekNum,
-                    ISNULL(SUM(si.Quantity * si.UnitPrice), 0) as Income
+                    ISNULL(SUM(si.Quantity * si.UnitPrice), 0) 
+                    - ISNULL(SUM(s.TotalDiscountAmount), 0) 
+                    - ISNULL(SUM(s.PromotionalDiscountAmount), 0) as Income
                 FROM Sales s
                 INNER JOIN SaleItems si ON s.SaleID = si.SaleID
                 WHERE s.Status = 'completed'
@@ -410,7 +420,9 @@ async def get_sales_overview(
                     DATENAME(month, s.CreatedAt) as Period,
                     YEAR(s.CreatedAt) as YearNum,
                     MONTH(s.CreatedAt) as MonthNum,
-                    ISNULL(SUM(si.Quantity * si.UnitPrice), 0) as Income
+                    ISNULL(SUM(si.Quantity * si.UnitPrice), 0) 
+                    - ISNULL(SUM(s.TotalDiscountAmount), 0) 
+                    - ISNULL(SUM(s.PromotionalDiscountAmount), 0) as Income
                 FROM Sales s
                 INNER JOIN SaleItems si ON s.SaleID = si.SaleID
                 WHERE s.Status = 'completed'
@@ -423,7 +435,9 @@ async def get_sales_overview(
                 SELECT 
                     CAST(YEAR(s.CreatedAt) AS VARCHAR) as Period,
                     YEAR(s.CreatedAt) as YearNum,
-                    ISNULL(SUM(si.Quantity * si.UnitPrice), 0) as Income
+                    ISNULL(SUM(si.Quantity * si.UnitPrice), 0) 
+                    - ISNULL(SUM(s.TotalDiscountAmount), 0) 
+                    - ISNULL(SUM(s.PromotionalDiscountAmount), 0) as Income
                 FROM Sales s
                 INNER JOIN SaleItems si ON s.SaleID = si.SaleID
                 WHERE s.Status = 'completed'
@@ -553,7 +567,9 @@ async def get_shift_performance(
         query = f"""
             SELECT 
                 ISNULL(s.CashierName, 'Unknown') as CashierUsername,
-                ISNULL(SUM(si.Quantity * si.UnitPrice), 0) as TotalSales,
+                ISNULL(SUM(si.Quantity * si.UnitPrice), 0) 
+                - ISNULL(SUM(s.TotalDiscountAmount), 0) 
+                - ISNULL(SUM(s.PromotionalDiscountAmount), 0) as TotalSales,
                 COUNT(DISTINCT s.SaleID) as OrderCount
             FROM Sales s
             INNER JOIN SaleItems si ON s.SaleID = si.SaleID

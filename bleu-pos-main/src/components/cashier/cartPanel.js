@@ -116,110 +116,145 @@ const CartPanel = ({
 
   // --- AUTOMATIC PROMOTION CALCULATION (CORRECTED) ---
   useEffect(() => {
-    const calculateBestPromotion = () => {
-        let bestPromo = null;
-        let maxDiscount = 0;
+  const calculateBestPromotion = () => {
+    let bestPromo = null;
+    let maxDiscount = 0;
 
-        if (!cartItems.length || !promotions.length) {
-            setAutoPromotion(null);
-            return;
+    if (!cartItems.length || !promotions.length) {
+      setAutoPromotion(null);
+      return;
+    }
+
+    // Filter and parse promotions with defensive checks
+    const parsedPromotions = promotions
+      .filter(p => {
+        // Check if promotion has required fields
+        if (!p || typeof p !== 'object') return false;
+        if (!p.products || !p.value) return false;
+        if (!p.type && !p.promotion_type) return false;
+        return true;
+      })
+      .map(p => {
+        const promo = { ...p, original: p };
+        const promotionType = p.type || p.promotion_type;
+        
+        if (promotionType === 'bogo') {
+          promo.promotionType = 'bogo';
+          promo.buyQuantity = p.buyQuantity || p.buy_quantity || 1;
+          promo.getQuantity = p.getQuantity || p.get_quantity || 1;
+          
+          const valueMatch = p.value.match(/(\d+\.?\d*)/);
+          if (valueMatch) {
+            promo.discountValue = parseFloat(valueMatch[0]);
+            promo.bogoDiscountType = p.value.includes('%') ? 'percentage' : 'fixed_amount';
+          }
+          
+          // Parse products string into array
+          promo.selectedProducts = typeof p.products === 'string' 
+            ? p.products.split(',').map(name => name.trim()).filter(Boolean)
+            : (Array.isArray(p.products) ? p.products : []);
+            
+        } else if (promotionType === 'percentage') {
+          promo.promotionType = 'percentage';
+          promo.promotionValue = parseFloat(p.value.replace('%', ''));
+          
+          promo.selectedProducts = typeof p.products === 'string'
+            ? p.products.split(',').map(name => name.trim()).filter(Boolean)
+            : (Array.isArray(p.products) ? p.products : []);
+            
+        } else if (promotionType === 'fixed') {
+          promo.promotionType = 'fixed';
+          promo.promotionValue = parseFloat(p.value.replace('₱', ''));
+          
+          promo.selectedProducts = typeof p.products === 'string'
+            ? p.products.split(',').map(name => name.trim()).filter(Boolean)
+            : (Array.isArray(p.products) ? p.products : []);
         }
+        
+        promo.applicationType = p.application_type || 'specific_products';
+        return promo;
+      });
 
-        const parsedPromotions = promotions.map(p => {
-            const promo = { ...p, original: p };
-            if (p.type.startsWith('BOGO')) {
-                promo.promotionType = 'bogo';
-                const matches = p.type.match(/(\d+)\+(\d+)/);
-                if (matches) {
-                    promo.buyQuantity = parseInt(matches[1], 10);
-                    promo.getQuantity = parseInt(matches[2], 10);
-                }
-                const valueMatch = p.value.match(/(\d+\.?\d*)/);
-                if (valueMatch) {
-                    promo.discountValue = parseFloat(valueMatch[0]);
-                    promo.bogoDiscountType = p.value.includes('%') ? 'percentage' : 'fixed_amount';
-                }
-                promo.selectedProducts = p.products.split(',').map(name => name.trim());
-            } else if (p.type.toUpperCase() === 'PERCENTAGE') {
-                 promo.promotionType = 'percentage';
-                 promo.promotionValue = parseFloat(p.value.replace('%', ''));
-                 promo.selectedProducts = p.products.split(',').map(name => name.trim());
-            } else if (p.type.toUpperCase() === 'FIXED') {
-                 promo.promotionType = 'fixed';
-                 promo.promotionValue = parseFloat(p.value.replace('₱', ''));
-                 promo.selectedProducts = p.products.split(',').map(name => name.trim());
-            }
-            promo.applicationType = p.application_type || 'specific_products';
-            return promo;
-        });
+    for (const promo of parsedPromotions) {
+      let currentDiscount = 0;
+      
+      // Ensure selectedProducts is an array before filtering
+      if (!Array.isArray(promo.selectedProducts)) {
+        console.warn('Invalid selectedProducts for promo:', promo.name);
+        continue;
+      }
+      
+      const eligibleItems = cartItems.filter(item => {
+        if (item.type !== 'product') return false;
+        if (promo.applicationType === 'all_products') return true;
+        if (promo.applicationType === 'specific_categories' && promo.selectedProducts.includes(item.category)) return true;
+        if (promo.applicationType === 'specific_products' && promo.selectedProducts.includes(item.name)) return true;
+        return false;
+      });
 
-        for (const promo of parsedPromotions) {
-            let currentDiscount = 0;
-            const eligibleItems = cartItems.filter(item => {
-                if (item.type !== 'product') return false;
-                if (promo.applicationType === 'all_products') return true;
-                if (promo.applicationType === 'specific_categories' && promo.selectedProducts.includes(item.category)) return true;
-                if (promo.applicationType === 'specific_products' && promo.selectedProducts.includes(item.name)) return true;
-                return false;
-            });
+      if (!eligibleItems.length) continue;
 
-            if (!eligibleItems.length) continue;
-
-            if (promo.promotionType === 'percentage' || promo.promotionType === 'fixed') {
-                const itemToDiscount = eligibleItems.sort((a, b) => b.price - a.price)[0];
-                if (promo.promotionType === 'percentage') {
-                    currentDiscount = parseFloat(itemToDiscount.price) * (parseFloat(promo.promotionValue) / 100);
-                } else {
-                    currentDiscount = Math.min(parseFloat(itemToDiscount.price), parseFloat(promo.promotionValue));
-                }
-            } else if (promo.promotionType === 'bogo') {
-                const buyItemName = promo.selectedProducts[0];
-                const getItemName = promo.selectedProducts.length > 1 ? promo.selectedProducts[1] : buyItemName;
-
-                if (buyItemName === getItemName) {
-                    const itemInCart = cartItems.find(item => item.name === buyItemName);
-                    if (!itemInCart || !promo.buyQuantity || !promo.getQuantity) continue;
-                    const bundleSize = promo.buyQuantity + promo.getQuantity;
-                    const numBundles = Math.floor(itemInCart.quantity / bundleSize);
-                    const itemsToDiscountCount = numBundles * promo.getQuantity;
-                    if (itemsToDiscountCount > 0) {
-                       const itemPrice = itemInCart.price;
-                       if (promo.bogoDiscountType === 'percentage') {
-                           currentDiscount = itemsToDiscountCount * (itemPrice * (promo.discountValue / 100));
-                       } else {
-                           const discountPerItem = Math.min(itemPrice, promo.discountValue);
-                           currentDiscount = itemsToDiscountCount * discountPerItem;
-                       }
-                    }
-                } else {
-                    const buyItemsInCart = cartItems.find(item => item.name === buyItemName);
-                    const getItemsInCart = cartItems.find(item => item.name === getItemName);
-                    if (!buyItemsInCart || !getItemsInCart || !promo.buyQuantity) continue;
-                    const bogoSets = Math.floor(buyItemsInCart.quantity / promo.buyQuantity);
-                    const eligibleGetItems = bogoSets * promo.getQuantity;
-                    const itemsToDiscountCount = Math.min(getItemsInCart.quantity, eligibleGetItems);
-                    if (itemsToDiscountCount > 0) {
-                        const getItemPrice = getItemsInCart.price;
-                        if (promo.bogoDiscountType === 'percentage') {
-                            currentDiscount = itemsToDiscountCount * (getItemPrice * (promo.discountValue / 100));
-                        } else {
-                            const discountPerItem = Math.min(getItemPrice, promo.discountValue);
-                            currentDiscount = itemsToDiscountCount * discountPerItem;
-                        }
-                    }
-                }
-            }
-
-            if (currentDiscount > maxDiscount) {
-                maxDiscount = currentDiscount;
-                bestPromo = { ...promo.original, discountAmount: maxDiscount };
-            }
+      if (promo.promotionType === 'percentage' || promo.promotionType === 'fixed') {
+        const itemToDiscount = eligibleItems.sort((a, b) => b.price - a.price)[0];
+        if (promo.promotionType === 'percentage') {
+          currentDiscount = parseFloat(itemToDiscount.price) * (parseFloat(promo.promotionValue) / 100);
+        } else {
+          currentDiscount = Math.min(parseFloat(itemToDiscount.price), parseFloat(promo.promotionValue));
         }
-        setAutoPromotion(bestPromo);
-    };
+      } else if (promo.promotionType === 'bogo') {
+        const buyItemName = promo.selectedProducts[0];
+        const getItemName = promo.selectedProducts.length > 1 ? promo.selectedProducts[1] : buyItemName;
 
-    calculateBestPromotion();
-  }, [cartItems, promotions, isCartOpen]);
+        if (buyItemName === getItemName) {
+          const itemInCart = cartItems.find(item => item.name === buyItemName);
+          if (!itemInCart || !promo.buyQuantity || !promo.getQuantity) continue;
+          
+          const bundleSize = promo.buyQuantity + promo.getQuantity;
+          const numBundles = Math.floor(itemInCart.quantity / bundleSize);
+          const itemsToDiscountCount = numBundles * promo.getQuantity;
+          
+          if (itemsToDiscountCount > 0) {
+            const itemPrice = itemInCart.price;
+            if (promo.bogoDiscountType === 'percentage') {
+              currentDiscount = itemsToDiscountCount * (itemPrice * (promo.discountValue / 100));
+            } else {
+              const discountPerItem = Math.min(itemPrice, promo.discountValue);
+              currentDiscount = itemsToDiscountCount * discountPerItem;
+            }
+          }
+        } else {
+          const buyItemsInCart = cartItems.find(item => item.name === buyItemName);
+          const getItemsInCart = cartItems.find(item => item.name === getItemName);
+          
+          if (!buyItemsInCart || !getItemsInCart || !promo.buyQuantity) continue;
+          
+          const bogoSets = Math.floor(buyItemsInCart.quantity / promo.buyQuantity);
+          const eligibleGetItems = bogoSets * promo.getQuantity;
+          const itemsToDiscountCount = Math.min(getItemsInCart.quantity, eligibleGetItems);
+          
+          if (itemsToDiscountCount > 0) {
+            const getItemPrice = getItemsInCart.price;
+            if (promo.bogoDiscountType === 'percentage') {
+              currentDiscount = itemsToDiscountCount * (getItemPrice * (promo.discountValue / 100));
+            } else {
+              const discountPerItem = Math.min(getItemPrice, promo.discountValue);
+              currentDiscount = itemsToDiscountCount * discountPerItem;
+            }
+          }
+        }
+      }
+
+      if (currentDiscount > maxDiscount) {
+        maxDiscount = currentDiscount;
+        bestPromo = { ...promo.original, discountAmount: maxDiscount };
+      }
+    }
+    
+    setAutoPromotion(bestPromo);
+  };
+
+  calculateBestPromotion();
+}, [cartItems, promotions, isCartOpen]);
 
 
   const isDiscountApplicable = (discount) => {
