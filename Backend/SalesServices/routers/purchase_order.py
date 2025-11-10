@@ -602,9 +602,12 @@ async def save_online_order(
                 
                 logger.info(f"✅ Created SaleItem '{item.name}' with auto-generated SaleItemID: {new_sale_item_id}")
                 
+                # Process each addon for this item
                 for addon in item.addons:
                     await cursor.execute("SELECT AddonID FROM Addons WHERE AddonName = ?", addon.addon_name)
                     addon_id_row = await cursor.fetchone()
+                    
+                    correct_pos_addon_id = None  # Initialize for this addon
                     
                     if not addon_id_row:
                         logger.info(f"Addon '{addon.addon_name}' not found in POS. Creating it with price {addon.price}")
@@ -627,8 +630,8 @@ async def save_online_order(
                                 addon.addon_name, Decimal(str(addon.price))
                             )
                             
-                            addon_id_row = await cursor.fetchone()
-                            correct_pos_addon_id = addon_id_row[0] if addon_id_row else None
+                            addon_id_row_new = await cursor.fetchone()
+                            correct_pos_addon_id = addon_id_row_new[0] if addon_id_row_new else None
                             
                         except Exception as output_error:
                             # ✅ Fallback method if OUTPUT doesn't work
@@ -655,10 +658,11 @@ async def save_online_order(
                     else:
                         correct_pos_addon_id = addon_id_row.AddonID
 
-            # Insert into SaleItemAddons
-            sql_insert_sale_item_addon = "INSERT INTO SaleItemAddons (SaleItemID, AddonID, Quantity) VALUES (?, ?, ?)"
-            await cursor.execute(sql_insert_sale_item_addon, new_sale_item_id, correct_pos_addon_id, 1)
-            
+                    # Insert into SaleItemAddons for THIS specific addon
+                    sql_insert_sale_item_addon = "INSERT INTO SaleItemAddons (SaleItemID, AddonID, Quantity) VALUES (?, ?, ?)"
+                    await cursor.execute(sql_insert_sale_item_addon, new_sale_item_id, correct_pos_addon_id, 1)
+                    logger.info(f"✅ Linked addon '{addon.addon_name}' (ID: {correct_pos_addon_id}) to SaleItem {new_sale_item_id}")
+
             # Get customer's full name for blockchain logging
             customer_full_name = await get_full_name_from_username(
                 order_data.customer_name, 
@@ -1085,13 +1089,9 @@ async def update_pos_status_for_online_order(
             logger.info(f"Will update CashierName to: {cashier_to_update}")
             
             # Generate detailed description BEFORE updating
-            detailed_description = await build_detailed_update_description(
-                cursor,
-                existing_order.SaleID,
+            detailed_description = await build_simple_update_description(
                 old_status,
-                request.newStatus,
-                actor,
-                current_user['access_token']
+                request.newStatus
             )
             
             update_sql = """

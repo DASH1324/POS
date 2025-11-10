@@ -15,6 +15,7 @@ import {
   FaCube,
   FaUndo,
   FaBan,
+  FaUser,
 } from "react-icons/fa";
 import Lottie from "lottie-react";
 import loadingAnimation from "../../../assets/animation/loading.json";
@@ -298,10 +299,23 @@ function BlockchainActivityLogs() {
       });
 
       // Filter for transaction-related logs (Sales, Refunds, Cancellations)
-      const transactionLogs = response.data.filter(log => {
-        const isTransactionService = ['POS_SALES', 'PURCHASE_ORDER_SERVICE', 'POS_SALES_AUTO_CANCEL'].includes(log.service_identifier);
-        const isTransactionAction = ['CREATE', 'REFUND', 'CANCEL', 'AUTO_CANCEL'].includes(log.action);
-        return isTransactionService && isTransactionAction;
+      let transactionLogs = response.data;
+
+      // Apply service filter
+      if (serviceFilter) {
+        const allowedServices = serviceFilter.split(',');
+        transactionLogs = transactionLogs.filter(log => allowedServices.includes(log.service_identifier));
+      } else {
+        // If no service filter, show all transaction-related services
+        transactionLogs = transactionLogs.filter(log =>
+          ['POS_SALES', 'PURCHASE_ORDER_SERVICE', 'POS_SALES_AUTO_CANCEL', 'DISCOUNTS_SERVICE', 'PROMOTIONS', 'CASHIER_SESSION', 'POS_SALES_REFUND'].includes(log.service_identifier)
+        );
+      }
+
+      // Filter by action
+      transactionLogs = transactionLogs.filter(log => {
+        const isTransactionAction = ['CREATE', 'UPDATE', 'REFUND', 'CANCEL', 'AUTO_CANCEL'].includes(log.action);
+        return isTransactionAction;
       });
 
       // Group logs by individual transaction (don't group multiple transactions together)
@@ -421,35 +435,41 @@ function BlockchainActivityLogs() {
   };
 
   const getServiceIcon = (service) => {
-    switch (service) {
-      case "DISCOUNTS_SERVICE":
-        return <FaTag className="activityLogs-icon-white" />;
-      case "POS_SALES":
-        return <FaShoppingCart className="activityLogs-icon-white" />;
-      case "PURCHASE_ORDER_SERVICE":
-        return <FaShoppingCart className="activityLogs-icon-white" />;
-      case "POS_SALES_AUTO_CANCEL":
-        return <FaBan className="activityLogs-icon-white" />;
-      case "PRODUCTS_SERVICE":
-        return <FaBox className="activityLogs-icon-white" />;
-      case "INVENTORY_SERVICE":
-        return <FaCube className="activityLogs-icon-white" />;
-      default:
-        return <FaBox className="activityLogs-icon-white" />;
-    }
-  };
+  switch (service) {
+    case "DISCOUNTS_SERVICE":
+    case "PROMOTIONS":
+      return <FaTag className="activityLogs-icon-white" />;
+    case "POS_SALES":
+    case "PURCHASE_ORDER_SERVICE":
+      return <FaShoppingCart className="activityLogs-icon-white" />;
+    case "POS_SALES_AUTO_CANCEL":
+      return <FaBan className="activityLogs-icon-white" />;
+    case "CASHIER_SESSION":
+      return <FaUser className="activityLogs-icon-white" />; // Add FaUser to imports
+    case "POS_SALES_REFUND":
+      return <FaUndo className="activityLogs-icon-white" />;
+    case "PRODUCTS_SERVICE":
+      return <FaBox className="activityLogs-icon-white" />;
+    case "INVENTORY_SERVICE":
+      return <FaCube className="activityLogs-icon-white" />;
+    default:
+      return <FaBox className="activityLogs-icon-white" />;
+  }
+};
 
   const getServiceColor = (service) => {
-    const colors = {
-      DISCOUNTS_SERVICE: "#3b82f6",
-      POS_SALES: "#10b981",
-      PURCHASE_ORDER_SERVICE: "#10b981",
-      POS_SALES_AUTO_CANCEL: "#ef4444",
-      PRODUCTS_SERVICE: "#f59e0b",
-      INVENTORY_SERVICE: "#8b5cf6",
-    };
-    return colors[service] || "#6b7280";
+  const colors = {
+    DISCOUNTS_SERVICE: "#3b82f6",
+    PROMOTIONS: "#3b82f6",
+    POS_SALES: "#10b981",
+    PURCHASE_ORDER_SERVICE: "#10b981",
+    POS_SALES_AUTO_CANCEL: "#ef4444",
+    POS_SALES_REFUND: "#f59e0b",
+    CASHIER_SESSION: "#8b5cf6",
+    PRODUCTS_SERVICE: "#f59e0b",
   };
+  return colors[service] || "#6b7280";
+};
 
   const getActionIcon = (action) => {
     switch (action) {
@@ -529,8 +549,13 @@ function BlockchainActivityLogs() {
     if (normalizedType === 'SALE') {
       // Check if it's a refund based on change_description
       const isRefund = group.events[0]?.change_description?.toLowerCase().includes('refund');
-      return isRefund ? 'Sale Refund' : 'Sale Transaction';
+      return isRefund ? 'Sale Refund' : 'Store Sale';
     }
+  }
+
+  // For PURCHASE_ORDER_SERVICE - show as "Online Order"
+  if (group.service === 'PURCHASE_ORDER_SERVICE' && normalizedType === 'PURCHASEORDER') {
+    return 'Online Order';
   }
   
   const entityName =
@@ -542,26 +567,24 @@ function BlockchainActivityLogs() {
 };
 
 const getTransactionTitle = (group) => {
+  // Check if any event mentions "Received an Online Order"
+  const hasOnlineOrder = group.events.some(e => 
+    e.change_description?.includes('Received an Online Order:')
+  );
+  
+  if (hasOnlineOrder) {
+    return 'Online Order';
+  }
+  
   const event = group.events[0];
   const description = event.change_description || '';
-  
-  // Extract meaningful info from the description
-  if (description.includes('Received an Online Order:')) {
-    const match = description.match(/Received an Online Order: "(.*?)"/);
-    if (match) return `Online Order: ${match[1]}`;
-  }
   
   if (description.includes('Refund')) {
     return 'Sale Refund';
   }
   
-  if (description.includes('New sale created') || description.includes('Status changed:')) {
-    return 'Sale Transaction';
-  }
-  
-  if (description.includes('updated orders:')) {
-    const match = description.match(/updated orders: "(.*?)"/);
-    if (match) return `Order Update: ${match[1]}`;
+  if (description.includes('New sale created')) {
+    return 'Store Sale';
   }
   
   if (description.includes('cancelled')) {
@@ -570,7 +593,6 @@ const getTransactionTitle = (group) => {
   
   return 'Transaction';
 };
-  
 
   // Filter groups by search term
   const filteredGroups = groupedLogs.filter((group) => {
@@ -864,55 +886,7 @@ const getTransactionTitle = (group) => {
                     </div>
                   </div>
 
-                  {activeTab === "transaction" && (
-                    <>
-                      <div className="activityLogs-filter-item">
-                        <span>Service:</span>
-                        <select
-                          value={serviceFilter}
-                          onChange={(e) => setServiceFilter(e.target.value)}
-                          className="activityLogs-select"
-                        >
-                          <option value="">All Services</option>
-                          <option value="DISCOUNTS_SERVICE">Discounts</option>
-                          <option value="POS_SALES">POS Sales</option>
-                          <option value="POS_SALES_AUTO_CANCEL">Auto Cancel</option>
-                          <option value="PRODUCTS_SERVICE">Products</option>
-                          <option value="INVENTORY_SERVICE">Inventory</option>
-                        </select>
-                      </div>
 
-                      <div className="activityLogs-filter-item">
-                        <span>Entity:</span>
-                        <select
-                          value={entityTypeFilter}
-                          onChange={(e) => setEntityTypeFilter(e.target.value)}
-                          className="activityLogs-select"
-                        >
-                          <option value="">All Types</option>
-                          <option value="Discount">Discount</option>
-                          <option value="Sale">Sale</option>
-                          <option value="Product">Product</option>
-                          <option value="Inventory">Inventory</option>
-                        </select>
-                      </div>
-
-                      <div className="activityLogs-filter-item">
-                        <span>Action:</span>
-                        <select
-                          value={actionFilter}
-                          onChange={(e) => setActionFilter(e.target.value)}
-                          className="activityLogs-select"
-                        >
-                          <option value="">All Actions</option>
-                          <option value="CREATE">Create</option>
-                          <option value="UPDATE">Update</option>
-                          <option value="DELETE">Delete</option>
-                          <option value="AUTO_CANCEL">Auto Cancel</option>
-                        </select>
-                      </div>
-                    </>
-                  )}
 
                   <button
                     className="activityLogs-clearBtn"

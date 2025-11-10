@@ -207,7 +207,6 @@ async def calculate_totals_and_discounts(sale_data: Sale, cursor):
     return subtotal, final_discount, applied_discounts_details, discount_names_with_amounts
 
 # --- Helper function to build detailed change description ---
-# --- Helper function to build detailed change description ---
 def build_detailed_change_description(
     items_data: list,
     final_total: float,

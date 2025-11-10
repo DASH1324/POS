@@ -1,12 +1,8 @@
-"""
-Blockchain Activity Logging Router - FIXED VERSION
-Handles logging all POST and PATCH operations to BuildBear Blockchain
-"""
 from fastapi import APIRouter, HTTPException, status, Depends
 from fastapi.security import OAuth2PasswordBearer
 from pydantic import BaseModel, Field
 from typing import Optional, Dict, Any, List
-from datetime import datetime
+from datetime import datetime, date
 from web3 import Web3
 from eth_account import Account
 import json
@@ -376,21 +372,22 @@ async def create_activity_log(
     
     return result
     
-# ========================================
-# API ENDPOINTS - FIXED
-# ========================================
+
 @router.get("/logs", response_model=List[BlockchainLogQueryResponse])
 async def get_activity_logs(
     service: Optional[str] = None,
     entity_type: Optional[str] = None,
     actor_username: Optional[str] = None,
     action: Optional[str] = None,
+    start_date: Optional[str] = None,  # ADD THIS
+    end_date: Optional[str] = None,    # ADD THIS
     limit: int = 50,
     current_user: dict = Depends(get_current_active_user)
 ):
     """
     Query activity logs from the database.
-    Filters: service, entity_type, actor_username, action
+    Filters: service, entity_type, actor_username, action, start_date, end_date
+    Date format: YYYY-MM-DD (e.g., 2025-01-15)
     """
     conn = await get_db_connection()
     try:
@@ -422,6 +419,27 @@ async def get_activity_logs(
             if action:
                 query += " AND Action = ?"
                 params.append(action)
+            
+            # ADD DATE FILTERING
+            if start_date:
+                try:
+                    # Validate date format
+                    datetime.strptime(start_date, '%Y-%m-%d')
+                    # Filter for dates >= start_date (beginning of day)
+                    query += " AND CAST(CreatedAt AS DATE) >= ?"
+                    params.append(start_date)
+                except ValueError:
+                    logger.warning(f"Invalid start_date format: {start_date}")
+            
+            if end_date:
+                try:
+                    # Validate date format
+                    datetime.strptime(end_date, '%Y-%m-%d')
+                    # Filter for dates <= end_date (end of day)
+                    query += " AND CAST(CreatedAt AS DATE) <= ?"
+                    params.append(end_date)
+                except ValueError:
+                    logger.warning(f"Invalid end_date format: {end_date}")
             
             # Apply limit with proper SQL syntax
             final_query = ""
