@@ -29,28 +29,33 @@ function OrderPanel({ order, onClose, isOpen, isStore, onUpdateStatus, onFullRef
     }
   }, [order, isStore]);
 
-  const fetchRefundInfo = async () => {
-    try {
-      const token = localStorage.getItem('authToken');
-      if (!token) return;
-
-      const response = await fetch(
-        `${SALES_API_BASE_URL}/auth/purchase_orders/${order.id}/refunds`,
-        {
-          headers: { 'Authorization': `Bearer ${token}` }
-        }
-      );
-
-      if (response.ok) {
-        const data = await response.json();
-        if (data.refunds && data.refunds.length > 0) {
-          setRefundInfo(data.refunds);
-        }
-      }
-    } catch (error) {
-      console.error("Error fetching refund info:", error);
+const fetchRefundInfo = async () => {
+  try {
+    const token = localStorage.getItem('authToken');
+    if (!token) {
+      setRefundInfo(null); // Clear when no token
+      return;
     }
-  };
+
+    const response = await fetch(
+      `${SALES_API_BASE_URL}/auth/purchase_orders/${order.id}/refunds`,
+      {
+        headers: { 'Authorization': `Bearer ${token}` }
+      }
+    );
+
+    if (response.ok) {
+      const data = await response.json();
+      // Always set refund info (null if no refunds)
+      setRefundInfo(data.refunds && data.refunds.length > 0 ? data.refunds : null);
+    } else {
+      setRefundInfo(null); // Clear on error
+    }
+  } catch (error) {
+    console.error("Error fetching refund info:", error);
+    setRefundInfo(null); // Clear on error
+  }
+};
 
   // Check if refund is still available
   useEffect(() => {

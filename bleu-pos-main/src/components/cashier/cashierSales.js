@@ -174,7 +174,7 @@ function CashierSales({ shiftLabel = "Morning Shift", shiftTime = "6:00AM – 2:
               product: item.name,
               qty: item.quantity,
               value: (item.price * item.quantity).toFixed(2),
-              status: o.status === 'refunded' ? 'Refund' : 'Cancelled'
+              status: (o.status === 'refunded' || o.status === 'partial_refund') ? 'Refund' : 'Cancelled'
             }))));
         } catch (error) { setCancelledError(error.message); } finally { setIsCancelledLoading(false); }
     };
@@ -325,7 +325,18 @@ function CashierSales({ shiftLabel = "Morning Shift", shiftTime = "6:00AM – 2:
   const cancelledProductsColumns = [
     { name: "TIME", selector: (row) => row.time, sortable: true, width: "18%" },
     { name: "PRODUCT", selector: (row) => row.product, sortable: true, width: "32%" },
-    { name: "STATUS", selector: (row) => row.status, sortable: true, width: "18%", cell: (row) => <span style={{ fontWeight: "500" }}>{row.status}</span> },
+    { 
+      name: "STATUS", 
+      selector: (row) => row.status, 
+      sortable: true, 
+      width: "18%", 
+      cell: (row) => {
+        const displayStatus = row.status === 'partial_refund' ? 'Refund' : 
+                            row.status === 'refunded' ? 'Refund' : 
+                            row.status === 'cancelled' ? 'Cancelled' : row.status;
+        return <span style={{ fontWeight: "500" }}>{displayStatus}</span>;
+      }
+    },
     { name: "QTY", selector: (row) => row.qty, center: "true", sortable: true, width: "8%" },
     { name: "VALUE", selector: (row) => `₱${row.value}`, center: "true", sortable: true, width: "24%" }
   ];
@@ -583,7 +594,6 @@ function CashierSales({ shiftLabel = "Morning Shift", shiftTime = "6:00AM – 2:
                     <div className="cashier-summary-row"><span>Actual Cash (Counted)</span><span className="cashier-actual-amount">₱{actualCashCounted.toFixed(2)}</span></div>
                     <div className={`cashier-summary-row cashier-discrepancy ${hasDiscrepancyInSession ? 'has-discrepancy' : 'no-discrepancy'}`}><span className="cashier-discrepancy-label"><FontAwesomeIcon icon={hasDiscrepancyInSession ? faExclamationTriangle : faCheckCircle} />Discrepancy</span><span className={`cashier-discrepancy-amount ${discrepancyInSession > 0 ? 'positive' : discrepancyInSession < 0 ? 'negative' : 'zero'}`}>{discrepancyInSession >= 0 ? '+' : ''}₱{discrepancyInSession.toFixed(2)}</span></div>
                     
-                    {/* --- MODIFIED BUTTON LOGIC --- */}
                     <div className="cashier-action-buttons">
                         {hasDiscrepancyInSession && (
                             <button 
@@ -601,7 +611,6 @@ function CashierSales({ shiftLabel = "Morning Shift", shiftTime = "6:00AM – 2:
                             {isSubmitting ? 'Submitting...' : 'Confirm Count'}
                         </button>
                     </div>
-                    {/* --- END OF MODIFICATION --- */}
 
                 </div>
                 {error && <div className="cashier-summary-info">{error}</div>}
@@ -755,7 +764,6 @@ function CashierSales({ shiftLabel = "Morning Shift", shiftTime = "6:00AM – 2:
                 ))}
               </div>
 
-              {/* Bottom sections container with split layout */}
               <div className="cashier-bottom-sections">
                 <div className="cashier-cancelled-section">
                   <div className="cashier-section-header">
@@ -798,7 +806,6 @@ function CashierSales({ shiftLabel = "Morning Shift", shiftTime = "6:00AM – 2:
       </div>
       {renderModal()}
 
-      {/* PIN Modal for Confirm Count and Report Discrepancy */}
       {showPinModal && (
         <div className="orderpanel-modal-overlay" onClick={() => setShowPinModal(false)}>
           <div className="orderpanel-modal-content" onClick={(e) => e.stopPropagation()}>
