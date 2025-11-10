@@ -157,6 +157,18 @@ async def log_to_blockchain(
     except Exception as e:
         logger.error(f"❌ Blockchain logging failed for {entity_type} {entity_id}: {e}", exc_info=True)
 
+# For store orders - simple status change only
+async def build_simple_update_description(
+    old_status: str,
+    new_status: str
+) -> str:
+    """
+    Simple status update description for store orders.
+    Since logs are grouped by order, no need to repeat order details.
+    """
+    return f"Status changed: {old_status} → {new_status}"
+
+# For online orders - detailed description with items
 async def build_detailed_update_description(
     cursor,
     order_id: int,
@@ -166,11 +178,10 @@ async def build_detailed_update_description(
     token: str
 ) -> str:
     """
-    Builds a detailed, human-readable description for a status update,
-    including items, add-ons, and discounts. Does NOT include actor name
-    (frontend displays it separately).
+    Builds a detailed description for online order status updates,
+    including items, add-ons, and discounts.
     """
-    # 1. Fetch items and their add-ons in one go
+    # 1. Fetch items and their add-ons
     sql_items = """
         SELECT
             si.SaleItemID, si.ItemName, si.Quantity,
@@ -207,7 +218,7 @@ async def build_detailed_update_description(
     
     product_list_str = " | ".join(item_strings)
 
-    # 2. Fetch applied discounts (both regular and promotional)
+    # 2. Fetch applied discounts
     sql_discounts = """
         SELECT
             s.PromotionalDiscountAmount,
@@ -223,12 +234,10 @@ async def build_detailed_update_description(
     
     discount_parts = []
     if discount_rows:
-        # Handle promotional discount first
         promo_amount = discount_rows[0].PromotionalDiscountAmount or Decimal('0.0')
         if promo_amount > 0:
             discount_parts.append(f"Promotion -₱{promo_amount:.2f}")
 
-        # Handle itemized discounts, avoiding duplicates
         seen_discounts = set()
         for row in discount_rows:
             if row.DiscountName and row.DiscountAppliedAmount:
@@ -241,7 +250,7 @@ async def build_detailed_update_description(
     if discount_parts:
         discount_str = f" (Discounts: {', '.join(discount_parts)})"
 
-    # 3. Build description WITHOUT actor name (frontend will add it)
+    # Build description with items
     final_description = (
         f"updated orders: \"{product_list_str}\"{discount_str} "
         f"status changed: {old_status} -> {new_status}."
@@ -874,7 +883,7 @@ async def update_order_status(
             
             # Step 2: Generate the detailed description BEFORE committing the database changes
             try:
-                detailed_description = await build_detailed_update_description(
+                detailed_description = await build_simple_update_description(
                     cursor,
                     parsed_id,
                     old_status,
@@ -885,7 +894,7 @@ async def update_order_status(
             except Exception as desc_error:
                 logger.error(f"Error building description: {desc_error}", exc_info=True)
                 # Fallback description
-                detailed_description = f"updated order {parsed_id} status from {old_status} to {request.newStatus}"
+                detailed_description = f"updated order status from {old_status} to {request.newStatus}"
             
             # Step 3: Perform the database update
             if request.newStatus == 'cancelled':
@@ -979,9 +988,9 @@ async def update_order_status(
             try:
                 background_tasks.add_task(
                     log_to_blockchain,
-                    service_identifier="PURCHASE_ORDER_SERVICE",
+                    service_identifier="POS_SALES",
                     action=action_type,
-                    entity_type="PurchaseOrder",
+                    entity_type="Sale",
                     entity_id=parsed_id,
                     actor_username=actor,
                     change_description=detailed_description,

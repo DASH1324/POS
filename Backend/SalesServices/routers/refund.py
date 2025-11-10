@@ -384,9 +384,9 @@ async def refund_order(
                 
                 background_tasks.add_task(
                     log_to_blockchain,
-                    service_identifier="PURCHASE_ORDER_SERVICE",
+                    service_identifier="POS_SALES",
                     action="REFUND",
-                    entity_type="PurchaseOrder",
+                    entity_type="SALE",
                     entity_id=parsed_id,
                     actor_username=cashier_username,  # Cashier is the actor
                     change_description=blockchain_description,
@@ -680,9 +680,9 @@ async def partial_refund_order(
             
             background_tasks.add_task(
                 log_to_blockchain,
-                service_identifier="PURCHASE_ORDER_SERVICE",
+                service_identifier="POS_SALES",
                 action="REFUND",
-                entity_type="PurchaseOrder",
+                entity_type="SALE",
                 entity_id=parsed_id,
                 actor_username=cashier_username,  # Cashier is the actor
                 change_description=blockchain_description,
@@ -959,9 +959,9 @@ async def refund_order_today(
                 
                 background_tasks.add_task(
                     log_to_blockchain,
-                    service_identifier="PURCHASE_ORDER_SERVICE",
+                    service_identifier="POS_SALES",
                     action="REFUND",
-                    entity_type="PurchaseOrder",
+                    entity_type="SALE",
                     entity_id=parsed_id,
                     actor_username=request.managerUsername,
                     change_description=blockchain_description,
@@ -1133,9 +1133,9 @@ async def partial_refund_order_today(
             
             background_tasks.add_task(
                 log_to_blockchain,
-                service_identifier="PURCHASE_ORDER_SERVICE",
+                service_identifier="POS_SALES",
                 action="REFUND",
-                entity_type="PurchaseOrder",
+                entity_type="SALE",
                 entity_id=parsed_id,
                 actor_username=request.managerUsername,
                 change_description=blockchain_description,

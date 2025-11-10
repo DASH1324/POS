@@ -353,40 +353,49 @@ function BlockchainActivityLogs() {
 
   // Group transaction logs - group by entity_id to show all events for same order
   const groupTransactionLogs = (logs) => {
-    const groups = {};
+  const groups = {};
 
-    logs.forEach((log) => {
-      // Group by entity_id (SaleID) to show all transactions for the same order together
-      const key = `${log.service_identifier}_${log.entity_type}_${log.entity_id}`;
+  logs.forEach((log) => {
+    // Normalize the key - treat POS_SALES/Sale and PURCHASE_ORDER_SERVICE/PurchaseOrder as the same
+    let normalizedService = log.service_identifier;
+    let normalizedType = log.entity_type;
+    
+    // Treat PurchaseOrder updates as part of Sale transactions
+    if (log.service_identifier === 'PURCHASE_ORDER_SERVICE' && log.entity_type === 'PurchaseOrder') {
+      normalizedService = 'POS_SALES';
+      normalizedType = 'Sale';
+    }
+    
+    const key = `${normalizedService}_${normalizedType}_${log.entity_id}`;
 
-      if (!groups[key]) {
-        groups[key] = {
-          id: key,
-          service: log.service_identifier,
-          entityType: log.entity_type,
-          entityId: log.entity_id,
-          firstTimestamp: log.created_at,
-          events: [],
-        };
-      }
+    if (!groups[key]) {
+      groups[key] = {
+        id: key,
+        service: normalizedService,  // Use normalized service
+        entityType: normalizedType,   // Use normalized type
+        entityId: log.entity_id,
+        firstTimestamp: log.created_at,
+        events: [],
+      };
+    }
 
-      groups[key].events.push(log);
-    });
+    groups[key].events.push(log);
+  });
 
-    // Sort events within each group by timestamp
-    Object.values(groups).forEach((group) => {
-      group.events.sort(
-        (a, b) => new Date(a.created_at) - new Date(b.created_at)
-      );
-      // Update first timestamp to earliest event
-      group.firstTimestamp = group.events[0]?.created_at;
-    });
-
-    // Convert to array and sort by first timestamp (newest first)
-    return Object.values(groups).sort(
-      (a, b) => new Date(b.firstTimestamp) - new Date(a.firstTimestamp)
+  // Sort events within each group by timestamp
+  Object.values(groups).forEach((group) => {
+    group.events.sort(
+      (a, b) => new Date(a.created_at) - new Date(b.created_at)
     );
-  };
+    // Update first timestamp to earliest event
+    group.firstTimestamp = group.events[0]?.created_at;
+  });
+
+  // Convert to array and sort by first timestamp (newest first)
+  return Object.values(groups).sort(
+    (a, b) => new Date(b.firstTimestamp) - new Date(a.firstTimestamp)
+  );
+};
 
   const handleClearFilters = () => {
     setSearchTerm("");
@@ -512,40 +521,56 @@ function BlockchainActivityLogs() {
   };
 
   const getEntityTitle = (group) => {
-    const entityName =
-      group.events[0]?.data?.name ||
-      group.events[0]?.change_description?.split(":")[1]?.trim() ||
-      `${group.entityType} #${group.entityId}`;
-    return `${group.entityType}: ${entityName}`;
-  };
-
-  const getTransactionTitle = (group) => {
-    const event = group.events[0];
-    
-    // Extract order type and items from change_description
-    let description = event.change_description;
-    
-    // Try to extract meaningful info from the description
-    if (description.includes('Received an Online Order:')) {
-      const match = description.match(/Received an Online Order: "(.*?)"/);
-      if (match) return `Online Order: ${match[1]}`;
-    } else if (description.includes('New sale created')) {
-      const match = description.match(/New sale created with \d+ item\(s\): (.*?) \|/);
-      if (match) return `New Sale: ${match[1]}`;
-    } else if (description.includes('Refund')) {
-      const match = description.match(/processed a .*?Refund: "(.*?)"/);
-      if (match) return `Refund: ${match[1]}`;
-    } else if (description.includes('updated orders:')) {
-      const match = description.match(/updated orders: "(.*?)"/);
-      if (match) return `Order Update: ${match[1]}`;
-    } else if (description.includes('cancelled')) {
-      return `Cancelled Order`;
-    } else if (description.includes('auto-cancelled')) {
-      return `Auto-Cancelled Order`;
+  // Normalize entity type for comparison
+  const normalizedType = group.entityType?.toUpperCase();
+  
+  // For POS_SALES in activity logs
+  if (group.service === 'POS_SALES') {
+    if (normalizedType === 'SALE') {
+      // Check if it's a refund based on change_description
+      const isRefund = group.events[0]?.change_description?.toLowerCase().includes('refund');
+      return isRefund ? 'Sale Refund' : 'Sale Transaction';
     }
-    
-    return `Transaction`;
-  };
+  }
+  
+  const entityName =
+    group.events[0]?.data?.name ||
+    group.events[0]?.change_description?.split(":")[1]?.trim() ||
+    `${group.entityType} #${group.entityId}`;
+  
+  return `${group.entityType}: ${entityName}`;
+};
+
+const getTransactionTitle = (group) => {
+  const event = group.events[0];
+  const description = event.change_description || '';
+  
+  // Extract meaningful info from the description
+  if (description.includes('Received an Online Order:')) {
+    const match = description.match(/Received an Online Order: "(.*?)"/);
+    if (match) return `Online Order: ${match[1]}`;
+  }
+  
+  if (description.includes('Refund')) {
+    return 'Sale Refund';
+  }
+  
+  if (description.includes('New sale created') || description.includes('Status changed:')) {
+    return 'Sale Transaction';
+  }
+  
+  if (description.includes('updated orders:')) {
+    const match = description.match(/updated orders: "(.*?)"/);
+    if (match) return `Order Update: ${match[1]}`;
+  }
+  
+  if (description.includes('cancelled')) {
+    return description.includes('auto-cancelled') ? 'Auto-Cancelled Order' : 'Cancelled Order';
+  }
+  
+  return 'Transaction';
+};
+  
 
   // Filter groups by search term
   const filteredGroups = groupedLogs.filter((group) => {

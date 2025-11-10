@@ -207,6 +207,7 @@ async def calculate_totals_and_discounts(sale_data: Sale, cursor):
     return subtotal, final_discount, applied_discounts_details, discount_names_with_amounts
 
 # --- Helper function to build detailed change description ---
+# --- Helper function to build detailed change description ---
 def build_detailed_change_description(
     items_data: list,
     final_total: float,
@@ -219,38 +220,42 @@ def build_detailed_change_description(
     # Build items summary
     items_summary = []
     for item in items_data:
-        item_desc = f"{item['quantity']}x {item['name']} (₱{item['price']:.2f})"
+        item_desc = f"{item['name']} (₱{item['price']:.2f})"
         
         # Add addons if present
         if item.get('addons') and len(item['addons']) > 0:
             addon_parts = []
             for addon in item['addons']:
-                addon_parts.append(f"{addon['quantity']}x {addon['addon_name']} (₱{addon['price']:.2f})")
-            item_desc += f" with Add-ons: {', '.join(addon_parts)}"
+                addon_parts.append(f"{addon['addon_name']} (₱{addon['price']:.2f})")
+            item_desc += f" with {', '.join(addon_parts)}"
         
         items_summary.append(item_desc)
     
-    # Build discount/promotion summary
-    discount_summary = []
+    # Build the description - no "created with" prefix
+    item_count = len(items_data)
+    item_word = "item" if item_count == 1 else "items"
+    
+    description = f"New sale created with {item_count} {item_word}: {items_summary[0]}"
+    
+    # Add additional items if more than one
+    if item_count > 1:
+        for additional_item in items_summary[1:]:
+            description += f", {additional_item}"
+    
+    # Add discounts if present
     if discount_names:
+        discount_parts = []
         for disc in discount_names:
-            discount_summary.append(f"Discount Applied: {disc['name']} (-₱{disc['amount']:.2f})")
+            discount_parts.append(f"{disc['name']} (-₱{disc['amount']:.2f})")
+        description += f" | Discounts: {', '.join(discount_parts)}"
     
     if promo_discount > 0:
-        discount_summary.append(f"Promotion Applied: Promotional Discount (-₱{promo_discount:.2f})")
+        description += f" | Promotional Discount (-₱{promo_discount:.2f})"
     
-    # Combine all parts
-    description_parts = [
-        f"New sale created with {len(items_data)} item(s):",
-        " | ".join(items_summary)
-    ]
+    # Add total and payment
+    description += f" | Total: ₱{final_total:.2f} | Payment: {payment_method}"
     
-    if discount_summary:
-        description_parts.append(" | ".join(discount_summary))
-    
-    description_parts.append(f"Total: ₱{final_total:.2f} | Payment: {payment_method}")
-    
-    return " | ".join(description_parts)
+    return description
 
 @router_sales.post("/", status_code=status.HTTP_201_CREATED)
 async def create_sale(
