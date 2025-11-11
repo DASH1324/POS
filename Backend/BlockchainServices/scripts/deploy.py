@@ -6,14 +6,18 @@ from web3 import Web3
 from eth_account import Account
 from solcx import compile_source, install_solc, get_installed_solc_versions
 import json
+import os
+from dotenv import load_dotenv
+
+load_dotenv()
 
 print("\n" + "="*70)
 print("🚀 DEPLOYING ACTIVITYLOGGER CONTRACT")
 print("="*70 + "\n")
 
-# Configuration
-BUILDBEAR_RPC_URL = "https://rpc.buildbear.io/intimate-warmachine-5f7e8f8e"
-PRIVATE_KEY = "f0554b4fc4374dce18af629ab73e0d0729e56b1ae6077d2f393d34a83330a9a0"
+# Configuration - Load from .env
+BUILDBEAR_RPC_URL = os.getenv("BUILDBEAR_RPC_URL", "https://rpc.buildbear.io/disciplinary-clea-8e7277ae")
+PRIVATE_KEY = os.getenv("PRIVATE_KEY", "aaa9d856bac05e3f90105eab3d7ecd4578006d618a9b22c76c30d5785a48d0a4")
 
 # Your contract source
 CONTRACT_SOURCE = '''
