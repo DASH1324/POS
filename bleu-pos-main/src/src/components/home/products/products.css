@@ -1,0 +1,330 @@
+body {
+    background: #eaf6f8;
+    margin: 0;
+    font-family: 'Segoe UI', sans-serif;
+}
+
+.productList {
+    display: flex;
+    flex-direction: row;
+    min-height: 100vh;
+}
+
+.productList-container {
+    flex: 1;
+    box-sizing: border-box;
+    width: 85%;
+    overflow: hidden; 
+    margin-top: 24px;
+    margin-left: 10px;
+    margin-right: 40px;
+    margin-bottom: 30px;
+}
+
+.productList-content {
+    margin-top: 25px;
+}
+
+/* === TABS AND FILTER WRAPPER === */
+.productList-tabs-filter-wrapper {
+    display: flex;
+    flex-direction: column;
+    gap: 15px;
+    margin-bottom: 15px;
+}
+
+/* === TABS === */
+.productList-tabs {
+    display: flex;
+    gap: 10px;
+}
+
+.productList-tab {
+    padding: 8px 16px;
+    background-color: #ffffff;
+    color: #666;
+    border: none;
+    border-radius: 6px;
+    cursor: pointer;
+    font-weight: 500;
+    transition: background-color 0.3s;
+    width: 150px;
+}
+
+.productList-tab:hover {
+    background-color: #f1f1f1;
+}
+
+.productList-tab--active {
+    background-color: #4B929D;
+    color: white;
+}
+
+.productList-tab--active:hover {
+    background-color: #4B929D;
+    color: white;
+}
+
+/* === FILTER BAR WITH TOGGLE === */
+.productList-filterBar {
+    display: flex;
+    gap: 10px;
+    align-items: center;
+    background-color: #f8fcfd;
+    padding: 12px 20px;
+    border-radius: 12px;
+    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.04);
+    border-left: 4px solid #4B929D;
+    margin-left: auto;
+    width: fit-content;
+    transition: all 0.5s ease-in-out;
+    overflow: hidden;
+}
+
+.productList-filterBar.collapsed {
+    width: fit-content;
+    padding: 12px 14px;
+}
+
+.productList-filterBar.collapsed .productList-filter-item,
+.productList-filterBar.collapsed .productList-search-input,
+.productList-filterBar.collapsed .productList-clearBtn {
+    display: none;
+}
+
+.productList-filterBar.open {
+    width: auto;
+}
+
+.productList-filter-toggle-btn {
+    background-color: transparent;
+    border: none;
+    font-size: 24px;
+    font-weight: 600;
+    cursor: pointer;
+    color: #4b929d;
+    transition: all 0.3s ease;
+    padding: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    flex-shrink: 0;
+}
+
+.productList-filter-text {
+    font-size: 14px;
+    font-weight: 500;
+    color: #1f2937;
+    margin-left: 10px;
+    margin-right: 10px;
+}
+
+/* === FILTER ITEMS === */
+.productList-filter-item {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+
+.productList-filter-item span {
+    font-size: 14px;
+    font-weight: 500;
+    color: #5a6c75;
+}
+
+/* Search Wrapper */
+.productList-search-wrapper {
+    position: relative;
+    flex: 1;
+    width: 220px;
+}
+
+.productList-search-icon {
+    position: absolute;
+    left: 14px;
+    top: 50%;
+    transform: translateY(-50%);
+    color: #6b7280;
+    font-size: 14px;
+}
+
+.productList-search-input {
+    width: 100%;
+    padding: 10px 16px 10px 40px;
+    border: none;
+    border-radius: 8px;
+    background-color: #f8fcfd;
+    font-size: 14px;
+    font-family: inherit;
+    outline: none;
+    transition: all 0.2s ease;
+    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.04);
+}
+
+.productList-search-input:focus {
+    background-color: white;
+    box-shadow: 0 2px 8px rgba(75, 146, 157, 0.2);
+}
+
+.productList-search-input::placeholder {
+    color: #999;
+}
+
+.productList-select {
+    padding: 8px 12px;
+    border-radius: 8px;
+    border: none;
+    background-color: #f8fcfd;
+    font-size: 14px;
+    font-family: inherit;
+    cursor: pointer;
+    min-width: 150px;
+    outline: none;
+    font-weight: 500;
+    color: #333;
+    transition: all 0.2s ease;
+}
+
+.productList-clearBtn {
+    padding: 8px 14px;
+    background-color: #d9534f;
+    color: white;
+    border: none;
+    border-radius: 6px;
+    cursor: pointer;
+    font-weight: 500;
+    font-size: 13px;
+    transition: background-color 0.3s;
+    white-space: nowrap;
+    flex-shrink: 0;
+    width: 110px;
+}
+
+.productList-clearBtn:hover {
+    background-color: #c9302c;
+}
+
+.productList-addBtn {
+    background-color: #007bff;
+    color: white;
+    padding: 9px 9px;
+    gap: 8px;
+    border: none;
+    border-radius: 4px;
+    cursor: pointer;
+    width: 25%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.productList-addBtn:hover {
+    background-color: #0069d9;
+}
+
+.productList-addBtn svg {
+    font-size: 12px;
+}
+
+.productList-itemInfo {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+}
+
+.productList-itemPhoto {
+    width: 90px;
+    height: 90px;
+    border-radius: 10%;
+    object-fit: cover;
+}
+
+.productList-itemName {
+    font-weight: 600;
+}
+
+.productList-tableContainer {
+    overflow: auto;
+    background-color: #4B929D;
+}
+
+/* === RESPONSIVE DESIGN === */
+@media (max-width: 1400px) {
+    .productList-tabs-filter-wrapper {
+        flex-direction: column;
+        align-items: stretch;
+    }
+
+    .productList-filterBar {
+        margin-left: 0;
+        width: 100%;
+    }
+
+    .productList-tabs {
+        justify-content: flex-start;
+    }
+}
+
+@media (max-width: 1024px) {
+    .productList-filterBar {
+        flex-direction: column;
+        align-items: stretch;
+        gap: 12px;
+        width: 100%;
+    }
+
+    .productList-filterBar.collapsed {
+        width: 60px;
+    }
+
+    .productList-search-input,
+    .productList-select {
+        width: 100%;
+        min-width: unset;
+    }
+
+    .productList-clearBtn {
+        width: 100%;
+        justify-content: center;
+    }
+}
+
+@media (max-width: 768px) {
+    .productList-container {
+        width: 95%;
+        margin: 20px 10px;
+    }
+
+    .productList-tabs {
+        gap: 8px;
+        flex-wrap: wrap;
+    }
+
+    .productList-tab {
+        width: auto;
+        min-width: 120px;
+        font-size: 13px;
+        padding: 8px 12px;
+    }
+
+    .productList-filterBar {
+        padding: 12px 16px;
+        gap: 12px;
+    }
+
+    .productList-filter-text {
+        font-size: 12px;
+    }
+}
+
+@media (max-width: 480px) {
+    .productList-tabs {
+        width: 100%;
+    }
+
+    .productList-tab {
+        flex: 1;
+        width: auto;
+        min-width: 100px;
+    }
+}

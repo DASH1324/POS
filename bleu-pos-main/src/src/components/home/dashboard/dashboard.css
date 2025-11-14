@@ -1,0 +1,439 @@
+body {
+  background: #eaf6f8;
+  margin: 0;
+  font-family: 'Segoe UI', sans-serif;
+}
+
+.posDashboard {
+  display: flex;
+  flex-direction: row;
+  min-height: 100vh;
+}
+
+.posDashboardMain {
+  flex: 1;
+  box-sizing: border-box;
+  width: 85%;
+  overflow: hidden; /* Keep this hidden */
+  margin-top: 23px;
+  margin-left: 10px;
+  margin-right: 40px;
+  margin-bottom: 30px;
+  display: flex;
+  flex-direction: column;
+  max-height: 100vh;
+}
+
+.posDashboardContents {
+  margin-top: 60px;
+  overflow-y: auto; /* Make this scrollable */
+  overflow-x: hidden;
+  flex: 1;
+  padding-bottom: 40px;
+  padding-right: 10px;
+}
+
+/* Customize scrollbar for contents */
+.posDashboardContents::-webkit-scrollbar {
+  width: 8px;
+}
+
+.posDashboardContents::-webkit-scrollbar-track {
+  background: #f1f1f1;
+  border-radius: 10px;
+}
+
+.posDashboardContents::-webkit-scrollbar-thumb {
+  background: #4B929D;
+  border-radius: 10px;
+}
+
+.posDashboardContents::-webkit-scrollbar-thumb:hover {
+  background: #3a7580;
+  }
+
+/* Cards */
+.posDashboardCards {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  gap: 20px;
+  margin-bottom: 30px;
+}
+
+.posDashboardCard {
+  background-color: #ffffff;
+  border-radius: 12px;
+  padding: 20px;
+  height: auto;
+  min-height: 100px;
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  box-shadow: 0 1px 3px rgba(0,0,0,0.1);
+}
+
+.posDashboardCardIcon {
+    font-size: 24px;
+    color: #fff;
+    height: 25px;
+    width: 25px;
+    border-radius: 6px;
+    padding: 30px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    align-self: start;
+}
+
+.posDashboardCard.posDashboardSales .posDashboardCardIcon { background: linear-gradient(135deg, #007bff, #66b3ff); }
+.posDashboardCard.posDashboardRevenue .posDashboardCardIcon { background: linear-gradient(135deg, #28a745, #5cd65c); }
+.posDashboardCard.posDashboardOrders .posDashboardCardIcon { background: linear-gradient(135deg, #20c997, #5ce6b9); }
+.posDashboardCard.posDashboardActiveOrders .posDashboardCardIcon { background: linear-gradient(135deg, #fd7e14, #ffa94d); }
+.posDashboardCard.posDashboardSpillage .posDashboardCardIcon { background: linear-gradient(135deg, #dc3545, #f27a89); }
+.posDashboardCard.posDashboardCanceled .posDashboardCardIcon { background: linear-gradient(135deg, #e83e8c, #f79cd4); }
+.posDashboardCard.posDashboardRefunds .posDashboardCardIcon { background: linear-gradient(135deg, #6f42c1, #a47de3); }
+.posDashboardCard.posDashboardCashVariance .posDashboardCardIcon { background: linear-gradient(135deg, #ffc107, #ffe066); }
+.posDashboardCard.posDashboardBestSelling .posDashboardCardIcon { background: linear-gradient(135deg, #28a745, #6ddc6d); }
+
+.posDashboardCardText {
+  flex: 1;
+  align-self: start;
+  margin-left: 10px;
+}
+
+.posDashboardCardTitle {
+  font-size: 15px;
+  color: #666;
+  font-weight: 500;
+  margin-top: 5px;
+}
+
+.posDashboardCardDetails {
+  display: flex;
+  align-items: center;
+  justify-content: flex-start;
+  margin-top: 10px;
+  gap: 8px;
+}
+
+.posDashboardCardValue {
+  font-size: 28px;
+  font-weight: bold;
+  color: #333;
+}
+
+.posDashboardCardPercent {
+  font-size: 12px;
+  display: flex;
+  align-items: center;
+  gap: 5px;
+}
+
+.posDashboardCardPercent.posDashboardGreen {
+  color: green;
+}
+
+.posDashboardCardPercent.posDashboardRed {
+  color: red;
+}
+
+.posDashboardCardSubtext {
+  margin-right: -55px;
+  margin-top: -10px;
+  text-align: left;
+  font-size: 12px;
+  color: #999;
+  text-align: right;
+}
+
+/* Charts */
+.posDashboardCharts {
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+}
+
+.posDashboardChartBox {
+  background: white;
+  padding: 20px;
+  border-radius: 12px;
+  box-shadow: 0 2px 5px rgba(0,0,0,0.08);
+  height: 450px;
+}
+
+/* Add these new classes for manager dashboard layout */
+.posDashboardOverviewRow {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 20px;
+}
+
+.posDashboardOrdersRow {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 20px;
+}
+
+.posDashboardOverviewRow .posDashboardChartBox {
+  height: 450px;
+}
+
+.posDashboardOrdersRow .posDashboardChartBox {
+  height: 450px;
+}
+
+/* Responsive */
+@media (max-width: 1024px) {
+  .posDashboardOverviewRow,
+  .posDashboardOrdersRow {
+    grid-template-columns: 1fr;
+  }
+  
+  .posDashboardOverviewRow .posDashboardChartBox,
+  .posDashboardOrdersRow .posDashboardChartBox {
+    height: auto;
+    min-height: 400px;
+  }
+}
+
+.posDashboardSpillageBox {
+  height: auto;
+}
+
+.posDashboardSpillageContent {
+  display: flex;
+  justify-content: space-around;
+  align-items: center;
+  gap: 40px;
+  padding: 20px;
+}
+
+.posDashboardSpillageStats {
+  display: flex;
+  flex-direction: column;
+  gap: 30px;
+  flex: 1;
+}
+
+.posDashboardSpillageStat {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.posDashboardSpillageLabel {
+  font-size: 14px;
+  color: #666;
+  font-weight: 500;
+}
+
+.posDashboardSpillageValue {
+  font-size: 32px;
+  font-weight: bold;
+  color: #333;
+}
+
+.posDashboardSpillageRing {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+}
+
+.posDashboardShiftBox {
+  grid-column: 1 / -1;
+  height: auto;
+  min-height: 500px;
+}
+
+.posDashboardShiftContent {
+  display: flex;
+  justify-content: space-between;
+  align-items: stretch;
+  gap: 40px;
+  padding: 20px;
+}
+
+.posDashboardShiftChart {
+  flex: 1;
+  min-width: 0;
+}
+
+.posDashboardShiftStats {
+  display: flex;
+  flex-direction: column;
+  gap: 30px;
+  min-width: 200px;
+}
+
+.posDashboardShiftStat {
+  background: #f8f9fa;
+  padding: 20px;
+  border-radius: 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.posDashboardShiftStatLabel {
+  font-size: 16px;
+  color: #666;
+  font-weight: 500;
+}
+
+.posDashboardShiftStatValue {
+  font-size: 36px;
+  font-weight: bold;
+  color: #333;
+}
+
+.posDashboardChartHeader {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 10px;
+  font-size: 22px;
+  font-weight: 600;
+  margin-left: 10px;
+  margin-bottom: 30px;
+}
+
+.posDashboardChartDropdown {
+  padding: 5px 10px;
+  border: none;
+  border-radius: 6px;
+  font-size: 15px;
+}
+
+.posDashboardChartDropdown option {
+  background: white;
+  box-shadow: 0 2px 8px rgba(0,0,0,0.15);
+  border-radius: 8px;
+  overflow: hidden;
+  z-index: 10;
+  animation: fadeIn 0.3s ease;
+}
+
+.posDashboardChartDropdown:hover {
+  background-color: #f0f0f0;
+}
+
+/* Table Styles */
+.posDashboardTableWrapper {
+  overflow-x: auto;
+  margin-top: 20px;
+}
+
+.posDashboardTable {
+  width: 100%;
+  border-collapse: collapse;
+}
+
+.posDashboardTable thead tr {
+  background: #f8f9fa;
+  border-bottom: 2px solid #dee2e6;
+}
+
+.posDashboardTable th {
+  padding: 12px;
+  text-align: left;
+  font-weight: 600;
+}
+
+.posDashboardTable th:not(:first-child) {
+  text-align: right;
+}
+
+.posDashboardTable tbody tr {
+  border-bottom: 1px solid #dee2e6;
+}
+
+.posDashboardTable td {
+  padding: 12px;
+}
+
+.posDashboardTable td:not(:first-child) {
+  text-align: right;
+}
+
+.posDashboardVariance {
+  font-weight: 600;
+}
+
+.posDashboardVariancePositive {
+  color: #dc3545;
+}
+
+.posDashboardVarianceNegative {
+  color: #28a745;
+}
+
+.posDashboardVarianceZero {
+  color: #6c757d;
+}
+
+/* Large screens (desktops) */
+@media (min-width: 1200px) {
+  .posDashboardMain {
+    width: 80%;
+    max-width: 1920px;
+  }
+
+  .posDashboardCards {
+    grid-template-columns: repeat(4, 1fr);
+  }
+}
+
+/* Medium screens (tablets) */
+@media (max-width: 1024px) {
+  .posDashboardMain {
+    width: 100%;
+    padding: 0 20px;
+  }
+
+  .posDashboardCards {
+    grid-template-columns: repeat(2, 1fr);
+  }
+
+  .posDashboardCharts {
+    grid-template-columns: 1fr;
+  }
+}
+
+/* Small screens (mobile) */
+@media (max-width: 768px) {
+  .posDashboardMain {
+    width: 100%;
+    padding: 15px;
+    flex-direction: column;
+  }
+
+  .posDashboardCharts {
+    grid-template-columns: 1fr;
+  }
+
+  .posDashboardCards {
+    grid-template-columns: 1fr;
+  }
+
+  .posDashboardCard {
+    flex-direction: column;
+    align-items: flex-start;
+  }
+
+  .posDashboardSpillageContent {
+    flex-direction: column;
+  }
+
+  .posDashboardShiftContent {
+    flex-direction: column;
+  }
+
+  .posDashboardShiftStats {
+    flex-direction: row;
+    min-width: 100%;
+  }
+
+  .posDashboardShiftStat {
+    flex: 1;
+  }
+}

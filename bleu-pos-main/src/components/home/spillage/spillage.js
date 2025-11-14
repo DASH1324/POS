@@ -9,8 +9,8 @@ import LogSpillageModal from "./modals/logSpillageModal";
 import EditSpillageModal from "./modals/editSpillageModal";
 import DeleteSpillageModal from "./modals/deleteSpillageModal";
 import CustomDateModal from "../shared/customDateModal";
-import loadingAnimation from "../../../assets/animation/loading.json";
-import Lottie from "lottie-react";
+import Loading from "../shared/loading";
+import { toast } from 'react-toastify';
 import '../../confirmAlertCustom.css';
 import {
   startOfToday,
@@ -35,16 +35,43 @@ function Spillage() {
   const [selectedSpillage, setSelectedSpillage] = useState(null);
   const [spillageData, setSpillageData] = useState([]);
   const [isLoading, setIsLoading] = useState(true);
-  const [cashiersMap, setCashiersMap] = useState({});
   const [loggedByName, setLoggedByName] = useState("");
   const [userRole, setUserRole] = useState("");
   const [isFilterOpen, setIsFilterOpen] = useState(false);
+  const [cashiersMap, setCashiersMap] = useState({}); // Map username to full name
 
   useEffect(() => {
     const role = localStorage.getItem("userRole");
     if (role) {
       setUserRole(role);
     }
+  }, []);
+
+  // Fetch cashiers and create username to full name mapping
+  useEffect(() => {
+    const fetchCashiers = async () => {
+      try {
+        const token = localStorage.getItem("authToken");
+        const response = await fetch("http://localhost:4000/users/cashiers", {
+          headers: {
+            Authorization: `Bearer ${token}`,
+          },
+        });
+
+        if (response.ok) {
+          const cashiers = await response.json();
+          const mapping = {};
+          cashiers.forEach(cashier => {
+            mapping[cashier.Username] = cashier.FullName;
+          });
+          setCashiersMap(mapping);
+        }
+      } catch (error) {
+        console.error("Error fetching cashiers:", error);
+      }
+    };
+
+    fetchCashiers();
   }, []);
 
   // Fetch the logged-in user's full employee name
@@ -86,7 +113,6 @@ function Spillage() {
     const fetchData = async () => {
       setIsLoading(true);
       try {
-        await fetchCashiers();
         await fetchSpillageData();
       } catch (error) {
         console.error("Error during data fetching:", error);
@@ -97,28 +123,6 @@ function Spillage() {
 
     fetchData();
   }, []);
-
-  const fetchCashiers = async () => {
-    try {
-      const token = localStorage.getItem("authToken");
-      const response = await fetch("http://localhost:4000/users/cashiers", {
-        headers: {
-          Authorization: `Bearer ${token}`,
-        },
-      });
-
-      if (response.ok) {
-        const cashiers = await response.json();
-        const map = {};
-        cashiers.forEach(c => {
-          map[c.Username] = c.FullName;
-        });
-        setCashiersMap(map);
-      }
-    } catch (error) {
-      console.error("Error fetching cashiers:", error);
-    }
-  };
 
   const fetchSpillageData = async () => {
     try {
@@ -165,6 +169,7 @@ function Spillage() {
 
   const handleAddSpillage = (newSpillage) => {
     setSpillageData((prev) => [newSpillage, ...prev]);
+    toast.success(`Spillage for "${newSpillage.product_name}" logged successfully`);
   };
 
   const handleUpdateSpillage = (updatedSpillage) => {
@@ -174,13 +179,18 @@ function Spillage() {
       )
     );
     setSelectedSpillage(updatedSpillage);
+    toast.success(`Spillage for "${updatedSpillage.product_name}" updated successfully`);
   };
 
   const handleDeleteSpillage = (id) => {
+    const deletedItem = spillageData.find(item => item.spillage_id === id);
     setSpillageData((prev) => prev.filter((item) => item.spillage_id !== id));
     if (selectedSpillage && selectedSpillage.spillage_id === id) {
       setSelectedSpillage(null);
       setIsDetailsModalOpen(false);
+    }
+    if (deletedItem) {
+      toast.success(`Spillage for "${deletedItem.product_name}" deleted successfully`);
     }
   };
 
@@ -239,11 +249,12 @@ function Spillage() {
       sum + (parseInt(item.quantity) || 0), 0
     );
     
-    // Staff most involved
+    // Staff most involved - use full name from cashiersMap
     const staffCount = {};
     filteredData.forEach(item => {
-      const cashierName = cashiersMap[item.cashier_name] || item.cashier_name || "Unknown";
-      staffCount[cashierName] = (staffCount[cashierName] || 0) + 1;
+      const cashierUsername = item.cashier_name || "Unknown";
+      const cashierFullName = cashiersMap[cashierUsername] || cashierUsername;
+      staffCount[cashierFullName] = (staffCount[cashierFullName] || 0) + 1;
     });
     const staffMostInvolved = Object.keys(staffCount).length > 0
       ? Object.entries(staffCount).reduce((a, b) => a[1] > b[1] ? a : b)[0]
@@ -272,7 +283,7 @@ function Spillage() {
   const columns = useMemo(() => {
     const baseColumns = [
       {
-        name: "PRODUCT & QUANTITY",
+        name: "PRODUCT",
         selector: (row) => row.product_name,
         cell: (row) => (
           <div>
@@ -285,7 +296,7 @@ function Spillage() {
           </div>
         ),
         sortable: true,
-        width: "18%",
+        width: "16%",
       },
       { 
         name: "CATEGORY", 
@@ -303,7 +314,16 @@ function Spillage() {
       },
       {
         name: "DATE",
-        selector: (row) => new Date(row.spillage_date).toLocaleDateString(),
+        selector: (row) => {
+          const d = new Date(row.spillage_date);
+          return d.toLocaleString(undefined, {
+            year: "numeric",
+            month: "short",
+            day: "numeric",
+            hour: "2-digit",
+            minute: "2-digit",
+          });
+        },
         sortable: true,
         width: "16%",
         center: true,
@@ -311,7 +331,7 @@ function Spillage() {
       { 
         name: "REASON", 
         selector: (row) => row.reason, 
-        width: "18%",
+        width: "20%",
         center: true,
       },
       {
@@ -322,45 +342,8 @@ function Spillage() {
         center: true,
       },
     ];
-
-    if (userRole !== 'admin') {
-      baseColumns.push({
-        name: "ACTIONS",
-        cell: (row) => (
-          <div className="mSpillage-action-buttons">
-            <button
-              type="button"
-              className="mSpillage-edit-btn"
-              onClick={(e) => {
-                e.stopPropagation();
-                setSelectedSpillage(row);
-                setIsEditModalOpen(true);
-              }}
-              title="Edit"
-            >
-              <FaEdit />
-            </button>
-            <button
-              type="button"
-              className="mSpillage-delete-btn"
-              onClick={(e) => {
-                e.stopPropagation();
-                setSelectedSpillage(row);
-                setIsDeleteModalOpen(true);
-              }}
-              title="Delete"
-            >
-              <FaTrash />
-            </button>
-          </div>
-        ),
-        center: true,
-        width: "12%",
-      });
-    }
-
     return baseColumns;
-  }, [userRole, cashiersMap]);
+  }, [cashiersMap]);
 
   return (
     <div className="mSpillage-page">
@@ -369,11 +352,7 @@ function Spillage() {
         <Header pageTitle="Spillage Management" />
         <div className="mSpillage-content">
           {isLoading ? (
-            <div className="loading-container">
-              <div className="loading-bg">
-                <Lottie animationData={loadingAnimation} loop={true} className="loading-animation" />
-              </div>
-            </div>
+            <Loading/>
           ) : (
             <>
             <div className="mSpillage-filter-wrapper">
@@ -564,8 +543,8 @@ function Spillage() {
             show={isDetailsModalOpen}
             onClose={() => setIsDetailsModalOpen(false)}
             spillage={selectedSpillage}
-            cashiersMap={cashiersMap}
             userRole={userRole}
+            cashiersMap={cashiersMap}
             onEdit={() => {
               setIsDetailsModalOpen(false);
               setIsEditModalOpen(true);

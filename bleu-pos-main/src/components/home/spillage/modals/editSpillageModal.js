@@ -3,67 +3,140 @@ import PropTypes from "prop-types";
 import "./sharedSpillageModal.css";
 
 function EditSpillageModal({ spillage, onClose, onUpdate, loggedByName }) {
-  const [productType, setProductType] = useState(spillage.category || "");
-  const [productName, setProductName] = useState(spillage.product_name || "");
-  const [amount, setAmount] = useState(spillage.quantity || "");
-  const [cashierName, setCashierName] = useState(spillage.cashier_name || "");
+  // Use optional chaining to safely access spillage properties
+  const [cashierName, setCashierName] = useState("");
+  const [productType, setProductType] = useState(spillage?.category || "");
+  const [productName, setProductName] = useState(spillage?.product_name || "");
+  const [amount, setAmount] = useState(spillage?.quantity || "");
+  const [selectedSession, setSelectedSession] = useState(spillage?.session_id || "");
   const [date, setDate] = useState(
-    spillage.spillage_date 
+    spillage?.spillage_date 
       ? new Date(spillage.spillage_date).toISOString().split('T')[0] 
       : ""
   );
-  const [reason, setReason] = useState(spillage.reason || "");
+  const [reason, setReason] = useState(spillage?.reason || "");
   const [errors, setErrors] = useState({});
   const [isUpdating, setIsUpdating] = useState(false);
-  const [cashiers, setCashiers] = useState([]);
+  const [sessions, setSessions] = useState([]);
   const [isLoadingProducts, setIsLoadingProducts] = useState(false);
   const [isLoadingCashiers, setIsLoadingCashiers] = useState(false);
   const [availableProducts, setAvailableProducts] = useState([]);
+  const [availableCashiers, setAvailableCashiers] = useState([]);
 
-  // Store original values for comparison
+  // Store original values for comparison - use optional chaining
   const [originalValues] = useState({
-    category: spillage.category || "",
-    product_name: spillage.product_name || "",
-    quantity: spillage.quantity || 0
+    category: spillage?.category || "",
+    product_name: spillage?.product_name || "",
+    quantity: spillage?.quantity || 0,
+    session_id: spillage?.session_id || null
   });
 
-  // Fetch cashiers list
+  // Fetch cashiers on mount
   useEffect(() => {
-    fetchCashiers();
-  }, []);
+    if (spillage) {
+      fetchCashiers();
+      fetchAllSessions();
+    }
+  }, [spillage]);
 
-  // Fetch products when date OR cashierName changes
+  // When cashier name OR date changes, find the matching session
   useEffect(() => {
-    if (date && cashierName) {
-      fetchProductsSoldByCashierOnDate(date, cashierName);
+    if (date && cashierName && spillage && sessions.length > 0) {
+      findSessionForCashierAndDate(cashierName, date);
+    } else if (!cashierName || !date) {
+      setAvailableProducts([]);
+      setProductType("");
+      setProductName("");
+      setSelectedSession("");
+    }
+  }, [date, cashierName, spillage, sessions]);
+
+  // Fetch products when session changes
+  useEffect(() => {
+    if (spillage && selectedSession) {
+      fetchProductsSoldInSession(selectedSession);
     } else {
       setAvailableProducts([]);
     }
-  }, [date, cashierName]);
+  }, [selectedSession, spillage]);
 
-  // Reset fields when spillage changes
+  // Reset fields when spillage changes and set initial cashier name
   useEffect(() => {
     if (spillage) {
       setProductType(spillage.category || "");
       setProductName(spillage.product_name || "");
       setAmount(spillage.quantity || "");
-      setCashierName(spillage.cashier_name || "");
+      setSelectedSession(spillage.session_id || "");
       setDate(
         spillage.spillage_date 
           ? new Date(spillage.spillage_date).toISOString().split('T')[0] 
           : ""
       );
       setReason(spillage.reason || "");
+      
+      // Find and set the cashier name from the session
+      if (spillage.session_id && sessions.length > 0) {
+        const session = sessions.find(s => s.session_id === spillage.session_id);
+        if (session && availableCashiers.length > 0) {
+          const cashier = availableCashiers.find(c => c.Username === session.cashier_name);
+          if (cashier) {
+            setCashierName(cashier.FullName);
+          }
+        }
+      }
     }
-  }, [spillage]);
+  }, [spillage, sessions, availableCashiers]);
 
+  // Guard clause AFTER all hooks - React requirement
   if (!spillage) return null;
 
   const fetchCashiers = async () => {
     setIsLoadingCashiers(true);
     try {
       const token = localStorage.getItem("authToken");
-      const response = await fetch("http://localhost:4000/users/cashiers", {
+      
+      if (!token) {
+        throw new Error("No authentication token found. Please log in again.");
+      }
+
+      const response = await fetch(
+        "http://localhost:4000/users/cashiers",
+        {
+          headers: {
+            Authorization: `Bearer ${token}`,
+          },
+        }
+      );
+
+      if (!response.ok) {
+        throw new Error(`Failed to fetch cashiers: ${response.status}`);
+      }
+
+      const cashiers = await response.json();
+      setAvailableCashiers(cashiers);
+
+      if (cashiers.length === 0) {
+        setErrors((prev) => ({
+          ...prev,
+          cashierName: "No cashiers found in the system",
+        }));
+      }
+    } catch (error) {
+      console.error("Error fetching cashiers:", error);
+      setErrors((prev) => ({
+        ...prev,
+        cashierName: "Error loading cashiers",
+      }));
+      setAvailableCashiers([]);
+    } finally {
+      setIsLoadingCashiers(false);
+    }
+  };
+
+  const fetchAllSessions = async () => {
+    try {
+      const token = localStorage.getItem("authToken");
+      const response = await fetch("http://localhost:9003/wastelogs/sessions/active", {
         headers: {
           Authorization: `Bearer ${token}`,
         },
@@ -71,16 +144,61 @@ function EditSpillageModal({ spillage, onClose, onUpdate, loggedByName }) {
 
       if (response.ok) {
         const data = await response.json();
-        setCashiers(data);
+        setSessions(data);
       }
     } catch (error) {
-      console.error("Error fetching cashiers:", error);
-    } finally {
-      setIsLoadingCashiers(false);
+      console.error("Error fetching sessions:", error);
     }
   };
 
-  const fetchProductsSoldByCashierOnDate = async (selectedDate, selectedCashier) => {
+  const findSessionForCashierAndDate = (selectedCashierFullName, selectedDate) => {
+    // Find the cashier's username from their full name
+    const cashier = availableCashiers.find(c => c.FullName === selectedCashierFullName);
+    if (!cashier) {
+      setErrors((prev) => ({
+        ...prev,
+        productType: "Cashier not found",
+      }));
+      return;
+    }
+
+    const cashierUsername = cashier.Username;
+
+    // Parse the selected date
+    const selectedDateTime = new Date(selectedDate);
+    selectedDateTime.setHours(0, 0, 0, 0);
+
+    // Find a session for this cashier that was active on the selected date
+    const matchingSession = sessions.find(session => {
+      if (session.cashier_name !== cashierUsername) return false;
+
+      const sessionStart = new Date(session.session_start);
+      const sessionEnd = session.session_end ? new Date(session.session_end) : new Date();
+
+      // Check if the selected date falls within the session period
+      return selectedDateTime >= new Date(sessionStart.toDateString()) && 
+             selectedDateTime <= new Date(sessionEnd.toDateString());
+    });
+
+    if (matchingSession) {
+      setSelectedSession(matchingSession.session_id);
+      fetchProductsSoldInSession(matchingSession.session_id);
+      // Clear any previous error
+      setErrors((prev) => {
+        const { productType, ...rest } = prev;
+        return rest;
+      });
+    } else {
+      setSelectedSession("");
+      setAvailableProducts([]);
+      setErrors((prev) => ({
+        ...prev,
+        productType: `No active session found for ${selectedCashierFullName} on ${selectedDate}`,
+      }));
+    }
+  };
+
+  const fetchProductsSoldInSession = async (sessionId) => {
     setIsLoadingProducts(true);
     
     try {
@@ -91,7 +209,7 @@ function EditSpillageModal({ spillage, onClose, onUpdate, loggedByName }) {
       }
 
       const response = await fetch(
-        `http://localhost:9003/wastelogs/products-sold?spillage_date=${selectedDate}&cashier_name=${encodeURIComponent(selectedCashier)}`,
+        `http://localhost:9003/wastelogs/products-sold?session_id=${sessionId}`,
         {
           headers: {
             Authorization: `Bearer ${token}`,
@@ -111,7 +229,7 @@ function EditSpillageModal({ spillage, onClose, onUpdate, loggedByName }) {
       if (products.length === 0) {
         setErrors((prev) => ({
           ...prev,
-          productType: "No products were processed by this cashier on this date",
+          productType: "No products were processed in this session",
         }));
       } else {
         setErrors((prev) => {
@@ -123,7 +241,7 @@ function EditSpillageModal({ spillage, onClose, onUpdate, loggedByName }) {
       console.error("Error fetching products:", error);
       setErrors((prev) => ({
         ...prev,
-        productType: error.message || "Error loading products for this date and cashier",
+        productType: error.message || "Error loading products for this session",
       }));
       setAvailableProducts([]);
     } finally {
@@ -149,8 +267,9 @@ function EditSpillageModal({ spillage, onClose, onUpdate, loggedByName }) {
     const categoryChanged = originalValues.category !== productType;
     const productChanged = originalValues.product_name !== productName;
     const quantityChanged = originalValues.quantity !== parseInt(amount);
+    const sessionChanged = originalValues.session_id !== parseInt(selectedSession);
 
-    if (!categoryChanged && !productChanged && !quantityChanged) {
+    if (!categoryChanged && !productChanged && !quantityChanged && !sessionChanged) {
       console.log("No inventory-affecting changes detected");
       return;
     }
@@ -158,7 +277,8 @@ function EditSpillageModal({ spillage, onClose, onUpdate, loggedByName }) {
     console.log("Inventory affecting changes detected:", {
       categoryChanged,
       productChanged,
-      quantityChanged
+      quantityChanged,
+      sessionChanged
     });
 
     const oldSpillage = {
@@ -269,13 +389,14 @@ function EditSpillageModal({ spillage, onClose, onUpdate, loggedByName }) {
     e.preventDefault();
     let newErrors = {};
 
+    if (!cashierName.trim()) newErrors.cashierName = "Cashier name is required";
+    if (!date.trim()) newErrors.date = "Date is required";
+    if (!selectedSession) newErrors.productType = "No valid session found for this cashier and date";
     if (!productType.trim()) newErrors.productType = "Product type is required";
     if (!productName.trim()) newErrors.productName = "Product name is required";
     if (!amount || isNaN(amount) || parseInt(amount) <= 0) {
       newErrors.amount = "Enter a valid amount";
     }
-    if (!cashierName.trim()) newErrors.cashierName = "Cashier is required";
-    if (!date.trim()) newErrors.date = "Date is required";
     if (!reason.trim()) newErrors.reason = "Reason is required";
 
     if (Object.keys(newErrors).length > 0) {
@@ -311,10 +432,10 @@ function EditSpillageModal({ spillage, onClose, onUpdate, loggedByName }) {
             "Content-Type": "application/json",
           },
           body: JSON.stringify({
+            session_id: parseInt(selectedSession),
             product_name: productName,
             category: productType,
             quantity: parseInt(amount),
-            cashier_name: cashierName,
             spillage_date: date,
             reason: reason,
             logged_by: loggedByName,
@@ -346,7 +467,7 @@ function EditSpillageModal({ spillage, onClose, onUpdate, loggedByName }) {
     <div className="spillage-modal-overlay" onClick={onClose}>
       <div className="spillage-modal" onClick={(e) => e.stopPropagation()}>
         <div className="spillage-modal-header">
-          <h3>Edit Spillage</h3>
+          <h3>Edit Spillage Log</h3>
           <button className="spillage-close-modal" onClick={onClose}>×</button>
         </div>
 
@@ -370,12 +491,12 @@ function EditSpillageModal({ spillage, onClose, onUpdate, loggedByName }) {
                 <option value="">
                   {isLoadingCashiers
                     ? "Loading cashiers..."
-                    : cashiers.length === 0
+                    : availableCashiers.length === 0
                     ? "No cashiers available"
                     : "Select cashier"}
                 </option>
-                {cashiers.map((cashier) => (
-                  <option key={cashier.UserID} value={cashier.Username}>
+                {availableCashiers.map((cashier) => (
+                  <option key={cashier.UserID} value={cashier.FullName}>
                     {cashier.FullName}
                   </option>
                 ))}
@@ -392,11 +513,7 @@ function EditSpillageModal({ spillage, onClose, onUpdate, loggedByName }) {
               <input
                 type="date"
                 value={date}
-                onChange={(e) => {
-                  setDate(e.target.value);
-                  setProductType("");
-                  setProductName("");
-                }}
+                onChange={(e) => setDate(e.target.value)}
                 onFocus={() => handleFocus("date")}
                 className={`spillage-input ${errors.date ? "spillage-error-field" : ""}`}
                 max={new Date().toLocaleDateString('en-CA')}
@@ -418,7 +535,7 @@ function EditSpillageModal({ spillage, onClose, onUpdate, loggedByName }) {
                 }}
                 onFocus={() => handleFocus("productType")}
                 className={`spillage-input ${errors.productType ? "spillage-error-field" : ""}`}
-                disabled={!date || !cashierName || isLoadingProducts}
+                disabled={!cashierName || !date || isLoadingProducts}
               >
                 <option value="">
                   {!cashierName || !date
@@ -529,7 +646,7 @@ function EditSpillageModal({ spillage, onClose, onUpdate, loggedByName }) {
               className="spillage-btn-confirm"
               disabled={isUpdating || isLoadingProducts || isLoadingCashiers}
             >
-              {isUpdating ? "Updating..." : "Update Spillage"}
+              {isUpdating ? "Updating..." : "Update Log"}
             </button>
           </div>
         </form>

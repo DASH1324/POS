@@ -1,0 +1,208 @@
+.sales-report-modal-overlay {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background-color: rgba(0, 0, 0, 0.6);
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  z-index: 1000;
+  animation: fadeIn 0.2s ease-in-out;
+}
+
+@keyframes fadeIn {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+.sales-report-modal-content {
+  position: relative;
+  background: white;
+  border-radius: 16px;
+  width: 90%;
+  max-width: 1100px;
+  max-height: 85vh;
+  display: flex;
+  flex-direction: column;
+  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.15);
+  animation: slideUp 0.3s ease-out;
+  overflow: hidden;
+}
+
+/* Top accent stripe */
+.sales-report-modal-content::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 3px;
+  background: #4197a2;
+  z-index: 1;
+}
+
+@keyframes slideUp {
+  from {
+    transform: translateY(30px);
+    opacity: 0;
+  }
+  to {
+    transform: translateY(0);
+    opacity: 1;
+  }
+}
+
+.sales-report-modal-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 18px 28px;
+  border-bottom: 2px solid #f1f5f9;
+  background-color: #ffffff;
+}
+
+.sales-report-modal-title-section h2 {
+  margin: 0;
+  font-size: 18px;
+  font-weight: 600;
+  color: #1a1a1a;
+  letter-spacing: -0.01em;
+}
+
+.sales-report-modal-period {
+  margin: 6px 0 0 0;
+  font-size: 14px;
+  color: #64748b;
+  font-weight: 500;
+}
+
+.sales-report-modal-close {
+  background: none;
+  border: none;
+  font-size: 24px;
+  cursor: pointer;
+  color: #aaa;
+  padding: 0;
+  width: 32px;
+  height: 32px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.sales-report-modal-close:hover {
+  color: #333;
+}
+
+.sales-report-modal-body {
+  padding: 16px 28px 16px 28px;
+  overflow-y: auto;
+  flex: 1;
+}
+
+.sales-report-modal-body::-webkit-scrollbar {
+  width: 6px;
+}
+
+.sales-report-modal-body::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.sales-report-modal-body::-webkit-scrollbar-thumb {
+  background-color: #b0c4cc;
+  border-radius: 6px;
+}
+
+.sales-report-modal-body::-webkit-scrollbar-thumb:hover {
+  background-color: #4B929D;
+}
+
+/* DataTable Custom Overrides */
+.sales-report-modal-body .rdt_Table {
+  border-radius: 0;
+  overflow: hidden;
+}
+
+.sales-report-modal-body .rdt_TableHead {
+  background-color: #ffffff;
+}
+
+.sales-report-modal-body .rdt_TableHeadRow {
+  border-bottom: 2px solid #e2e8f0;
+  background-color: #ffffff;
+  min-height: 50px;
+}
+
+.sales-report-modal-body .rdt_TableRow {
+  border-bottom: 1px solid #f1f5f9;
+  transition: background-color 0.15s ease;
+}
+
+.sales-report-modal-body .rdt_TableRow:hover {
+  background-color: none;
+}
+
+.sales-report-modal-body .rdt_Pagination {
+  border-top: 2px solid #f1f5f9;
+  padding: 16px 20px;
+  font-size: 14px;
+  color: #444;
+}
+
+@media (max-width: 768px) {
+  .sales-report-modal-content {
+    width: 95%;
+    max-height: 90vh;
+    border-radius: 12px;
+  }
+
+  .sales-report-modal-header {
+    padding: 20px 24px;
+  }
+
+  .sales-report-modal-title-section h2 {
+    font-size: 18px;
+  }
+
+  .sales-report-modal-period {
+    font-size: 13px;
+  }
+
+  .sales-report-modal-close {
+    font-size: 24px;
+    width: 32px;
+    height: 32px;
+  }
+
+  .sales-report-modal-body {
+    padding: 20px 24px 24px 24px;
+  }
+}
+
+@media (max-width: 480px) {
+  .sales-report-modal-content {
+    width: 96%;
+  }
+
+  .sales-report-modal-header {
+    padding: 16px 20px;
+  }
+
+  .sales-report-modal-title-section h2 {
+    font-size: 16px;
+  }
+
+  .sales-report-modal-period {
+    font-size: 12px;
+  }
+
+  .sales-report-modal-body {
+    padding: 16px 20px 20px 20px;
+  }
+}

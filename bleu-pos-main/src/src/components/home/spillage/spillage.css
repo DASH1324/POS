@@ -1,0 +1,409 @@
+body {
+    background: #eaf6f8;
+    margin: 0;
+    font-family: 'Segoe UI', sans-serif;
+}
+
+.mSpillage-page {
+    display: flex;
+    flex-direction: row;
+    min-height: 100vh;
+}
+
+.mSpillage {
+    flex: 1;
+    box-sizing: border-box;
+    width: 85%;
+    overflow: hidden;
+    margin-top: 23px;
+    margin-left: 10px;
+    margin-right: 40px;
+    margin-bottom: 30px;
+}
+
+.mSpillage-content {
+    margin-top: 25px;
+}
+
+/* === FILTER BAR WITH TOGGLE === */
+.mSpillage-filter-wrapper {
+    display: flex;
+    gap: 10px;
+    align-items: center;
+    justify-content: flex-end;
+    margin-bottom: 15px;
+}
+
+.mSpillage-filter-bar {
+    display: flex;
+    gap: 10px;
+    align-items: center;
+    background-color: #f8fcfd;
+    padding: 12px 20px;
+    border-radius: 12px;
+    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.04);
+    border-left: 4px solid #4B929D;
+    width: fit-content;
+    transition: all 0.5s ease-in-out;
+    overflow: hidden;
+}
+
+.mSpillage-filter-bar.collapsed {
+    width: auto;
+    padding: 12px 14px;
+}
+
+.mSpillage-filter-bar.collapsed .mSpillage-filter-item,
+.mSpillage-filter-bar.collapsed .mSpillage-search-input,
+.mSpillage-filter-bar.collapsed .mSpillage-clear-btn,
+.mSpillage-filter-bar.collapsed .mSpillage-add-btn {
+    display: none;
+}
+
+.mSpillage-filter-bar.open {
+    width: auto;
+}
+
+.mSpillage-filter-toggle-btn {
+    background-color: transparent;
+    border: none;
+    font-size: 24px;
+    font-weight: 600;
+    cursor: pointer;
+    color: #4b929d;
+    transition: all 0.3s ease;
+    padding: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    flex-shrink: 0;
+}
+
+/* === FILTER ITEMS === */
+.mSpillage-filter-item {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+
+.mSpillage-filter-item span {
+    font-size: 14px;
+    font-weight: 500;
+    color: #5a6c75;
+    white-space: nowrap;
+}
+
+/* Search Wrapper */
+.mSpillage-search-wrapper {
+    position: relative;
+    flex: 1;
+    min-width: 220px;
+}
+
+.mSpillage-search-icon {
+    position: absolute;
+    left: 14px;
+    top: 50%;
+    transform: translateY(-50%);
+    color: #6b7280;
+    font-size: 14px;
+}
+
+.mSpillage-search-input {
+    width: 100%;
+    padding: 10px 16px 10px 40px;
+    border: none;
+    border-radius: 8px;
+    background-color: #f8fcfd;
+    font-size: 14px;
+    font-family: inherit;
+    outline: none;
+    transition: all 0.2s ease;
+    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.04);
+}
+
+.mSpillage-search-input {
+    background-color: white;
+    box-shadow: 0 2px 8px rgba(75, 146, 157, 0.2);
+}
+
+.mSpillage-search-input::placeholder {
+    color: #999;
+}
+
+.mSpillage-select {
+    padding: 8px 12px;
+    border-radius: 8px;
+    border: none;
+    background-color: #f8fcfd;
+    font-size: 14px;
+    font-family: inherit;
+    cursor: pointer;
+    min-width: 150px;
+    outline: none;
+    font-weight: 500;
+    color: #333;
+    transition: all 0.2s ease;
+}
+
+.mSpillage-select:focus {
+    background-color: white;
+    box-shadow: 0 2px 8px rgba(75, 146, 157, 0.2);
+}
+
+.mSpillage-clear-btn {
+    padding: 8px 14px;
+    background-color: #d9534f;
+    color: white;
+    border: none;
+    border-radius: 6px;
+    cursor: pointer;
+    font-weight: 500;
+    font-size: 13px;
+    transition: background-color 0.3s;
+    white-space: nowrap;
+    flex-shrink: 0;
+    width: 110px;
+}
+
+.mSpillage-clear-btn:hover {
+    background-color: #c9302c;
+}
+
+.mSpillage-add-btn {
+    padding: 8px 16px;
+    background-color: #007BFF;
+    color: white;
+    border: none;
+    border-radius: 6px;
+    cursor: pointer;
+    font-weight: 600;
+    font-size: 14px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 6px; 
+    white-space: nowrap;
+    flex-shrink: 0;
+    transition: background-color 0.3s;
+    height: 44px;
+    min-width: 140px;
+}
+
+.mSpillage-add-btn:hover {
+    background-color: #0069d9;
+}
+
+.mngDiscountPromo-add-btn svg {
+    font-size: 16px;
+}
+
+/* === SUMMARY CARDS === */
+.mSpillage-cards-container {
+  display: flex;
+  gap: 16px;
+  flex-wrap: wrap;
+  justify-content: center;
+  flex-shrink: 0;
+  margin-bottom: 20px;
+}
+
+.mSpillage-stat-card {
+  background: white;
+  border-radius: 12px;
+  padding: 20px;
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.08);
+  flex: 1;
+  min-width: 250px;
+  max-width: 350px;
+}
+
+.mSpillage-card-icon {
+  width: 56px;
+  height: 56px;
+  border-radius: 10px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 24px;
+  color: white;
+  flex-shrink: 0;
+}
+
+.mSpillage-icon-blue {
+  background: linear-gradient(135deg, #3b82f6 0%, #2563eb 100%);
+}
+
+.mSpillage-icon-red {
+  background: linear-gradient(135deg, #ef4444 0%, #dc2626 100%);
+}
+
+.mSpillage-icon-orange {
+  background: linear-gradient(135deg, #f59e0b 0%, #d97706 100%);
+}
+
+.mSpillage-icon-purple {
+  background: linear-gradient(135deg, #8b5cf6 0%, #7c3aed 100%);
+}
+
+.mSpillage-icon-teal {
+  background: linear-gradient(135deg, #14b8a6 0%, #0d9488 100%);
+}
+
+.mSpillage-card-content {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  flex: 1;
+}
+
+.mSpillage-card-label {
+  font-size: 11px;
+  font-weight: 500;
+  color: #6b7280;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+.mSpillage-card-value {
+  font-size: 24px;
+  font-weight: 600;
+  color: #1f2937;
+  line-height: 1;
+}
+
+.mSpillage-card-subvalue {
+  font-size: 13px;
+  font-weight: 500;
+  color: #6b7280;
+  margin-top: 2px;
+}
+
+.mSpillage-table-container {
+    background-color: #4B929D;
+    overflow: auto;
+}
+
+.mSpillage-action-buttons {
+    display: flex;
+    justify-content: center;
+    gap: 8px;
+    align-items: center;
+}
+
+.mSpillage-action-buttons button {
+    padding: 8px 12px;
+    border: none;
+    border-radius: 4px;
+    cursor: pointer;
+    color: white;
+    font-size: 14px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    transition: background-color 0.3s;
+}
+
+.mSpillage-edit-btn {
+    background-color: #007bff;
+}
+
+.mSpillage-edit-btn:hover {
+    background-color: #0056b3;
+}
+
+.mSpillage-delete-btn {
+    background-color: #dc3545;
+}
+
+.mSpillage-delete-btn:hover {
+    background-color: #c82333;
+}
+
+/* === RESPONSIVE DESIGN === */
+@media (max-width: 1400px) {
+    .mSpillage-filter-bar {
+        flex-wrap: wrap;
+    }
+
+    .mSpillage-search-wrapper {
+        min-width: 200px;
+    }
+}
+
+@media (max-width: 1024px) {
+    .mSpillage-filter-bar {
+        flex-direction: column;
+        align-items: stretch;
+        gap: 12px;
+    }
+
+    .mSpillage-filter-bar.collapsed {
+        width: 60px;
+        flex-direction: row;
+    }
+
+    .mSpillage-filter-item {
+        width: 100%;
+    }
+
+    .mSpillage-search-wrapper,
+    .mSpillage-select {
+        width: 100%;
+        min-width: unset;
+    }
+
+    .mSpillage-clear-btn,
+    .mSpillage-add-btn {
+        width: 100%;
+        justify-content: center;
+    }
+
+    .mSpillage-cards-container {
+        gap: 12px;
+    }
+
+    .mSpillage-stat-card {
+        min-width: 200px;
+    }
+}
+
+@media (max-width: 768px) {
+    .mSpillage {
+        width: 95%;
+        margin: 20px 10px;
+    }
+
+    .mSpillage-filter-bar {
+        padding: 12px 16px;
+    }
+
+    .mSpillage-stat-card {
+        min-width: 100%;
+        max-width: 100%;
+    }
+}
+
+@media (max-width: 480px) {
+    .mSpillage-filter-item span {
+        font-size: 12px;
+    }
+
+    .mSpillage-search-input,
+    .mSpillage-select {
+        font-size: 13px;
+    }
+
+    .mSpillage-card-value {
+        font-size: 20px;
+    }
+
+    .mSpillage-card-icon {
+        width: 48px;
+        height: 48px;
+        font-size: 20px;
+    }
+}

@@ -1,0 +1,164 @@
+/* =============== PRODUCT DETAILS MODAL =============== */
+
+.details-modal-overlay {
+  position: fixed;
+  inset: 0;
+  background-color: rgba(0, 0, 0, 0.4);
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  z-index: 1100;
+  font-family: 'Segoe UI', 'Roboto', sans-serif;
+}
+
+.details-modal {
+  background: white;
+  border-radius: 10px;
+  width: 90%;
+  max-width: 720px;
+  max-height: 85vh;
+  overflow: hidden;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.12);
+  position: relative;
+  animation: modalSlideIn 0.25s ease-out;
+}
+
+/* Teal accent stripe */
+.details-modal::before {
+  content: "";
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 3px;
+  background: #4197a2;
+  z-index: 1;
+}
+
+/* Close button only (no header) */
+.details-close-modal {
+  position: absolute;
+  top: 12px;
+  right: 16px;
+  background: none;
+  border: none;
+  font-size: 24px;
+  cursor: pointer;
+  color: #999;
+  width: 32px;
+  height: 32px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: color 0.2s;
+  z-index: 2;
+}
+
+.details-close-modal:hover {
+  color: #333;
+}
+
+/* ========== MAIN BODY ========== */
+.details-modal-content {
+  padding: 32px 24px 24px;
+  max-height: 600px;
+  overflow-y: auto;
+}
+
+.details-main-section {
+  display: flex;
+  gap: 24px;
+  align-items: flex-start;
+}
+
+/* LEFT SIDE */
+.details-image-wrapper {
+  flex: 0 0 200px;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+}
+
+.details-image {
+  width: 200px;
+  height: 200px;
+  border-radius: 10px;
+  object-fit: cover;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+}
+
+/* RIGHT SIDE */
+.details-info-section {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+}
+
+.details-product-name {
+  font-size: 22px;
+  font-weight: 600;
+  color: #1a1a1a;
+  margin-bottom: 16px;
+}
+
+.details-info-grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 16px;
+  margin-bottom: 16px;
+}
+
+.details-info-item {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.details-label {
+  font-weight: 500;
+  font-size: 13px;
+  color: #666;
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+}
+
+.details-value {
+  color: #1a1a1a;
+  font-size: 15px;
+  font-weight: 500;
+}
+
+/* DESCRIPTION below info grid */
+.details-description-section {
+  margin-top: 8px;
+}
+
+.details-description {
+  color: #444;
+  font-size: 14px;
+  line-height: 1.6;
+  white-space: pre-wrap;
+  margin-top: 4px;
+}
+
+/* Responsive */
+@media (max-width: 600px) {
+  .details-main-section {
+    flex-direction: column;
+    align-items: center;
+  }
+
+  .details-info-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .details-image {
+    width: 160px;
+    height: 160px;
+  }
+
+  .details-close-modal {
+    top: 8px;
+    right: 10px;
+  }
+}

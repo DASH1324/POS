@@ -15,6 +15,8 @@ function LogSpillageModal({ show, onClose, onSave, loggedByName }) {
   const [isLoadingCashiers, setIsLoadingCashiers] = useState(false);
   const [availableProducts, setAvailableProducts] = useState([]);
   const [availableCashiers, setAvailableCashiers] = useState([]);
+  const [cashierSessions, setCashierSessions] = useState([]);
+  const [selectedSessionId, setSelectedSessionId] = useState(null);
 
   useEffect(() => {
     if (!show) {
@@ -26,24 +28,28 @@ function LogSpillageModal({ show, onClose, onSave, loggedByName }) {
       setReason("");
       setErrors({});
       setAvailableProducts([]);
+      setSelectedSessionId(null);
     }
   }, [show]);
 
   useEffect(() => {
     if (show) {
       fetchCashiers();
+      fetchAllSessions();
     }
   }, [show]);
 
+  // When cashier name OR date changes, find the matching session
   useEffect(() => {
     if (date && cashierName && show) {
-      fetchProductsSoldByCashierOnDate(date, cashierName);
+      findSessionForCashierAndDate(cashierName, date);
     } else {
       setAvailableProducts([]);
       setProductType("");
       setProductName("");
+      setSelectedSessionId(null);
     }
-  }, [date, cashierName, show]);
+  }, [date, cashierName, show, cashierSessions]);
 
   if (!show) return null;
 
@@ -90,7 +96,71 @@ function LogSpillageModal({ show, onClose, onSave, loggedByName }) {
     }
   };
 
-  const fetchProductsSoldByCashierOnDate = async (selectedDate, selectedCashier) => {
+  const fetchAllSessions = async () => {
+    try {
+      const token = localStorage.getItem("authToken");
+      
+      const response = await fetch(
+        "http://localhost:9003/wastelogs/sessions/active",
+        {
+          headers: {
+            Authorization: `Bearer ${token}`,
+          },
+        }
+      );
+
+      if (response.ok) {
+        const sessions = await response.json();
+        setCashierSessions(sessions);
+      }
+    } catch (error) {
+      console.error("Error fetching sessions:", error);
+    }
+  };
+
+  const findSessionForCashierAndDate = (selectedCashierFullName, selectedDate) => {
+    // Find the cashier's username from their full name
+    const cashier = availableCashiers.find(c => c.FullName === selectedCashierFullName);
+    if (!cashier) {
+      setErrors((prev) => ({
+        ...prev,
+        productType: "Cashier not found",
+      }));
+      return;
+    }
+
+    const cashierUsername = cashier.Username;
+
+    // Parse the selected date
+    const selectedDateTime = new Date(selectedDate);
+    selectedDateTime.setHours(0, 0, 0, 0);
+
+    // Find a session for this cashier that was active on the selected date
+    const matchingSession = cashierSessions.find(session => {
+      if (session.cashier_name !== cashierUsername) return false;
+
+      const sessionStart = new Date(session.session_start);
+      const sessionEnd = session.session_end ? new Date(session.session_end) : new Date();
+
+      // Check if the selected date falls within the session period
+      return selectedDateTime >= new Date(sessionStart.toDateString()) && 
+             selectedDateTime <= new Date(sessionEnd.toDateString());
+    });
+
+    if (matchingSession) {
+      setSelectedSessionId(matchingSession.session_id);
+      fetchProductsSoldInSession(matchingSession.session_id);
+    } else {
+      setSelectedSessionId(null);
+      setAvailableProducts([]);
+      setErrors((prev) => ({
+        ...prev,
+        productType: `No active session found for ${selectedCashierFullName} on ${selectedDate}`,
+      }));
+    }
+  };
+
+  const fetchProductsSoldInSession = async (sessionId) => {
     setIsLoadingProducts(true);
     setProductType("");
     setProductName("");
@@ -102,19 +172,8 @@ function LogSpillageModal({ show, onClose, onSave, loggedByName }) {
         throw new Error("No authentication token found. Please log in again.");
       }
 
-      const selectedCashierObj = availableCashiers.find(c => c.FullName === selectedCashier);
-      
-      if (!selectedCashierObj) {
-        throw new Error("Selected cashier not found in available cashiers list");
-      }
-      
-      const cashierUsername = selectedCashierObj.Username;
-      
-      console.log("Fetching products with token:", token.substring(0, 20) + "...");
-      console.log("Using cashier username:", cashierUsername);
-      
       const response = await fetch(
-        `http://localhost:9003/wastelogs/products-sold?spillage_date=${selectedDate}&cashier_name=${encodeURIComponent(cashierUsername)}`,
+        `http://localhost:9003/wastelogs/products-sold?session_id=${sessionId}`,
         {
           headers: {
             Authorization: `Bearer ${token}`,
@@ -134,7 +193,7 @@ function LogSpillageModal({ show, onClose, onSave, loggedByName }) {
       if (products.length === 0) {
         setErrors((prev) => ({
           ...prev,
-          productType: "No products were processed by this cashier on this date",
+          productType: "No products were processed in this session",
         }));
       } else {
         setErrors((prev) => {
@@ -146,7 +205,7 @@ function LogSpillageModal({ show, onClose, onSave, loggedByName }) {
       console.error("Error fetching products:", error);
       setErrors((prev) => ({
         ...prev,
-        productType: error.message || "Error loading products for this date and cashier",
+        productType: error.message || "Error loading products for this session",
       }));
       setAvailableProducts([]);
     } finally {
@@ -199,8 +258,6 @@ function LogSpillageModal({ show, onClose, onSave, loggedByName }) {
         throw new Error(errorData.detail || "Failed to deduct merchandise from inventory");
       }
 
-      const result = await response.json();
-      console.log("Merchandise deduction result:", result);
       console.log("Successfully deducted merchandise for spillage");
     } catch (error) {
       console.error("Error deducting merchandise:", error);
@@ -237,9 +294,6 @@ function LogSpillageModal({ show, onClose, onSave, loggedByName }) {
         throw new Error(errorData.detail || "Failed to deduct ingredients from IMS");
       }
 
-      const ingredientsResult = await ingredientsResponse.json();
-      console.log("Ingredients deduction result:", ingredientsResult);
-
       const materialsResponse = await fetch(
         "http://localhost:8002/materials/deduct-from-spillage",
         {
@@ -260,9 +314,6 @@ function LogSpillageModal({ show, onClose, onSave, loggedByName }) {
         throw new Error(errorData.detail || "Failed to deduct materials from IMS");
       }
 
-      const materialsResult = await materialsResponse.json();
-      console.log("Materials deduction result:", materialsResult);
-
       console.log("Successfully deducted from IMS (ingredients and materials) for spillage");
     } catch (error) {
       console.error("Error deducting from IMS:", error);
@@ -276,6 +327,7 @@ function LogSpillageModal({ show, onClose, onSave, loggedByName }) {
 
     if (!cashierName.trim()) newErrors.cashierName = "Cashier name is required";
     if (!date.trim()) newErrors.date = "Date is required";
+    if (!selectedSessionId) newErrors.productType = "No valid session found for this cashier and date";
     if (!productType.trim()) newErrors.productType = "Product type is required";
     if (!productName.trim()) newErrors.productName = "Product name is required";
     if (!quantity.trim()) newErrors.quantity = "Quantity is required";
@@ -292,16 +344,8 @@ function LogSpillageModal({ show, onClose, onSave, loggedByName }) {
     try {
       const token = localStorage.getItem("authToken");
       
-      const selectedCashierObj = availableCashiers.find(c => c.FullName === cashierName);
-      
-      if (!selectedCashierObj) {
-        throw new Error("Selected cashier not found");
-      }
-      
-      const cashierUsername = selectedCashierObj.Username;
-      
       const spillageData = {
-        cashier_name: cashierUsername,
+        session_id: selectedSessionId,
         spillage_date: date,
         product_name: productName,
         category: productType,
@@ -427,7 +471,7 @@ function LogSpillageModal({ show, onClose, onSave, loggedByName }) {
                 }}
                 onFocus={() => handleFocus("productType")}
                 className={`spillage-input ${errors.productType ? "spillage-error-field" : ""}`}
-                disabled={!date || !cashierName || isLoadingProducts}
+                disabled={!cashierName || !date || isLoadingProducts}
               >
                 <option value="">
                   {!cashierName || !date
@@ -538,7 +582,7 @@ function LogSpillageModal({ show, onClose, onSave, loggedByName }) {
               className="spillage-btn-confirm"
               disabled={isSaving || isLoadingProducts || isLoadingCashiers}
             >
-              {isSaving ? "Saving..." : "Save Spillage"}
+              {isSaving ? "Logging..." : "Log Spillage"}
             </button>
           </div>
         </form>

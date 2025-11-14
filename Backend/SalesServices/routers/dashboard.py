@@ -842,12 +842,14 @@ async def get_spillage_overview(
                 ORDER BY Incidents DESC
             """)
         elif filter == "By Cashier/Shift":
+            # Join with CashierSessions to get the cashier name
             await cursor.execute("""
                 SELECT 
-                    ps.CashierName as Name,
+                    cs.CashierName as Name,
                     COUNT(DISTINCT ps.SpillageID) as Incidents,
                     ISNULL(SUM(ps.Quantity * si.UnitPrice), 0) as TotalCost
                 FROM ProductSpillage ps
+                INNER JOIN CashierSessions cs ON ps.SessionID = cs.SessionID
                 LEFT JOIN SaleItems si ON ps.ProductName = si.ItemName
                 WHERE CAST(ps.SpillageDate AS DATE) = CAST(GETDATE() AS DATE)
                 AND ps.isDeleted = 0
@@ -857,7 +859,7 @@ async def get_spillage_overview(
                     WHERE ItemName = ps.ProductName 
                     ORDER BY SaleItemID DESC
                 )
-                GROUP BY ps.CashierName
+                GROUP BY cs.CashierName
                 HAVING COUNT(DISTINCT ps.SpillageID) > 0
                 ORDER BY Incidents DESC
             """)

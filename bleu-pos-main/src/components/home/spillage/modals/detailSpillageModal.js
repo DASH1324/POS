@@ -1,7 +1,42 @@
+import React, { useState, useEffect } from "react";
 import "./sharedSpillageModal.css";
 import { FaEdit, FaTrash } from "react-icons/fa";
 
-function SpillageDetailsModal({ show, onClose, spillage, cashiersMap, userRole, onEdit, onDelete }) {
+function SpillageDetailsModal({ show, onClose, spillage, userRole, onEdit, onDelete }) {
+  const [cashierFullName, setCashierFullName] = useState("");
+  const [isLoadingCashier, setIsLoadingCashier] = useState(false);
+
+  useEffect(() => {
+    if (show && spillage?.cashier_name) {
+      fetchCashierFullName(spillage.cashier_name);
+    }
+  }, [show, spillage]);
+
+  const fetchCashierFullName = async (username) => {
+    setIsLoadingCashier(true);
+    try {
+      const token = localStorage.getItem("authToken");
+      const response = await fetch("http://localhost:4000/users/cashiers", {
+        headers: {
+          Authorization: `Bearer ${token}`,
+        },
+      });
+
+      if (response.ok) {
+        const cashiers = await response.json();
+        const cashier = cashiers.find(c => c.Username === username);
+        setCashierFullName(cashier ? cashier.FullName : username);
+      } else {
+        setCashierFullName(username);
+      }
+    } catch (error) {
+      console.error("Error fetching cashier name:", error);
+      setCashierFullName(username);
+    } finally {
+      setIsLoadingCashier(false);
+    }
+  };
+
   if (!show || !spillage) return null;
 
   return (
@@ -14,8 +49,22 @@ function SpillageDetailsModal({ show, onClose, spillage, cashiersMap, userRole, 
           <h2>
             Spillage Details
             <span className="logSpillage-header-icons">
-              {onEdit && <FaEdit className="logSpillage-icon-edit" onClick={() => onEdit(spillage)} />}
-              {onDelete && <FaTrash className="logSpillage-icon-delete" onClick={() => onDelete(spillage.spillage_id)} />}
+              {userRole !== "admin" && (
+                <>
+                  {onEdit && (
+                    <FaEdit
+                      className="logSpillage-icon-edit"
+                      onClick={() => onEdit(spillage)}
+                    />
+                  )}
+                  {onDelete && (
+                    <FaTrash
+                      className="logSpillage-icon-delete"
+                      onClick={() => onDelete(spillage.spillage_id)}
+                    />
+                  )}
+                </>
+              )}
             </span>
           </h2>
           <button className="logSpillage-close-button" onClick={onClose}>×</button>
@@ -40,7 +89,7 @@ function SpillageDetailsModal({ show, onClose, spillage, cashiersMap, userRole, 
           <div className="logSpillage-detail-item">
             <span className="logSpillage-detail-label">Spilled By</span>
             <span className="logSpillage-detail-value">
-              {cashiersMap?.[spillage.cashier_name] || spillage.cashier_name}
+              {isLoadingCashier ? "Loading..." : (cashierFullName || spillage.cashier_name)}
             </span>
           </div>
 

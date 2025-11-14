@@ -1,0 +1,125 @@
+/* Export PDF Styles - These styles are embedded in the generated HTML */
+
+.salesMonExportHeader {
+    text-align: center;
+    margin-bottom: 30px;
+    border-bottom: 3px solid #4B929D;
+    padding-bottom: 20px;
+}
+
+.salesMonExportHeader h1 {
+    margin: 0;
+    color: #333;
+    font-size: 24px;
+}
+
+.salesMonExportHeader p {
+    margin: 5px 0;
+    color: #666;
+    font-size: 13px;
+}
+
+.salesMonExportMetrics {
+    display: grid;
+    grid-template-columns: 1fr 1fr 1fr 1fr;
+    gap: 15px;
+    margin-bottom: 30px;
+}
+
+.salesMonExportMetricCard {
+    background: white;
+    padding: 15px;
+    border-radius: 6px;
+    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+    border-left: 4px solid #4B929D;
+}
+
+.salesMonExportMetricLabel {
+    color: #666;
+    font-size: 11px;
+    text-transform: uppercase;
+    margin-bottom: 5px;
+}
+
+.salesMonExportMetricValue {
+    font-size: 24px;
+    font-weight: bold;
+    color: #333;
+}
+
+.salesMonExportMetricUnit {
+    font-size: 11px;
+    color: #999;
+}
+
+.salesMonExportTable {
+    width: 100%;
+    border-collapse: collapse;
+    margin-top: 15px;
+    background: white;
+}
+
+.salesMonExportTable th,
+.salesMonExportTable td {
+    padding: 10px;
+    text-align: left;
+    border-bottom: 1px solid #ddd;
+    font-size: 12px;
+}
+
+.salesMonExportTable th {
+    background: #4B929D;
+    color: white;
+    font-weight: bold;
+}
+
+.salesMonExportTable tr:nth-child(even) {
+    background: #f9f9f9;
+}
+
+.salesMonExportFooter {
+    margin-top: 30px;
+    text-align: right;
+    font-size: 11px;
+    color: #999;
+    border-top: 1px solid #ddd;
+    padding-top: 15px;
+}
+
+.salesMonExportSectionTitle {
+    font-size: 14px;
+    font-weight: bold;
+    color: #333;
+    margin-top: 25px;
+    margin-bottom: 10px;
+    background: #f0f0f0;
+    padding: 8px;
+}
+
+.salesMonExportPageBreak {
+    page-break-after: always;
+}
+
+/* Print-specific styles */
+@media print {
+    body {
+        background: white;
+        -webkit-print-color-adjust: exact;
+        print-color-adjust: exact;
+    }
+
+    .salesMonExportTable th {
+        background: #4B929D !important;
+        color: white !important;
+        -webkit-print-color-adjust: exact;
+        print-color-adjust: exact;
+    }
+
+    .salesMonExportMetricCard {
+        page-break-inside: avoid;
+    }
+
+    .salesMonExportPageBreak {
+        page-break-after: always;
+    }
+}
