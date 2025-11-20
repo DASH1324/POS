@@ -191,10 +191,11 @@ async def get_all_transaction_history(
     try:
         conn = await get_db_connection()
         async with conn.cursor() as cursor:
-            # Main query to get sales with refund, discount, and promotion information
+            # ✅ SQL QUERY IS FIXED HERE
             sql = """
                 SELECT
-                    s.SaleID, s.OrderType, s.PaymentMethod, s.CreatedAt, s.CashierName,
+                    s.SaleID, s.OrderType, s.PaymentMethod, s.CreatedAt, 
+                    cs.CashierName, -- ✅ FIX 1: Get CashierName from CashierSessions table (cs)
                     s.TotalDiscountAmount, s.PromotionalDiscountAmount, s.Status, s.GCashReferenceNumber,
                     si.SaleItemID, si.ItemName, si.Quantity AS ItemQuantity, si.UnitPrice, si.Category,
                     a.AddonID, a.AddonName, a.Price AS AddonPrice, sia.Quantity AS AddonQuantity,
@@ -221,6 +222,8 @@ async def get_all_transaction_history(
                          ) AS applied_promos
                      )) AS PromotionNames
                 FROM Sales AS s
+                -- ✅ FIX 2: JOIN with CashierSessions to access the CashierName
+                LEFT JOIN CashierSessions AS cs ON s.SessionID = cs.SessionID 
                 LEFT JOIN SaleItems AS si ON s.SaleID = si.SaleID
                 LEFT JOIN SaleItemAddons AS sia ON si.SaleItemID = sia.SaleItemID
                 LEFT JOIN Addons AS a ON sia.AddonID = a.AddonID
@@ -253,7 +256,7 @@ async def get_all_transaction_history(
             await cursor.execute(sql, *params)
             rows = await cursor.fetchall()
             
-            # Process results
+            # (The rest of your Python logic for processing the results remains the same)
             transactions_dict: Dict[int, dict] = {}
             
             for row in rows:
@@ -283,7 +286,6 @@ async def get_all_transaction_history(
                         "_item_refund_map": {}
                     }
                     
-                    # Add refund info if exists
                     if row.RefundType:
                         transactions_dict[sale_id]["refundInfo"] = {
                             "refundType": row.RefundType,
@@ -291,7 +293,6 @@ async def get_all_transaction_history(
                             "refundReason": row.RefundReason
                         }
 
-                # Track item refunds
                 if row.SaleItemID and row.RefundedQuantity:
                     item_key = row.SaleItemID
                     if item_key not in transactions_dict[sale_id]["_item_refund_map"]:
@@ -302,26 +303,21 @@ async def get_all_transaction_history(
                     transactions_dict[sale_id]["_item_refund_map"][item_key]["refundedQuantity"] += row.RefundedQuantity or 0
                     transactions_dict[sale_id]["_item_refund_map"][item_key]["refundAmount"] += row.ItemRefundAmount or Decimal('0.0')
 
-                # Process items
                 if row.SaleItemID:
                     if row.SaleItemID not in transactions_dict[sale_id]["_processed_items"]:
                         item_quantity = row.ItemQuantity or 0
                         item_price = row.UnitPrice or Decimal('0.0')
                         
-                        # Get refund info for this specific item
                         refund_info = transactions_dict[sale_id]["_item_refund_map"].get(row.SaleItemID, {})
                         refunded_qty = refund_info.get("refundedQuantity", 0)
                         item_refund_amount = float(refund_info.get("refundAmount", Decimal('0.0')))
                         
-                        # Calculate totals
                         item_total = item_price * item_quantity
                         transactions_dict[sale_id]["originalSubtotal"] += item_total
                         
-                        # Effective quantity after refunds
                         effective_quantity = item_quantity - refunded_qty
                         transactions_dict[sale_id]["subtotal"] += item_price * effective_quantity
                         
-                        # Check if item has addons
                         has_addons = any(r.SaleItemID == row.SaleItemID and r.AddonID for r in rows)
                         
                         transactions_dict[sale_id]["items"].append({
@@ -336,7 +332,6 @@ async def get_all_transaction_history(
                         
                         transactions_dict[sale_id]["_processed_items"][row.SaleItemID] = True
 
-                    # Process addons
                     if row.AddonID:
                         addon_price = row.AddonPrice or Decimal('0.0')
                         addon_quantity = row.AddonQuantity or 0
@@ -345,17 +340,14 @@ async def get_all_transaction_history(
                         addon_total = addon_price * addon_quantity
                         transactions_dict[sale_id]["originalSubtotal"] += addon_total
                         
-                        # Get refund info
                         refund_info = transactions_dict[sale_id]["_item_refund_map"].get(row.SaleItemID, {})
                         refunded_qty = refund_info.get("refundedQuantity", 0)
                         
-                        # Calculate proportion of addons that weren't refunded
                         effective_ratio = (item_quantity - refunded_qty) / item_quantity if item_quantity > 0 else 0
                         effective_addon_cost = addon_total * Decimal(str(effective_ratio))
                         
                         transactions_dict[sale_id]["subtotal"] += effective_addon_cost
 
-            # Finalize transaction records
             response_list = []
             for sale_id, transaction_data in transactions_dict.items():
                 subtotal = transaction_data["subtotal"]
@@ -363,10 +355,8 @@ async def get_all_transaction_history(
                 discount = transaction_data["discount"]
                 promo_discount = transaction_data["promotionalDiscount"]
                 
-                # Calculate final total (subtotal after refunds - discount - promo discount)
                 final_total = subtotal - discount - promo_discount
                 
-                # Update refund info with original amounts
                 if transaction_data.get("refundInfo"):
                     total_refunded = original_subtotal - subtotal
                     transaction_data["refundInfo"]["totalRefundAmount"] = float(total_refunded)

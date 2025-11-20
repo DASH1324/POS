@@ -30,6 +30,8 @@ function Menu() {
 
   // --- PROMOTIONS STATE ---
   const [promotions, setPromotions] = useState([]);
+  const [discounts, setDiscounts] = useState([]); // ✅ NEW STATE FOR DISCOUNTS
+
   const [showBogoInfoModal, setShowBogoInfoModal] = useState(false);
   const [showBogoCongratsModal, setShowBogoCongratsModal] = useState(false);
   const [activeBogoPromo, setActiveBogoPromo] = useState(null);
@@ -954,7 +956,7 @@ function Menu() {
         )}
       </div>
 
-      <CartPanel 
+      <CartPanel
         cartItems={cartItems}
         setCartItems={setCartItems}
         isCartOpen={isCartOpen}
@@ -964,6 +966,7 @@ function Menu() {
         setPaymentMethod={setPaymentMethod}
         getDynamicMaxQuantity={getDynamicMaxQuantity}
         promotions={promotions}
+        discounts={discounts}
       />
     </div>
   );

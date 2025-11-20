@@ -213,8 +213,6 @@ async def get_all_discounts(token: str = Depends(oauth2_scheme)):
         await auto_expire_discounts(conn)
         
         async with conn.cursor() as cursor:
-            # CORRECTED QUERY: Replaced STRING_AGG with a more compatible
-            # STUFF and FOR XML PATH approach for older SQL Server versions.
             sql = """
                 SELECT 
                     d.id, d.name, d.status, d.application_type, d.discount_type, 
@@ -240,7 +238,6 @@ async def get_all_discounts(token: str = Depends(oauth2_scheme)):
             
             results = []
             for row in rows:
-                # This processing logic remains the same and works correctly
                 prods = row.products.split(',') if row.products else []
                 cats = row.categories.split(',') if row.categories else []
                 
@@ -260,8 +257,9 @@ async def get_all_discounts(token: str = Depends(oauth2_scheme)):
                     application=app_str, 
                     discount=disc_str, 
                     minSpend=float(row.minimum_spend), 
-                    validFrom=row.valid_from.strftime('%Y-%m-%d'), 
-                    validTo=row.valid_to.strftime('%Y-%m-%d'), 
+                    # ✅ FIX: Use .date() here as well for the list view
+                    validFrom=row.valid_from.date().strftime('%Y-%m-%d'), 
+                    validTo=row.valid_to.date().strftime('%Y-%m-%d'), 
                     status=row.status, 
                     type=row.discount_type,
                     application_type=row.application_type,
@@ -270,7 +268,6 @@ async def get_all_discounts(token: str = Depends(oauth2_scheme)):
                 ))
             return results
     except Exception as e:
-        # It's good practice to log the full error for easier debugging
         print(f"An unexpected error occurred in get_all_discounts: {e}")
         raise HTTPException(status_code=500, detail=f"Database error on get all: {e}")
     finally:
@@ -294,15 +291,25 @@ async def get_discount(discount_id: int, token: str = Depends(oauth2_scheme)):
             await cursor.execute("SELECT category_name FROM discount_applicable_categories WHERE discount_id=?", discount_id)
             categories = [row.category_name for row in await cursor.fetchall()]
 
+            # ✅ FIX: Convert datetime from database to date before Pydantic validation
             return DiscountDetailOut(
-                id=base_data['id'], discountName=base_data['name'], applicationType=base_data['application_type'],
-                selectedProducts=products, selectedCategories=categories, discountType=base_data['discount_type'],
-                discountValue=base_data['discount_value'], minSpend=base_data['minimum_spend'],
-                validFrom=base_data['valid_from'], validTo=base_data['valid_to'], status=base_data['status'])
+                id=base_data['id'], 
+                discountName=base_data['name'], 
+                applicationType=base_data['application_type'],
+                selectedProducts=products, 
+                selectedCategories=categories, 
+                discountType=base_data['discount_type'],
+                discountValue=base_data['discount_value'], 
+                minSpend=base_data['minimum_spend'],
+                validFrom=base_data['valid_from'].date(),  # <-- FIX APPLIED
+                validTo=base_data['valid_to'].date(),      # <-- FIX APPLIED
+                status=base_data['status']
+            )
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Database error on get one: {e}")
     finally:
         if conn: await conn.close()
+
 
 @discounts_router.put("/{discount_id}", response_model=DiscountDetailOut)
 async def update_discount(

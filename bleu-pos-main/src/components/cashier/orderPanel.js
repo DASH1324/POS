@@ -486,7 +486,10 @@ function OrderPanel({ order, onClose, isOpen, isStore, onUpdateStatus, onFullRef
                     </div>
                   )}
                 </div>
-                {isStore && !refundMode && <div className="orderpanel-item-price">₱{item.price.toFixed(2)}</div>}
+                {/* ✅ THIS IS THE FIX ✅ */}
+                {isStore && !refundMode && itemDiscounts.length === 0 && (
+                    <div className="orderpanel-item-price">₱{item.price.toFixed(2)}</div>
+                )}
               </div>
 
               {refundMode ? (

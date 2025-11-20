@@ -325,16 +325,27 @@ async def get_promotion(promotion_id: int, token: str = Depends(oauth2_scheme)):
             await cursor.execute("SELECT category_name FROM promotion_applicable_categories WHERE promotion_id=?", promotion_id)
             categories = [row.category_name for row in await cursor.fetchall()]
 
+            # ✅ FIX: Convert datetime from database to date for Pydantic model
             return PromotionDetailOut(
-                id=base_data['id'], promotionName=base_data['name'], description=base_data['description'],
-                applicationType=base_data['application_type'], selectedProducts=products,
-                selectedCategories=categories, promotionType=base_data['promotion_type'],
-                promotionValue=base_data['promotion_value'], buyQuantity=base_data['buy_quantity'],
-                getQuantity=base_data['get_quantity'], bogoDiscountType=base_data['bogo_discount_type'],
-                bogoDiscountValue=base_data['bogo_discount_value'], minQuantity=base_data['min_quantity'],
-                validFrom=base_data['valid_from'], validTo=base_data['valid_to'], status=base_data['status']
+                id=base_data['id'], 
+                promotionName=base_data['name'], 
+                description=base_data['description'],
+                applicationType=base_data['application_type'], 
+                selectedProducts=products,
+                selectedCategories=categories, 
+                promotionType=base_data['promotion_type'],
+                promotionValue=base_data['promotion_value'], 
+                buyQuantity=base_data['buy_quantity'],
+                getQuantity=base_data['get_quantity'], 
+                bogoDiscountType=base_data['bogo_discount_type'],
+                bogoDiscountValue=base_data['bogo_discount_value'], 
+                minQuantity=base_data['min_quantity'],
+                validFrom=base_data['valid_from'].date(),  # <-- ADDED .date()
+                validTo=base_data['valid_to'].date(),      # <-- ADDED .date()
+                status=base_data['status']
             )
     except Exception as e:
+        # The error you are seeing is caught here
         raise HTTPException(status_code=500, detail=f"Database error on get one: {e}")
     finally:
         if conn: await conn.close()

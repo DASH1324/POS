@@ -57,18 +57,8 @@ export const AddonsModal = ({
         </div>
 
         <div className="cAddons-footer">
-          <button
-            className="discPin-btn-cancel"
-            onClick={closeAddonsModal}
-          >
-            Cancel
-          </button>
-          <button
-            className="cAddons-save-btn"
-            onClick={saveAddons}
-          >
-            Add
-          </button>
+          <button className="discPin-btn-cancel" onClick={closeAddonsModal}>Cancel</button>
+          <button className="cAddons-save-btn" onClick={saveAddons}>Add</button>
         </div>
       </div>
     </div>
@@ -85,22 +75,16 @@ export const ManagerPinModal = ({
   const [pin, setPin] = useState('');
 
   useEffect(() => {
-    if (!show) {
-      setPin('');
-    }
+    if (!show) setPin('');
   }, [show]);
 
   const handlePinChange = (e) => {
     const value = e.target.value;
-    if (/^\d*$/.test(value) && value.length <= 6) {
-      setPin(value);
-    }
+    if (/^\d*$/.test(value) && value.length <= 6) setPin(value);
   };
 
   const handleSubmit = () => {
-    if (pin.length >= 4) {
-      onSubmit(pin);
-    }
+    if (pin.length >= 4) onSubmit(pin);
   };
 
   if (!show) return null;
@@ -126,9 +110,7 @@ export const ManagerPinModal = ({
           {error && <p className="discPin-error-message">{error}</p>}
         </div>
         <div className="discPin-modal-footer">
-          <button onClick={onClose} disabled={isProcessing} className="discPin-btn-cancel">
-            Cancel
-          </button>
+          <button onClick={onClose} disabled={isProcessing} className="discPin-btn-cancel">Cancel</button>
           <button onClick={handleSubmit} disabled={isProcessing || pin.length < 4} className="discPin-btn-confirm">
             {isProcessing ? 'Verifying...' : 'Confirm'}
           </button>
@@ -149,7 +131,8 @@ export const DiscountsModal = ({
   getTotalAddonsPrice,
   applyDiscountWithItems,
   appliedDiscounts = [],
-  removeAllDiscounts, // NEW PROP
+  removeAllDiscounts,
+  autoPromotion, // NEW PROP
 }) => {
   const [selectedDiscount, setSelectedDiscount] = useState(null);
   const [selectedItemsQty, setSelectedItemsQty] = useState({});
@@ -169,9 +152,11 @@ export const DiscountsModal = ({
   }, [showDiscountsModal]);
 
   const handleDiscountSelect = (discount) => {
+    // Don't allow selection if discount is not enabled (lower value than promo)
+    if (!discount.isEnabled) return;
+    
     const subtotal = getSubtotal();
     const isEligible = !discount.minAmount || subtotal >= discount.minAmount;
-    
     if (!isEligible) return;
     
     if (selectedDiscount?.id === discount.id) {
@@ -208,7 +193,6 @@ export const DiscountsModal = ({
         delete updated[itemIndex];
         return updated;
       }
-      
       return { ...prev, [itemIndex]: newQty };
     });
   };
@@ -239,16 +223,11 @@ export const DiscountsModal = ({
 
   const isItemEligible = (item, discount) => {
     if (!discount) return false;
-    
     switch (discount.applicationType) {
-      case 'all_products':
-        return true;
-      case 'specific_products':
-        return discount.applicableProducts?.includes(item.name);
-      case 'specific_categories':
-        return discount.applicableCategories?.includes(item.category);
-      default:
-        return false;
+      case 'all_products': return true;
+      case 'specific_products': return discount.applicableProducts?.includes(item.name);
+      case 'specific_categories': return discount.applicableCategories?.includes(item.category);
+      default: return false;
     }
   };
 
@@ -267,24 +246,20 @@ export const DiscountsModal = ({
     const item = cartItems[itemIndex];
     const itemSubtotal = (item.price + getTotalAddonsPrice(item.addons)) * qty;
     const selectedSubtotal = calculateSelectedSubtotal();
-    
     if (selectedSubtotal === 0) return 0;
     
     let totalDiscountValue = 0;
-    
     if (selectedDiscount.type === 'percentage') {
       totalDiscountValue = selectedSubtotal * (selectedDiscount.value / 100);
     } else if (selectedDiscount.type === 'fixed') {
       totalDiscountValue = Math.min(selectedDiscount.value, selectedSubtotal);
     }
     
-    const itemDiscount = (itemSubtotal / selectedSubtotal) * totalDiscountValue;
-    return itemDiscount;
+    return (itemSubtotal / selectedSubtotal) * totalDiscountValue;
   };
 
   const calculateTotalDiscount = () => {
     if (!selectedDiscount || Object.keys(selectedItemsQty).length === 0) return 0;
-    
     const selectedSubtotal = calculateSelectedSubtotal();
     
     if (selectedDiscount.type === 'percentage') {
@@ -292,7 +267,6 @@ export const DiscountsModal = ({
     } else if (selectedDiscount.type === 'fixed') {
       return Math.min(selectedDiscount.value, selectedSubtotal);
     }
-    
     return 0;
   };
 
@@ -327,10 +301,7 @@ export const DiscountsModal = ({
       const token = localStorage.getItem('authToken');
       const response = await fetch('http://127.0.0.1:4000/users/verify-pin', {
         method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${token}`
-        },
+        headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
         body: JSON.stringify({ pin })
       });
 
@@ -342,7 +313,6 @@ export const DiscountsModal = ({
       setShowPinModal(false);
       applyDiscountWithItems(discountData);
       closeDiscountsModal();
-      
     } catch (err) {
       setPinError(err.message);
     } finally {
@@ -350,12 +320,9 @@ export const DiscountsModal = ({
     }
   };
 
-  // NEW FUNCTION: Handle remove all discounts
   const handleRemoveAllDiscounts = () => {
     if (window.confirm('Are you sure you want to remove all applied discounts?')) {
-      if (removeAllDiscounts) {
-        removeAllDiscounts();
-      }
+      if (removeAllDiscounts) removeAllDiscounts();
     }
   };
 
@@ -367,14 +334,12 @@ export const DiscountsModal = ({
   );
   
   const allEligibleSelected = eligibleItems.length > 0 && 
-    eligibleItems.every((item, idx) => {
+    eligibleItems.every((item) => {
       const itemIndex = cartItems.findIndex(ci => ci === item);
       return selectedItemsQty[itemIndex] === getAvailableQuantity(itemIndex);
     });
 
-  const getTotalSelectedQuantity = () => {
-    return Object.values(selectedItemsQty).reduce((sum, qty) => sum + qty, 0);
-  };
+  const getTotalSelectedQuantity = () => Object.values(selectedItemsQty).reduce((sum, qty) => sum + qty, 0);
 
   return (
     <>
@@ -403,23 +368,32 @@ export const DiscountsModal = ({
               <div className="cDiscount-list">
                 {isLoading && <p>Loading discounts...</p>}
                 {error && <p className="cDiscount-error-message">{error}</p>}
+                {!isLoading && !error && availableDiscounts.length === 0 && (
+                  <p className="cDiscount-placeholder">No discounts available</p>
+                )}
                 {!isLoading && !error && availableDiscounts.map(discount => {
                   const isSelected = selectedDiscount?.id === discount.id;
                   const isEligible = !discount.minAmount || subtotal >= discount.minAmount;
-                  const isDisabled = !isEligible;
+                  // Use the isEnabled flag from the discount object
+                  const isClickable = discount.isEnabled !== false && isEligible;
+                  const isLowerThanPromo = discount.isEnabled === false;
                   
                   return (
                     <div 
                       key={discount.id} 
-                      className={`cDiscount-item ${isSelected ? 'cDiscount-selected' : ''} ${isDisabled ? 'cDiscount-disabled' : ''}`} 
-                      onClick={() => !isDisabled && handleDiscountSelect(discount)}
+                      className={`cDiscount-item ${isSelected ? 'cDiscount-selected' : ''} ${!isClickable ? 'cDiscount-disabled' : ''}`} 
+                      onClick={() => isClickable && handleDiscountSelect(discount)}
+                      style={{
+                        opacity: isClickable ? 1 : 0.5,
+                        cursor: isClickable ? 'pointer' : 'not-allowed'
+                      }}
                     >
                       <div className="cDiscount-checkbox">
                         <input 
                           type="radio" 
                           checked={isSelected} 
-                          onChange={() => !isDisabled && handleDiscountSelect(discount)} 
-                          disabled={isDisabled} 
+                          onChange={() => isClickable && handleDiscountSelect(discount)} 
+                          disabled={!isClickable} 
                         />
                       </div>
                       <div className="cDiscount-info">
@@ -430,15 +404,29 @@ export const DiscountsModal = ({
                               ? `${discount.value}% off`
                               : `₱${Number(discount.value).toFixed(2)} off`}
                           </span>
-                          {discount.minAmount && (
+                          {discount.minAmount > 0 && (
                             <span className="cDiscount-min-spend">
                               {' | '}Min. Spend: ₱{Number(discount.minAmount).toFixed(2)}
                             </span>
                           )}
-                          {!isEligible && discount.minAmount && (
-                            <span className="cDiscount-min-requirement"> (Not eligible)</span>
+                          {/* Show potential discount value */}
+                          {discount.potentialDiscount > 0 && (
+                            <span className="cDiscount-potential" style={{color: '#666', marginLeft: '8px'}}>
+                              (Saves ₱{discount.potentialDiscount.toFixed(2)})
+                            </span>
                           )}
                         </div>
+                        {/* Show reason why it's disabled */}
+                        {isLowerThanPromo && autoPromotion && (
+                          <div className="cDiscount-disabled-reason" style={{fontSize: '11px', color: '#ff9800', marginTop: '4px'}}>
+                            Lower than "{autoPromotion.name}" promo (₱{autoPromotion.discountAmount?.toFixed(2)})
+                          </div>
+                        )}
+                        {!isEligible && discount.minAmount > 0 && (
+                          <div className="cDiscount-min-requirement" style={{fontSize: '11px', color: '#dc3545', marginTop: '4px'}}>
+                            Minimum spend not met
+                          </div>
+                        )}
                       </div>
                       <div className="cDiscount-icon">
                         <FontAwesomeIcon icon={faPercent} />
@@ -506,30 +494,20 @@ export const DiscountsModal = ({
                         </div>
                         {selectedQty > 0 && (
                           <>
-                            <div className="cDiscount-item-subtotal">
-                              Subtotal: ₱{itemSubtotal.toFixed(2)}
-                            </div>
+                            <div className="cDiscount-item-subtotal">Subtotal: ₱{itemSubtotal.toFixed(2)}</div>
                             {itemDiscount > 0 && (
-                              <div className="cDiscount-item-discount">
-                                Discount: -₱{itemDiscount.toFixed(2)}
-                              </div>
+                              <div className="cDiscount-item-discount">Discount: -₱{itemDiscount.toFixed(2)}</div>
                             )}
                           </>
                         )}
                       </div>
 
                       <div className="cDiscount-qty-controls">
-                        <button 
-                          onClick={() => handleItemQuantityChange(index, -1)}
-                          disabled={selectedQty === 0}
-                        >
+                        <button onClick={() => handleItemQuantityChange(index, -1)} disabled={selectedQty === 0}>
                           <FiMinus />
                         </button>
                         <span className="cDiscount-qty-display">{selectedQty}</span>
-                        <button 
-                          onClick={() => handleItemQuantityChange(index, 1)}
-                          disabled={selectedQty >= availableQty}
-                        >
+                        <button onClick={() => handleItemQuantityChange(index, 1)} disabled={selectedQty >= availableQty}>
                           <FiPlus />
                         </button>
                       </div>
@@ -597,6 +575,32 @@ export const TransactionSummaryModal = ({
 }) => {
   if (!showTransactionSummary) return null;
 
+  // Helper function to get combined discounts for an item
+  const getCombinedDiscountsForItem = (itemIndex) => {
+    // Group discounts by discount name
+    const discountGroups = {};
+    
+    appliedDiscounts.forEach((discountData) => {
+      const itemDiscountInfo = discountData.itemDiscounts?.find(d => d.itemIndex === itemIndex);
+      if (!itemDiscountInfo || itemDiscountInfo.discountAmount === 0) return;
+      
+      const discountName = discountData.discount?.name || 'Discount';
+      
+      if (!discountGroups[discountName]) {
+        discountGroups[discountName] = {
+          name: discountName,
+          totalQuantity: 0,
+          totalAmount: 0
+        };
+      }
+      
+      discountGroups[discountName].totalQuantity += itemDiscountInfo.quantity;
+      discountGroups[discountName].totalAmount += itemDiscountInfo.discountAmount;
+    });
+    
+    return Object.values(discountGroups);
+  };
+
   return (
     <div className="trnsSummary-modal-overlay" onClick={() => setShowTransactionSummary(false)}>
       <div className="trnsSummary-transaction-summary-modal" onClick={(e) => e.stopPropagation()}>
@@ -627,16 +631,14 @@ export const TransactionSummaryModal = ({
             <div className="trnsSummary-items-scrollable">
               {cartItems.map((item, index) => {
                 const itemDiscount = getItemDiscount ? getItemDiscount(index) : 0;
-                const discountedQty = getItemDiscountedQty ? getItemDiscountedQty(index) : 0;
                 const itemTotal = (item.price + getTotalAddonsPrice(item.addons)) * item.quantity;
+                const combinedDiscounts = getCombinedDiscountsForItem(index);
                 
                 return (
                   <div key={index} className="trnsSummary-summary-item">
                     <div className="trnsSummary-item-header">
                       <span className="trnsSummary-item-name">{item.name}</span>
-                      <span className="trnsSummary-item-total">
-                        ₱{(itemTotal - itemDiscount).toFixed(2)}
-                      </span>
+                      <span className="trnsSummary-item-total">₱{(itemTotal - itemDiscount).toFixed(2)}</span>
                     </div>
                     <div className="trnsSummary-item-details">
                       <span className="trnsSummary-quantity">Qty: {item.quantity}</span>
@@ -651,17 +653,13 @@ export const TransactionSummaryModal = ({
                         ))}
                       </div>
                     )}
-                    {itemDiscount > 0 && (
+                    {combinedDiscounts.length > 0 && (
                       <div className="trnsSummary-item-discount">
-                        {appliedDiscounts.map((discountData, discIdx) => {
-                          const itemDiscountInfo = discountData.itemDiscounts?.find(d => d.itemIndex === index);
-                          if (!itemDiscountInfo || itemDiscountInfo.discountAmount === 0) return null;
-                          return (
-                            <span key={discIdx}>
-                              {discountData.discount?.name || 'Discount'} ({itemDiscountInfo.quantity}): -₱{itemDiscountInfo.discountAmount.toFixed(2)}
-                            </span>
-                          );
-                        })}
+                        {combinedDiscounts.map((discount, discIdx) => (
+                          <span key={discIdx}>
+                            {discount.name} ({discount.totalQuantity}): -₱{discount.totalAmount.toFixed(2)}
+                          </span>
+                        ))}
                       </div>
                     )}
                   </div>
@@ -675,23 +673,18 @@ export const TransactionSummaryModal = ({
               <span>Subtotal:</span>
               <span>₱{getSubtotal().toFixed(2)}</span>
             </div>
-
             {promotionalDiscountValue > 0 && (
               <div className="trnsSummary-breakdown-row trnsSummary-discount">
                 <span>{autoPromotion?.name || 'Promotion'}:</span>
                 <span>-₱{promotionalDiscountValue.toFixed(2)}</span>
               </div>
             )}
-
             {manualDiscountValue > 0 && (
               <div className="trnsSummary-breakdown-row trnsSummary-discount">
-                <span>
-                  Discount:
-                </span>
+                <span>Discount:</span>
                 <span>-₱{manualDiscountValue.toFixed(2)}</span>
               </div>
             )}
-            
             <div className="trnsSummary-breakdown-row trnsSummary-total">
               <span>Total Amount:</span>
               <span>₱{getTotal().toFixed(2)}</span>
@@ -700,14 +693,8 @@ export const TransactionSummaryModal = ({
         </div>
         <div className="trnsSummary-confirmation-section">
           <div className="trnsSummary-modal-footer-transaction">
-            <button className="trnsSummary-cancel-btn" onClick={() => setShowTransactionSummary(false)}>
-              Review Order
-            </button>
-            <button 
-              className="trnsSummary-confirm-btn" 
-              onClick={confirmTransaction} 
-              disabled={isProcessing}
-            >
+            <button className="trnsSummary-cancel-btn" onClick={() => setShowTransactionSummary(false)}>Review Order</button>
+            <button className="trnsSummary-confirm-btn" onClick={confirmTransaction} disabled={isProcessing}>
               {isProcessing ? 'Processing...' : 'Confirm & Process'}
             </button>
           </div>
@@ -727,9 +714,7 @@ export const GCashReferenceModal = ({
   const [referenceNumber, setReferenceNumber] = useState("");
 
   useEffect(() => {
-    if (!showGCashReference) {
-      setReferenceNumber("");
-    }
+    if (!showGCashReference) setReferenceNumber("");
   }, [showGCashReference]);
 
   if (!showGCashReference) return null;
@@ -743,24 +728,12 @@ export const GCashReferenceModal = ({
   };
 
   return (
-    <div
-      className="discPin-modal-overlay"
-      onClick={() => setShowGCashReference(false)}
-    >
-      <div
-        className="discPin-modal"
-        onClick={(e) => e.stopPropagation()}
-      >
+    <div className="discPin-modal-overlay" onClick={() => setShowGCashReference(false)}>
+      <div className="discPin-modal" onClick={(e) => e.stopPropagation()}>
         <div className="discPin-modal-header">
           <h3>GCash Payment</h3>
-          <button
-            className="discPin-close-modal"
-            onClick={() => setShowGCashReference(false)}
-          >
-            ×
-          </button>
+          <button className="discPin-close-modal" onClick={() => setShowGCashReference(false)}>×</button>
         </div>
-
         <div className="discPin-modal-content">
           <p>Please enter GCash reference number:</p>
           <input
@@ -774,20 +747,11 @@ export const GCashReferenceModal = ({
           />
           {error && <p className="discPin-error-message">{error}</p>}
         </div>
-
         <div className="discPin-modal-footer">
-          <button
-            onClick={() => setShowGCashReference(false)}
-            disabled={isProcessing}
-            className="discPin-btn-cancel"
-          >
+          <button onClick={() => setShowGCashReference(false)} disabled={isProcessing} className="discPin-btn-cancel">
             Cancel
           </button>
-          <button
-            onClick={handleSubmit}
-            disabled={!referenceNumber.trim() || isProcessing}
-            className="discPin-btn-confirm"
-          >
+          <button onClick={handleSubmit} disabled={!referenceNumber.trim() || isProcessing} className="discPin-btn-confirm">
             {isProcessing ? "Processing..." : "Submit"}
           </button>
         </div>
