@@ -107,8 +107,6 @@ function OrderPanel({ order, onClose, isOpen, isStore, onUpdateStatus, onFullRef
   const addOnsCost = order.addOns || 0;
   const promotionalDiscount = order.promotionalDiscount || 0;
   const manualDiscount = order.manualDiscount || 0;
-  const appliedDiscountNames = order.appliedDiscounts || [];
-
   // Calculate total refund amount
   const getTotalRefundAmount = () => {
     if (!refundInfo || refundInfo.length === 0) return 0;
@@ -456,18 +454,12 @@ function OrderPanel({ order, onClose, isOpen, isStore, onUpdateStatus, onFullRef
 
       <div className="orderpanel-items-section">
         {order.orderItems.map((item, idx) => {
-          const itemDiscounts = appliedDiscountNames
-            .map((discountData, discIdx) => {
-              const itemDiscountInfo = discountData.itemDiscounts?.find(d => d.itemIndex === idx);
-              if (!itemDiscountInfo || itemDiscountInfo.discountAmount === 0) return null;
-              return {
-                name: discountData.discount?.name || 'Discount',
-                quantity: itemDiscountInfo.quantity,
-                amount: itemDiscountInfo.discountAmount
-              };
-            })
-            .filter(Boolean);
-          
+          const itemDiscounts = (item.itemDiscounts || []).map(discount => ({
+            name: discount.discountName,
+            quantity: discount.quantityDiscounted,
+            amount: discount.discountAmount
+          }));
+
           return (
             <div key={idx} className="orderpanel-item">
               <div className="orderpanel-item-details">
@@ -477,30 +469,29 @@ function OrderPanel({ order, onClose, isOpen, isStore, onUpdateStatus, onFullRef
                     <div className="orderpanel-item-addons">
                       {item.addons.map((addon, addonIdx) => (
                         <div key={addonIdx} className="orderpanel-addon">
-                          + {addon.addon_name || addon.addonName || addon.name} 
-                          {addon.quantity && addon.quantity > 1 && ` (x${addon.quantity})`} 
+                          + {addon.addon_name || addon.addonName || addon.name}
+                          {addon.quantity && addon.quantity > 1 && ` (x${addon.quantity})`}
                           - ₱{((addon.price || 0) * (addon.quantity || 1)).toFixed(2)}
                         </div>
                       ))}
                     </div>
                   )}
-                  {/* NEW: Display discount badges for this item */}
                   {itemDiscounts.length > 0 && (
-                    <div className="orderpanel-item-discount-badges">
+                    <div className="orderpanel-item-discount-applied">
                       {itemDiscounts.map((discount, discIdx) => (
-                        <span key={discIdx} className="orderpanel-discount-badge">
-                          {discount.name} ({discount.quantity}): -₱{discount.amount.toFixed(2)}
-                        </span>
+                        <div key={discIdx} className="orderpanel-discount-info">
+                          {discount.quantity} {item.name} • {discount.name}: -₱{discount.amount.toFixed(2)}
+                        </div>
                       ))}
                     </div>
                   )}
                 </div>
                 {isStore && !refundMode && <div className="orderpanel-item-price">₱{item.price.toFixed(2)}</div>}
               </div>
-              
+
               {refundMode ? (
                 <div className="orderpanel-item-qty orderpanel-refund-qty-controls">
-                  <button 
+                  <button
                     onClick={() => updateItemQuantity(idx, (selectedItems[idx] || 0) - 1)}
                     disabled={!selectedItems[idx] || selectedItems[idx] <= 0}
                     className="orderpanel-qty-btn orderpanel-qty-minus"
@@ -508,7 +499,7 @@ function OrderPanel({ order, onClose, isOpen, isStore, onUpdateStatus, onFullRef
                     -
                   </button>
                   <span className="orderpanel-qty-display">{selectedItems[idx] || 0}</span>
-                  <button 
+                  <button
                     onClick={() => updateItemQuantity(idx, (selectedItems[idx] || 0) + 1)}
                     disabled={selectedItems[idx] >= item.quantity}
                     className="orderpanel-qty-btn orderpanel-qty-plus"
@@ -530,7 +521,6 @@ function OrderPanel({ order, onClose, isOpen, isStore, onUpdateStatus, onFullRef
                       addonTotal += (addon.price || 0) * (addon.quantity || 1);
                     });
                   }
-                  // Subtract the item's discount from its subtotal
                   const itemTotalDiscount = itemDiscounts.reduce((sum, d) => sum + d.amount, 0);
                   return (baseTotal + addonTotal - itemTotalDiscount).toFixed(2);
                 })()}

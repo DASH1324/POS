@@ -162,7 +162,9 @@ function Orders() {
                 price: item.price,
                 category: item.category,
                 size: item.size || 'Standard', 
-                addons: item.addons || []
+                addons: item.addons || [],
+                itemDiscounts: item.itemDiscounts || []
+
               })) : [],
               source: 'store',
               subtotal: order.subtotal || 0,
@@ -195,7 +197,7 @@ function Orders() {
             price: item.price,
             size: item.size || 'Standard', 
             category: item.category,
-            addons: item.addons || []
+            addons: item.addons || [],
           })) : [];
 
           const totalQuantity = parsedItems.reduce((sum, item) => sum + item.quantity, 0);
