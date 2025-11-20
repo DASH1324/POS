@@ -255,6 +255,12 @@
   white-space: nowrap;
 }
 
+.discount-tag.removable {
+  cursor: pointer;
+  transition: all 0.2s ease;
+  padding-right: 4px;
+}
+
   .discount-input-wrapper:hover {
     background-color: #ececef;
   }

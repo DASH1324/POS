@@ -79,7 +79,7 @@ async def auto_cancel_expired_orders():
             
             async with conn.cursor() as cursor:
                 # Find all pending orders older than 30 minutes
-                # Calculate total from SaleItems instead of non-existent TotalAmount column
+                # Calculate total from SaleItems and get cashier name from CashierSessions
                 expiration_time = datetime.now() - timedelta(minutes=30)
                 
                 await cursor.execute("""
@@ -88,7 +88,7 @@ async def auto_cancel_expired_orders():
                         s.GCashReferenceNumber, 
                         s.OrderType,
                         s.CreatedAt,
-                        s.CashierName,
+                        ISNULL(cs.CashierName, 'Unknown') AS CashierName,
                         -- Calculate total from SaleItems
                         ISNULL((
                             SELECT SUM(si.UnitPrice * si.Quantity)
@@ -96,6 +96,7 @@ async def auto_cancel_expired_orders():
                             WHERE si.SaleID = s.SaleID
                         ), 0) AS CalculatedTotal
                     FROM Sales s
+                    LEFT JOIN CashierSessions cs ON s.SessionID = cs.SessionID
                     WHERE s.Status = 'pending' 
                     AND s.CreatedAt < ?
                 """, expiration_time)
@@ -132,7 +133,7 @@ async def auto_cancel_expired_orders():
                             
                             logger.info(
                                 f"✅ Auto-cancelled POS order SaleID={sale_id}, "
-                                f"Ref={reference_number}, Type={order_type}"
+                                f"Ref={reference_number}, Type={order_type}, Cashier={cashier_name}"
                             )
                             
                             # Log to blockchain
@@ -154,7 +155,7 @@ async def auto_cancel_expired_orders():
                             await log_to_blockchain_system(
                                 action="AUTO_CANCEL",
                                 entity_id=sale_id,
-                                change_description=f"Automatically cancelled order after {minutes_elapsed} minutes (threshold: 30 min) - Ref: {reference_number or 'N/A'}",
+                                change_description=f"Automatically cancelled order after {minutes_elapsed} minutes (threshold: 30 min) - Ref: {reference_number or 'N/A'} - Cashier: {cashier_name}",
                                 data=blockchain_data
                             )
                             

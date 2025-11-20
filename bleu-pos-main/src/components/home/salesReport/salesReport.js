@@ -4,15 +4,13 @@ import Sidebar from "../shared/sidebar";
 import Header from "../shared/header";
 import DataTable from "react-data-table-component";
 import { 
-  FaFileExport, FaShoppingCart, FaStore, FaGlobe, FaDollarSign, 
-  FaReceipt, FaFilter, FaExclamationTriangle, FaFilePdf, 
-  FaFileDownload, FaPrint, FaCheckCircle, FaUser, 
-  FaCashRegister, FaChartPie, FaUndo, FaBalanceScale 
+  FaFileExport, FaDollarSign, 
+  FaReceipt, FaFilter, FaExclamationTriangle,
+  FaCashRegister, FaUndo, FaBalanceScale 
 } from "react-icons/fa"; 
-import { FontAwesomeIcon } from "@fortawesome/react-fontawesome";
-import { faArrowTrendUp, faArrowTrendDown } from "@fortawesome/free-solid-svg-icons";
 import CustomDateModal from "../shared/customDateModal";
-import handleSalesReportExport from "./salesReportExport";
+import { generatePDFReport, generateCSVReport } from "./salesReportExport";
+import { ExportModal, NoDataModal } from "../shared/exportModal";
 import SalesReportModal from "./salesReportModal";
 import Loading from "../shared/loading";
 import '../../confirmAlertCustom.css';
@@ -70,6 +68,10 @@ function SalesReport() {
   const [salesBreakdownTab, setSalesBreakdownTab] = useState('category');
   const [financialTab, setFinancialTab] = useState('cashDrawer');
   const [isBreakdownModalOpen, setIsBreakdownModalOpen] = useState(false);
+  
+  // Export modal states
+  const [isExportModalOpen, setIsExportModalOpen] = useState(false);
+  const [isNoDataModalOpen, setIsNoDataModalOpen] = useState(false);
 
   // --- FETCH CASHIERS LIST ---
   useEffect(() => {
@@ -178,7 +180,7 @@ function SalesReport() {
     };
 
     fetchSalesReport();
-  }, [activeTab, customRange, selectedCashier]); // Re-fetch when cashier changes
+  }, [activeTab, customRange, selectedCashier]);
 
   // Update the period display text when the active tab or custom range changes
   useEffect(() => {
@@ -192,6 +194,52 @@ function SalesReport() {
     setCustomRange({ start: startStr, end: endStr });
     setActiveTab("custom");
     setIsCustomModalOpen(false);
+  };
+
+  // --- EXPORT HANDLERS ---
+  const handleExportClick = () => {
+    if (!reportData || !reportData.productBreakdown || reportData.productBreakdown.length === 0) {
+      setIsNoDataModalOpen(true);
+      return;
+    }
+    setIsExportModalOpen(true);
+  };
+
+  const handleExportPDF = () => {
+    setIsExportModalOpen(false);
+    
+    // Prepare enhanced totals object with all data
+    const enhancedTotals = {
+      totalSales: reportData.summary?.totalSales || 0,
+      cashInDrawer: reportData.summary?.cashInDrawer || 0,
+      discrepancy: reportData.summary?.discrepancy || 0,
+      transactions: reportData.summary?.transactions || 0,
+      refunds: reportData.summary?.refunds || 0,
+      cashAmount: reportData.paymentSummary?.cashAmount || 0,
+      gcashAmount: reportData.paymentSummary?.gcashAmount || 0,
+      cashDrawerOpening: reportData.cashDrawer?.opening || 0,
+      cashDrawerSales: reportData.cashDrawer?.cashSales || 0,
+      cashDrawerRefunds: reportData.cashDrawer?.refunds || 0,
+      cashDrawerExpected: reportData.cashDrawer?.expected || 0,
+      cashDrawerActual: reportData.cashDrawer?.actual || 0,
+      cashDrawerDiscrepancy: reportData.cashDrawer?.discrepancy || 0,
+      reportedBy: reportData.cashDrawer?.reportedBy || 'N/A',
+      verifiedBy: reportData.cashDrawer?.verifiedBy || 'N/A',
+      refundsList: reportData.refundsList || []
+    };
+    
+    generatePDFReport(
+      reportData.productBreakdown, 
+      enhancedTotals, 
+      activeTab, 
+      currentPeriodText,
+      selectedCashier
+    );
+  };
+
+  const handleExportCSV = () => {
+    setIsExportModalOpen(false);
+    generateCSVReport(reportData.productBreakdown);
   };
 
   // --- DATA TABLE COLUMN DEFINITIONS ---
@@ -293,7 +341,7 @@ function SalesReport() {
 
             <button 
               className="aSalesRep-export-btn" 
-              onClick={() => reportData && handleSalesReportExport(reportData.productBreakdown, reportData.summary, activeTab, currentPeriodText)}
+              onClick={handleExportClick}
               disabled={!reportData || isLoading}
             >
               <FaFileExport /> Export
@@ -476,15 +524,35 @@ function SalesReport() {
           )}
         </div>
       </div>
-      <CustomDateModal show={isCustomModalOpen} onClose={() => setIsCustomModalOpen(false)} onApply={handleCustomApply} />
+
+      {/* Modals */}
+      <CustomDateModal 
+        show={isCustomModalOpen} 
+        onClose={() => setIsCustomModalOpen(false)} 
+        onApply={handleCustomApply} 
+      />
 
       <SalesReportModal
-          show={isBreakdownModalOpen}
-          onClose={() => setIsBreakdownModalOpen(false)}
-          data={salesBreakdownTab === 'category' ? reportData?.categoryBreakdown : reportData?.productBreakdown}
-          type={salesBreakdownTab}
-          periodText={currentPeriodText}
+        show={isBreakdownModalOpen}
+        onClose={() => setIsBreakdownModalOpen(false)}
+        data={salesBreakdownTab === 'category' ? reportData?.categoryBreakdown : reportData?.productBreakdown}
+        type={salesBreakdownTab}
+        periodText={currentPeriodText}
+      />
+
+      {/* Export Modal */}
+      {isExportModalOpen && (
+        <ExportModal
+          onClose={() => setIsExportModalOpen(false)}
+          onExportPDF={handleExportPDF}
+          onExportCSV={handleExportCSV}
         />
+      )}
+
+      {/* No Data Modal */}
+      {isNoDataModalOpen && (
+        <NoDataModal onClose={() => setIsNoDataModalOpen(false)} />
+      )}
     </div>
   );
 }

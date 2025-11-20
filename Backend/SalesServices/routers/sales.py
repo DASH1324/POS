@@ -237,11 +237,16 @@ async def get_current_session_sales_metrics(
     try:
         conn = await get_db_connection()
         async with conn.cursor() as cursor:
-            await cursor.execute("SELECT SessionStart FROM CashierSessions WHERE CashierName = ? AND Status = 'Active'", request.cashierName)
+            await cursor.execute("""
+                SELECT SessionStart, SessionID 
+                FROM CashierSessions 
+                WHERE CashierName = ? AND Status = 'Active'
+            """, request.cashierName)
             session_row = await cursor.fetchone()
             if not session_row:
                 return SalesMetricsResponse(totalSales=0.0, cashSales=0.0, gcashSales=0.0, itemsSold=0)
             session_start_time = session_row.SessionStart
+            session_id = session_row.SessionID
             order_type_condition = get_order_type_condition(request.orderType)
             product_type_condition = get_product_type_condition(request.productType)
             
@@ -251,7 +256,6 @@ async def get_current_session_sales_metrics(
                         s.SaleID,
                         s.PaymentMethod,
                         s.CreatedAt,
-                        -- Calculate the actual amount paid (FinalAmount from Sales table)
                         (
                             SELECT SUM(si2.UnitPrice * si2.Quantity)
                             FROM SaleItems si2
@@ -268,7 +272,7 @@ async def get_current_session_sales_metrics(
                         ISNULL(s.PromotionalDiscountAmount, 0) AS AmountPaid
                     FROM Sales s
                     WHERE s.Status = 'completed' 
-                        AND s.CashierName = ? 
+                        AND s.SessionID = ? 
                         AND s.CreatedAt >= ?
                         {order_type_condition}
                 ),
@@ -276,12 +280,11 @@ async def get_current_session_sales_metrics(
                     SELECT 
                         s.SaleID,
                         s.PaymentMethod,
-                        -- For partially refunded sales, use the refund amount from RefundedOrders
                         ISNULL(ro.RefundAmount, 0) AS RefundAmount
                     FROM Sales s
                     LEFT JOIN RefundedOrders ro ON s.SaleID = ro.SaleID
                     WHERE s.Status IN ('completed')
-                        AND s.CashierName = ?
+                        AND s.SessionID = ?
                         AND s.CreatedAt >= ?
                         AND ro.RefundID IS NOT NULL
                         {order_type_condition}
@@ -296,7 +299,7 @@ async def get_current_session_sales_metrics(
                     LEFT JOIN RefundedItems ri ON si.SaleItemID = ri.SaleItemID
                     JOIN Sales s ON si.SaleID = s.SaleID
                     WHERE s.Status = 'completed'
-                        AND s.CashierName = ?
+                        AND s.SessionID = ?
                         AND s.CreatedAt >= ?
                         {order_type_condition}
                         {product_type_condition}
@@ -321,11 +324,10 @@ async def get_current_session_sales_metrics(
                     ISNULL((SELECT ItemsSold FROM ItemsSoldCalc), 0) AS ItemsSold
             """
             
-            # Need to pass cashierName and session_start_time multiple times for each CTE
             params = (
-                request.cashierName, session_start_time,  # CompletedSales
-                request.cashierName, session_start_time,  # PartiallyRefundedSales
-                request.cashierName, session_start_time   # SaleItemsDetail
+                session_id, session_start_time,  # CompletedSales
+                session_id, session_start_time,  # PartiallyRefundedSales
+                session_id, session_start_time   # SaleItemsDetail
             )
             
             await cursor.execute(sql, params)
@@ -343,7 +345,6 @@ async def get_current_session_sales_metrics(
         raise HTTPException(status_code=500, detail="Failed to fetch sales metrics.")
     finally:
         if conn: await conn.close()
-
 
 @router_sales_metrics.post(
     "/today",
@@ -380,8 +381,9 @@ async def get_todays_sales_metrics(
                         ISNULL(s.TotalDiscountAmount, 0) + ISNULL(s.PromotionalDiscountAmount, 0) AS TotalSaleDiscount
                     FROM Sales s 
                     JOIN SaleItems si ON s.SaleID = si.SaleID
+                    JOIN CashierSessions cs ON s.SessionID = cs.SessionID
                     WHERE s.Status = 'completed' 
-                        AND s.CashierName = ? 
+                        AND cs.CashierName = ? 
                         AND CAST(s.CreatedAt AS DATE) = CAST(GETDATE() AS DATE)
                         {order_type_condition}
                         {product_type_condition}
@@ -482,8 +484,9 @@ async def get_sales_metrics_by_date(
                         s.PaymentMethod,
                         s.CreatedAt
                     FROM Sales s
+                    JOIN CashierSessions cs ON s.SessionID = cs.SessionID
                     WHERE s.Status = 'completed' 
-                        AND s.CashierName = ? 
+                        AND cs.CashierName = ? 
                         AND CAST(s.CreatedAt AS DATE) = ?
                         {order_type_condition}
                 ),
@@ -491,7 +494,6 @@ async def get_sales_metrics_by_date(
                     SELECT 
                         cs.SaleID,
                         cs.PaymentMethod,
-                        -- Calculate original sale total (items + addons - discounts)
                         ISNULL((
                             SELECT SUM(si2.UnitPrice * si2.Quantity)
                             FROM SaleItems si2
@@ -506,7 +508,6 @@ async def get_sales_metrics_by_date(
                         ), 0) - 
                         ISNULL((SELECT TotalDiscountAmount FROM Sales WHERE SaleID = cs.SaleID), 0) - 
                         ISNULL((SELECT PromotionalDiscountAmount FROM Sales WHERE SaleID = cs.SaleID), 0) AS GrossAmount,
-                        -- Get total refund amount for this sale
                         ISNULL((
                             SELECT SUM(ro.RefundAmount)
                             FROM RefundedOrders ro
@@ -594,19 +595,20 @@ async def get_sales_report(
     cashier_condition = ""
     cashier_params = []
     if request.cashierName and request.cashierName.lower() != "all":
-        cashier_condition = "AND s.CashierName = ?"
+        cashier_condition = "AND cs.CashierName = ?"
         cashier_params.append(request.cashierName)
 
     base_query_cte = f"""
         WITH SaleItemTotals AS (
             SELECT 
-                s.SaleID, s.OrderType, s.CreatedAt, s.PaymentMethod, s.CashierName,
+                s.SaleID, s.OrderType, s.CreatedAt, s.PaymentMethod, cs.CashierName,
                 si.SaleItemID, si.ItemName, si.Category, si.Quantity,
                 (si.UnitPrice * si.Quantity) AS ItemSubtotal,
                 ISNULL((SELECT SUM(a.Price * sia.Quantity) FROM SaleItemAddons sia JOIN Addons a ON sia.AddonID = a.AddonID WHERE sia.SaleItemID = si.SaleItemID), 0) AS AddonsTotal,
                 ISNULL(s.TotalDiscountAmount, 0) + ISNULL(s.PromotionalDiscountAmount, 0) AS TotalSaleDiscount
             FROM Sales s 
             JOIN SaleItems si ON s.SaleID = si.SaleID 
+            JOIN CashierSessions cs ON s.SessionID = cs.SessionID
             WHERE s.Status = 'completed' 
                 AND CAST(s.CreatedAt AS DATE) BETWEEN ? AND ?
                 {cashier_condition}
@@ -689,10 +691,19 @@ async def get_sales_report(
         refunds_base_condition = "WHERE CAST(ro.RefundedAt AS DATE) BETWEEN ? AND ?"
         refunds_params = [start_date, end_date]
         if request.cashierName and request.cashierName.lower() != "all":
-            refunds_base_condition += " AND s.CashierName = ?"
+            refunds_base_condition += " AND cs.CashierName = ?"
             refunds_params.append(request.cashierName)
             
-        refunds_query = f"SELECT CAST(ro.SaleID AS VARCHAR) as id, si.ItemName as product, ri.RefundAmount as amount, ro.RefundReason as reason, s.CashierName as cashier, FORMAT(ro.RefundedAt, 'MM/dd/yyyy') as date FROM RefundedOrders ro JOIN Sales s ON ro.SaleID = s.SaleID JOIN RefundedItems ri ON ro.RefundID = ri.RefundID JOIN SaleItems si ON ri.SaleItemID = si.SaleItemID {refunds_base_condition};"
+        refunds_query = f"""
+            SELECT CAST(ro.SaleID AS VARCHAR) as id, si.ItemName as product, ri.RefundAmount as amount, 
+                   ro.RefundReason as reason, cs.CashierName as cashier, FORMAT(ro.RefundedAt, 'MM/dd/yyyy') as date 
+            FROM RefundedOrders ro 
+            JOIN Sales s ON ro.SaleID = s.SaleID 
+            JOIN CashierSessions cs ON s.SessionID = cs.SessionID
+            JOIN RefundedItems ri ON ro.RefundID = ri.RefundID 
+            JOIN SaleItems si ON ri.SaleItemID = si.SaleItemID 
+            {refunds_base_condition};
+        """
         
         async with conn.cursor() as cursor:
             await cursor.execute(refunds_query, tuple(refunds_params))
@@ -701,7 +712,7 @@ async def get_sales_report(
             refunds_list = [dict(zip(columns, row)) for row in refund_rows]
             total_refund_amount = sum(float(item.get('amount', 0.0)) for item in refunds_list)
 
-        # 6. Fetch Cash Drawer Summary (FIXED VERSION)
+        # 6. Fetch Cash Drawer Summary
         cash_drawer_base_condition = "WHERE cs.Status = 'Closed' AND CAST(cs.SessionEnd AS DATE) BETWEEN ? AND ?"
         cash_drawer_params = [start_date, end_date]
         
@@ -709,7 +720,6 @@ async def get_sales_report(
             cash_drawer_base_condition += " AND cs.CashierName = ?"
             cash_drawer_params.append(request.cashierName)
         
-        # Updated query to show ALL closed sessions (not just those with discrepancies)
         cash_drawer_query = f"""
             WITH SessionRefunds AS (
                 SELECT 
@@ -722,14 +732,13 @@ async def get_sales_report(
                     cs.SessionEnd,
                     cs.CheckedBy,
                     ISNULL(cd.DiscrepancyAmount, 0) as DiscrepancyAmount,
-                    -- Calculate total refunds for cash transactions in this session's timeframe
                     ISNULL((
                         SELECT SUM(ri.RefundAmount)
                         FROM RefundedOrders ro
                         JOIN RefundedItems ri ON ro.RefundID = ri.RefundID
                         JOIN Sales s ON ro.SaleID = s.SaleID
                         WHERE s.PaymentMethod = 'Cash'
-                            AND s.CashierName = cs.CashierName
+                            AND s.SessionID = cs.SessionID
                             AND ro.RefundedAt BETWEEN cs.SessionStart AND ISNULL(cs.SessionEnd, GETDATE())
                     ), 0) AS TotalRefunds
                 FROM CashierSessions cs
@@ -762,7 +771,6 @@ async def get_sales_report(
             reported_by_username = cash_drawer_row_dict.get('reportedBy')
             verified_by_username = cash_drawer_row_dict.get('verifiedBy')
             
-            # Fetch reported by full name
             if reported_by_username:
                 try:
                     async with httpx.AsyncClient() as client:
@@ -779,7 +787,6 @@ async def get_sales_report(
                     logger.warning(f"Could not fetch employee name for {reported_by_username}: {e}")
                     reported_by_name = reported_by_username
             
-            # Fetch verified by full name
             if verified_by_username:
                 try:
                     async with httpx.AsyncClient() as client:
@@ -796,7 +803,6 @@ async def get_sales_report(
                     logger.warning(f"Could not fetch employee name for {verified_by_username}: {e}")
                     verified_by_name = verified_by_username
         
-        # Build the CashDrawerSummary with corrected calculations
         cash_drawer = CashDrawerSummary()
         if cash_drawer_row_dict:
             opening_bal = float(cash_drawer_row_dict.get('opening') or 0.0)
@@ -805,39 +811,20 @@ async def get_sales_report(
             actual = float(cash_drawer_row_dict.get('actual') or 0.0)
             stored_discrepancy = float(cash_drawer_row_dict.get('discrepancy') or 0.0)
             
-            # Calculate net cash sales (gross - refunds)
             net_cash_sales = gross_cash_sales - total_refunds
-            
-            # Calculate expected cash (opening + net cash sales)
             expected = opening_bal + net_cash_sales
             
-            # Verify discrepancy calculation
-            calculated_discrepancy = actual - expected
-            
             cash_drawer = CashDrawerSummary(
-                opening=opening_bal,              # InitialCash
-                cashSales=net_cash_sales,         # CashSalesAtClose - TotalRefunds
-                refunds=total_refunds,            # Sum of all RefundAmount
-                expected=expected,                # Opening + Net Cash Sales
-                actual=actual,                    # ClosingCash
-                discrepancy=stored_discrepancy,   # From CashDiscrepancies table
-                reportedBy=reported_by_name,      # CashierName (full name)
-                verifiedBy=verified_by_name       # CheckedBy (full name)
+                opening=opening_bal,
+                cashSales=net_cash_sales,
+                refunds=total_refunds,
+                expected=expected,
+                actual=actual,
+                discrepancy=stored_discrepancy,
+                reportedBy=reported_by_name,
+                verifiedBy=verified_by_name
             )
-            
-            logger.info(f"=== Cash Drawer Summary ===")
-            logger.info(f"Opening Balance: ₱{opening_bal}")
-            logger.info(f"Gross Cash Sales: ₱{gross_cash_sales}")
-            logger.info(f"Total Refunds: ₱{total_refunds}")
-            logger.info(f"Net Cash Sales: ₱{net_cash_sales}")
-            logger.info(f"Expected Cash: ₱{expected}")
-            logger.info(f"Actual Cash: ₱{actual}")
-            logger.info(f"Discrepancy: ₱{stored_discrepancy}")
-            logger.info(f"Reported By: {reported_by_name}")
-            logger.info(f"Verified By: {verified_by_name}")
-            logger.info(f"==========================")
 
-        # Assemble the final response object
         summary = SalesReportSummary(
             totalSales=float(summary_row_dict.get('totalSales') or 0.0),
             transactions=summary_row_dict.get('transactions') or 0,
@@ -849,14 +836,6 @@ async def get_sales_report(
             cashAmount=float(summary_row_dict.get('cashAmount') or 0.0),
             gcashAmount=float(summary_row_dict.get('gcashAmount') or 0.0)
         )
-        
-        logger.info(f"=== Sales Report Summary ===")
-        logger.info(f"Total Sales: ₱{summary.totalSales}")
-        logger.info(f"Transactions: {summary.transactions}")
-        logger.info(f"Total Refunds: ₱{summary.refunds}")
-        logger.info(f"Cash In Drawer: ₱{summary.cashInDrawer}")
-        logger.info(f"Discrepancy: ₱{summary.discrepancy}")
-        logger.info(f"===========================")
         
         return AlignedSalesReportResponse(
             summary=summary, 
@@ -873,6 +852,7 @@ async def get_sales_report(
     finally:
         if conn: 
             await conn.close()
+
 
 
 @router_sales_metrics.post(
@@ -904,7 +884,7 @@ async def get_sales_monitoring_data(
             params = []
             
             if request.selectedCashier and request.selectedCashier != 'all':
-                cashier_condition = "AND s.CashierName = ?"
+                cashier_condition = "AND cs.CashierName = ?"
                 params.append(request.selectedCashier)
             
             if request.selectedCategory and request.selectedCategory != 'all':
@@ -915,14 +895,16 @@ async def get_sales_monitoring_data(
                 WITH SaleItemTotals AS (
                     SELECT 
                         s.SaleID, si.SaleItemID, si.ItemName, si.Category, si.Quantity, si.UnitPrice,
-                        s.OrderType, s.CreatedAt, s.CashierName,
+                        s.OrderType, s.CreatedAt, cs.CashierName,
                         (si.UnitPrice * si.Quantity + ISNULL((
                             SELECT SUM(a.Price * sia.Quantity)
                             FROM SaleItemAddons sia JOIN Addons a ON sia.AddonID = a.AddonID
                             WHERE sia.SaleItemID = si.SaleItemID
                         ), 0)) AS ItemTotalWithAddons,
                         (ISNULL(s.TotalDiscountAmount, 0) + ISNULL(s.PromotionalDiscountAmount, 0)) AS TotalDiscount
-                    FROM Sales s JOIN SaleItems si ON s.SaleID = si.SaleID
+                    FROM Sales s 
+                    JOIN SaleItems si ON s.SaleID = si.SaleID
+                    JOIN CashierSessions cs ON s.SessionID = cs.SessionID
                     WHERE s.Status = 'completed'
                     {date_condition} {cashier_condition} {category_condition}
                 ),
@@ -979,6 +961,7 @@ async def get_sales_monitoring_data(
                 SELECT COUNT(DISTINCT s.SaleID)
                 FROM Sales s
                 JOIN SaleItems si ON s.SaleID = si.SaleID
+                JOIN CashierSessions cs ON s.SessionID = cs.SessionID
                 WHERE s.Status = 'completed'
                 {date_condition} {cashier_condition} {category_condition}
             """
@@ -1013,8 +996,6 @@ async def get_sales_monitoring_data(
     
     except Exception as e:
         logger.error(f"Error fetching sales monitoring data: {e}", exc_info=True)
-        logger.error(f"SQL Query: {sql if 'sql' in locals() else 'SQL not generated'}")
-        logger.error(f"Parameters: {params if 'params' in locals() else 'No params'}")
         raise HTTPException(status_code=500, detail=f"Failed to fetch sales monitoring data: {str(e)}")
     finally:
         if conn:

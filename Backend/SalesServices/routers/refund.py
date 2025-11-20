@@ -234,7 +234,7 @@ async def refund_order(
         async with conn.cursor() as cursor:
             # Check order exists and is completed
             await cursor.execute(
-                "SELECT Status, CashierName, TotalDiscountAmount, UpdatedAt, CreatedAt FROM Sales WHERE SaleID = ?", 
+                "SELECT Status, TotalDiscountAmount, UpdatedAt, CreatedAt FROM Sales WHERE SaleID = ?", 
                 parsed_id
             )
             order_result = await cursor.fetchone()
@@ -479,7 +479,7 @@ async def partial_refund_order(
         async with conn.cursor() as cursor:
             # Check order exists and is completed
             await cursor.execute(
-                "SELECT Status, CashierName, TotalDiscountAmount, UpdatedAt, CreatedAt FROM Sales WHERE SaleID = ?", 
+                "SELECT Status, TotalDiscountAmount, UpdatedAt, CreatedAt FROM Sales WHERE SaleID = ?", 
                 parsed_id
             )
             order_result = await cursor.fetchone()
@@ -861,7 +861,7 @@ async def refund_order_today(
         
         async with conn.cursor() as cursor:
             await cursor.execute(
-                "SELECT Status, CashierName, TotalDiscountAmount, UpdatedAt, CreatedAt FROM Sales WHERE SaleID = ?", 
+                "SELECT Status, TotalDiscountAmount, UpdatedAt, CreatedAt FROM Sales WHERE SaleID = ?", 
                 parsed_id
             )
             order_result = await cursor.fetchone()

@@ -1,189 +1,388 @@
-export const generatePDFReport = (metrics, selectedProduct, selectedCategory) => {
-  const reportDate = new Date().toLocaleString();
-  const htmlContent = `
-    <html>
-      <head>
-        <title>Sales Monitoring Report - EOD</title>
+import html2pdf from 'html2pdf.js';
+import html2canvas from 'html2canvas';
+
+export const generatePDFReport = async (metrics, selectedCategory, selectedCashier) => {
+  try {
+    const reportDate = new Date().toLocaleString();
+    
+    // Calculate summary statistics
+    const totalTransactions = metrics.totalTransactions || 0;
+    const totalItemsSold = metrics.totalItemsSold || 0;
+    const totalSales = metrics.totalSales || 0;
+    const averageSaleValue = metrics.averageSaleValue || 0;
+    const topCashier = metrics.topCashier;
+
+    // Capture charts as images
+    let salesTrendImage = '';
+    let categoryPieImage = '';
+    let topProductsImage = '';
+
+    try {
+      // Capture Sales Trend Chart
+      const salesTrendChart = document.querySelector('.salesMonChartCard:nth-child(1) .recharts-wrapper');
+      if (salesTrendChart) {
+        const canvas = await html2canvas(salesTrendChart, { scale: 2, useCORS: true, backgroundColor: '#ffffff' });
+        salesTrendImage = canvas.toDataURL('image/png');
+      }
+
+      // Capture Category Pie Chart
+      const categoryChart = document.querySelector('.salesMonChartCard:nth-child(2) .recharts-wrapper');
+      if (categoryChart) {
+        const canvas = await html2canvas(categoryChart, { scale: 2, useCORS: true, backgroundColor: '#ffffff' });
+        categoryPieImage = canvas.toDataURL('image/png');
+      }
+
+      // Capture Top Products Bar Chart
+      const topProductsChart = document.querySelector('.salesMonChartCardWide .recharts-wrapper');
+      if (topProductsChart) {
+        const canvas = await html2canvas(topProductsChart, { scale: 2, useCORS: true, backgroundColor: '#ffffff' });
+        topProductsImage = canvas.toDataURL('image/png');
+      }
+    } catch (chartError) {
+      console.warn('Error capturing charts:', chartError);
+    }
+
+    // Generate table rows
+    const tableRows = metrics.filtered.map((item) => {
+      const date = new Date(item.date);
+      const formattedDate = date.toLocaleDateString('en-CA');
+      const formattedTime = date.toLocaleTimeString('en-US', { 
+        hour: '2-digit', 
+        minute: '2-digit', 
+        hour12: true 
+      });
+
+      return `
+        <tr>
+          <td>${item.product}</td>
+          <td>${item.category}</td>
+          <td>
+            <div class="date-cell">
+              <div class="date-line">${formattedDate}</div>
+              <div class="time-line">${formattedTime}</div>
+            </div>
+          </td>
+          <td class="text-center">${item.quantity}</td>
+          <td class="text-right bold">₱${item.revenue.toFixed(2)}</td>
+          <td>${item.orderType || '—'}</td>
+          <td>${item.cashier || '—'}</td>
+        </tr>
+      `;
+    }).join('');
+
+    // Complete HTML with page-break-friendly CSS
+    const htmlContent = `
+      <div id="pdfContent">
         <style>
-          body { 
-            font-family: 'Segoe UI', Arial, sans-serif; 
-            padding: 30px; 
-            background: #f5f5f5; 
-            -webkit-print-color-adjust: exact; 
-            print-color-adjust: exact; 
-          }
-          .salesMonExportHeader { 
+          * { -webkit-print-color-adjust: exact !important; print-color-adjust: exact !important; color-adjust: exact !important; }
+          body { font-family: Arial, sans-serif; padding: 15px; margin: 0; font-size: 10px; }
+          
+          .export-header { 
             text-align: center; 
-            margin-bottom: 30px; 
+            margin-bottom: 20px; 
             border-bottom: 3px solid #4B929D; 
-            padding-bottom: 20px; 
+            padding-bottom: 15px; 
           }
-          .salesMonExportHeader h1 { 
-            margin: 0; 
-            color: #333; 
-            font-size: 24px; 
-          }
-          .salesMonExportHeader p { 
-            margin: 5px 0; 
-            color: #666; 
-            font-size: 13px; 
-          }
-          .salesMonExportMetrics { 
-            display: grid; 
-            grid-template-columns: 1fr 1fr 1fr 1fr; 
-            gap: 15px; 
-            margin-bottom: 30px; 
-          }
-          .salesMonExportMetricCard { 
-            background: white; 
-            padding: 15px; 
-            border-radius: 6px; 
-            box-shadow: 0 2px 4px rgba(0,0,0,0.1); 
-            border-left: 4px solid #4B929D; 
-          }
-          .salesMonExportMetricLabel { 
-            color: #666; 
-            font-size: 11px; 
-            text-transform: uppercase; 
-            margin-bottom: 5px; 
-          }
-          .salesMonExportMetricValue { 
-            font-size: 24px; 
-            font-weight: bold; 
+          .export-header h1 { 
+            margin: 0 0 8px 0; 
+            font-size: 20px; 
             color: #333; 
           }
-          .salesMonExportMetricUnit { 
-            font-size: 11px; 
-            color: #999; 
+          .export-header p { 
+            margin: 3px 0; 
+            font-size: 10px; 
+            color: #666; 
           }
-          .salesMonExportTable { 
+
+          .summary { 
+            margin-top: 20px;
+            margin-bottom: 20px;
+            page-break-inside: avoid; 
+          }
+          .summary h3 { 
+            margin-bottom: 10px; 
+            color: #333; 
+            font-size: 14px; 
+            border-bottom: 2px solid #4B929D; 
+            padding-bottom: 5px; 
+          }
+          .summary-table { 
+            border-collapse: collapse; 
+            width: 60%; 
+            margin: 0 auto; 
+          }
+          .summary-table th, .summary-table td { 
+            border: 1px solid #333; 
+            padding: 6px 8px; 
+            font-size: 10px; 
+          }
+          .summary-table th { 
+            background: #f2f2f2 !important; 
+            color: #333 !important; 
+            text-align: left; 
+            width: 60%; 
+            font-weight: 600; 
+          }
+          .summary-table td { 
+            text-align: right; 
+            font-weight: 500; 
+          }
+
+          .charts-section {
+            margin-top: 20px;
+            margin-bottom: 20px;
+            page-break-inside: avoid;
+          }
+          .charts-section h3 {
+            margin-bottom: 15px;
+            color: #333;
+            font-size: 14px;
+            border-bottom: 2px solid #4B929D;
+            padding-bottom: 5px;
+          }
+          .charts-grid {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 15px;
+            margin-bottom: 15px;
+          }
+          .chart-container {
+            text-align: center;
+            background: #f9f9f9;
+            padding: 10px;
+            border-radius: 4px;
+            border: 1px solid #ddd;
+          }
+          .chart-container img {
+            max-width: 100%;
+            height: auto;
+            display: block;
+            margin: 0 auto;
+          }
+          .chart-title {
+            font-size: 11px;
+            font-weight: 600;
+            color: #333;
+            margin-bottom: 8px;
+          }
+          .chart-wide {
+            grid-column: 1 / -1;
+          }
+
+          .data-section {
+            margin-top: 20px;
+            page-break-before: always;
+          }
+          .data-section h3 {
+            margin-bottom: 10px;
+            color: #333;
+            font-size: 14px;
+            border-bottom: 2px solid #4B929D;
+            padding-bottom: 5px;
+          }
+
+          table { 
             width: 100%; 
             border-collapse: collapse; 
             margin-top: 15px; 
-            background: white; 
+            font-size: 9px; 
+            page-break-inside: auto; 
           }
-          .salesMonExportTable th, 
-          .salesMonExportTable td { 
-            padding: 10px; 
+          thead { display: table-header-group; }
+          tbody { display: table-row-group; }
+          tr { page-break-inside: avoid; page-break-after: auto; }
+          th, td { 
+            border: 1px solid #333; 
+            padding: 6px 4px; 
             text-align: left; 
-            border-bottom: 1px solid #ddd; 
-            font-size: 12px; 
           }
-          .salesMonExportTable th { 
-            background: #4B929D !important; 
-            color: white !important; 
+          th { 
+            background-color: #4B929D !important; 
+            color: #fff !important; 
             font-weight: bold; 
+            text-align: center; 
+            font-size: 8px; 
+            text-transform: uppercase; 
+            letter-spacing: 0.3px; 
           }
-          .salesMonExportTable tr:nth-child(even) { 
-            background: #f9f9f9; 
-          }
-          .salesMonExportFooter { 
+          tr:nth-child(even) { background-color: #f9f9f9 !important; }
+          
+          .bold { font-weight: 700; }
+          .text-center { text-align: center; }
+          .text-right { text-align: right; }
+          
+          .date-cell { line-height: 1.3; }
+          .date-line { font-weight: 500; font-size: 9px; }
+          .time-line { font-size: 8px; color: #666; }
+
+          .approved { 
             margin-top: 30px; 
             text-align: right; 
-            font-size: 11px; 
-            color: #999; 
-            border-top: 1px solid #ddd; 
-            padding-top: 15px; 
+            page-break-inside: avoid; 
           }
-          .salesMonExportSectionTitle { 
-            font-size: 14px; 
-            font-weight: bold; 
-            color: #333; 
-            margin-top: 25px; 
-            margin-bottom: 10px; 
-            background: #f0f0f0; 
-            padding: 8px; 
-          }
-          .salesMonExportPageBreak { 
-            page-break-after: always; 
+          .signature { 
+            margin-top: 20px; 
+            display: inline-block; 
+            border-top: 1px solid #000; 
+            padding-top: 5px; 
+            min-width: 180px; 
+            text-align: center; 
+            font-size: 10px; 
           }
         </style>
-      </head>
-      <body>
-        <div class="salesMonExportHeader">
-          <h1>End-of-Day Sales Report</h1>
-          <p>Generated on: ${reportDate}</p>
-          <p>Product: ${selectedProduct !== 'all' ? selectedProduct : 'All Products'} | Category: ${selectedCategory !== 'all' ? selectedCategory : 'All Categories'}</p>
+
+        <div class="export-header">
+          <h1>End-of-Day Sales Monitoring</h1>
+          <p><strong>Generated On:</strong> ${reportDate}</p>
+          <p><strong>Category:</strong> ${selectedCategory !== 'all' ? selectedCategory : 'All Categories'} | <strong>Cashier:</strong> ${selectedCashier !== 'all' ? selectedCashier : 'All Cashiers'}</p>
         </div>
 
-        <div class="salesMonExportSectionTitle">Key Metrics Summary</div>
-        <div class="salesMonExportMetrics">
-          <div class="salesMonExportMetricCard">
-            <div class="salesMonExportMetricLabel">Total Revenue</div>
-            <div class="salesMonExportMetricValue">₱${metrics.totalRevenue.toLocaleString('en-PH', { maximumFractionDigits: 2 })}</div>
-          </div>
-          <div class="salesMonExportMetricCard">
-            <div class="salesMonExportMetricLabel">Gross Profit</div>
-            <div class="salesMonExportMetricValue">₱${metrics.totalProfit.toLocaleString('en-PH', { maximumFractionDigits: 2 })}</div>
-          </div>
-          <div class="salesMonExportMetricCard">
-            <div class="salesMonExportMetricLabel">Quantity Sold</div>
-            <div class="salesMonExportMetricValue">${metrics.totalQuantity}</div>
-            <div class="salesMonExportMetricUnit">items</div>
-          </div>
-          <div class="salesMonExportMetricCard">
-            <div class="salesMonExportMetricLabel">Profit Margin</div>
-            <div class="salesMonExportMetricValue">${metrics.profitMargin}%</div>
-          </div>
+        <div class="summary">
+          <h3>Sales Summary</h3>
+          <table class="summary-table">
+            <tr><th>Total Sales</th><td>₱${totalSales.toFixed(2)}</td></tr>
+            <tr><th>Total Transactions</th><td>${totalTransactions}</td></tr>
+            <tr><th>Total Items Sold</th><td>${totalItemsSold}</td></tr>
+            <tr><th>Average Sale Value</th><td>₱${averageSaleValue.toFixed(2)}</td></tr>
+            ${topCashier ? `<tr><th>Top Cashier</th><td>${topCashier.name} (₱${topCashier.sales.toFixed(2)})</td></tr>` : ''}
+          </table>
         </div>
 
-        <div class="salesMonExportSectionTitle">Product Performance</div>
-        <table class="salesMonExportTable">
-          <thead>
-            <tr>
-              <th>Product</th>
-              <th>Category</th>
-              <th>Revenue</th>
-              <th>Profit</th>
-              <th>Quantity</th>
-              <th>Order Type</th>
-            </tr>
-          </thead>
-          <tbody>
-            ${metrics.filtered.map(item => `
+        ${salesTrendImage || categoryPieImage || topProductsImage ? `
+          <div class="charts-section">
+            <h3>Sales Analytics</h3>
+            <div class="charts-grid">
+              ${salesTrendImage ? `
+                <div class="chart-container">
+                  <div class="chart-title">Sales Trend</div>
+                  <img src="${salesTrendImage}" alt="Sales Trend Chart" />
+                </div>
+              ` : ''}
+              ${categoryPieImage ? `
+                <div class="chart-container">
+                  <div class="chart-title">Sales by Category</div>
+                  <img src="${categoryPieImage}" alt="Category Distribution Chart" />
+                </div>
+              ` : ''}
+            </div>
+            ${topProductsImage ? `
+              <div class="chart-container chart-wide">
+                <div class="chart-title">Top-Selling Products</div>
+                <img src="${topProductsImage}" alt="Top Products Chart" />
+              </div>
+            ` : ''}
+          </div>
+        ` : ''}
+
+        <div class="data-section">
+          <h3>Detailed Sales Data</h3>
+          <table>
+            <thead>
               <tr>
-                <td>${item.product}</td>
-                <td>${item.category}</td>
-                <td>₱${item.revenue.toFixed(2)}</td>
-                <td>₱${item.profit.toFixed(2)}</td>
-                <td>${item.quantity}</td>
-                <td>${item.orderType}</td>
+                <th>PRODUCT</th>
+                <th>CATEGORY</th>
+                <th>DATE & TIME</th>
+                <th>QTY</th>
+                <th>REVENUE</th>
+                <th>ORDER TYPE</th>
+                <th>CASHIER</th>
               </tr>
-            `).join('')}
-          </tbody>
-        </table>
-
-        <div class="salesMonExportFooter">
-          <p>This is an automatically generated End-of-Day (EOD) report. For inquiries, contact management.</p>
+            </thead>
+            <tbody>
+              ${tableRows}
+            </tbody>
+          </table>
         </div>
-      </body>
-    </html>
-  `;
 
-  const newWindow = window.open('', '_blank');
-  newWindow.document.write(htmlContent);
-  newWindow.document.close();
-  setTimeout(() => newWindow.print(), 250);
+        <div class="approved">
+          <p><strong>Approved By:</strong></p>
+          <div class="signature">Signature</div>
+        </div>
+      </div>
+    `;
+
+    // Temporary container
+    const container = document.createElement('div');
+    container.innerHTML = htmlContent;
+    document.body.appendChild(container);
+
+    // PDF options
+    const opt = {
+      margin: [10, 10, 10, 10],
+      filename: `Sales_Report_${new Date().toISOString().split('T')[0]}.pdf`,
+      image: { type: 'jpeg', quality: 0.98 },
+      html2canvas: { scale: 2, useCORS: true },
+      jsPDF: { unit: 'mm', format: 'a4', orientation: 'landscape' }
+    };
+
+    // Generate PDF and download
+    await html2pdf().set(opt).from(container).save();
+
+    // Remove container
+    document.body.removeChild(container);
+
+  } catch (error) {
+    console.error("Error generating PDF:", error);
+    alert("Error generating PDF. Please try again.");
+  }
 };
 
 export const generateCSVReport = (metrics) => {
-  const headers = ['Product', 'Category', 'Revenue', 'Profit', 'Quantity', 'Order Type', 'Date'];
-  const rows = metrics.filtered.map(item => [
-    item.product,
-    item.category,
-    item.revenue,
-    item.profit,
-    item.quantity,
-    item.orderType,
-    item.date
-  ]);
+  const headers = [
+    'Product', 
+    'Category', 
+    'Date',
+    'Time',
+    'Quantity',
+    'Revenue', 
+    'Order Type',
+    'Cashier'
+  ];
+  
+  const rows = metrics.filtered.map(item => {
+    const date = new Date(item.date);
+    const formattedDate = date.toLocaleDateString('en-CA');
+    const formattedTime = date.toLocaleTimeString('en-US', { 
+      hour: '2-digit', 
+      minute: '2-digit', 
+      hour12: true 
+    });
 
-  const csvContent = [headers, ...rows].map(row => row.map(cell => `"${cell}"`).join(',')).join('\n');
+    return [
+      item.product,
+      item.category,
+      formattedDate,
+      formattedTime,
+      item.quantity,
+      item.revenue.toFixed(2),
+      item.orderType || '—',
+      item.cashier || '—'
+    ];
+  });
+
+  // Escape CSV values properly
+  const escapeCSV = (value) => {
+    if (value === null || value === undefined) return '';
+    const stringValue = String(value);
+    if (stringValue.includes(',') || stringValue.includes('"') || stringValue.includes('\n')) {
+      return `"${stringValue.replace(/"/g, '""')}"`;
+    }
+    return stringValue;
+  };
+
+  const csvContent = [
+    headers.map(escapeCSV).join(','),
+    ...rows.map(row => row.map(escapeCSV).join(','))
+  ].join('\n');
+
   const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+  const url = URL.createObjectURL(blob);
+
   const link = document.createElement('a');
-  link.href = URL.createObjectURL(blob);
-  link.download = `sales_report_${new Date().toISOString().split('T')[0]}.csv`;
+  link.setAttribute('href', url);
+  link.setAttribute('download', `sales_report_${new Date().toISOString().split('T')[0]}.csv`);
   document.body.appendChild(link);
   link.click();
   document.body.removeChild(link);
+  URL.revokeObjectURL(url);
 };

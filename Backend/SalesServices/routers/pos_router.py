@@ -43,15 +43,29 @@ class SaleItem(BaseModel):
     quantity: int
     price: float
     category: str
-    addons: List[AddonDetail]
-    type: Optional[str] = "product"  
+    addons: List[AddonDetail] = []
+    type: Optional[str] = "product"
+
+# ✅ NEW: Model for item-level discount information
+class ItemDiscountDetail(BaseModel):
+    itemIndex: int
+    quantity: int
+    discountAmount: float
+
+# ✅ NEW: Model for applied discount with item breakdown
+class AppliedDiscountDetail(BaseModel):
+    discountName: str
+    discountId: int
+    itemDiscounts: List[ItemDiscountDetail] = []
 
 class Sale(BaseModel):
     cartItems: List[SaleItem]
     orderType: str
     paymentMethod: str
-    appliedDiscounts: List[str]
+    appliedDiscounts: List[AppliedDiscountDetail] = []  # ✅ CHANGED from List[str]
     promotionalDiscountAmount: Optional[float] = 0.0
+    promotionalDiscountName: Optional[str] = None
+    manualDiscountAmount: Optional[float] = 0.0
     gcashReference: Optional[str] = None
 
 
@@ -68,6 +82,21 @@ async def get_current_active_user(token: str = Depends(oauth2_scheme)):
             raise HTTPException(status_code=e.response.status_code, detail=f"Invalid token or user not found: {e.response.text}")
         except httpx.RequestError:
             raise HTTPException(status_code=status.HTTP_503_SERVICE_UNAVAILABLE, detail="Could not connect to the authentication service.")
+        
+async def get_active_session(cashier_username: str, cursor):
+    """Get the active session for a cashier"""
+    await cursor.execute(
+        "SELECT SessionID FROM CashierSessions WHERE CashierName = ? AND Status = 'Active'",
+        cashier_username
+    )
+    session = await cursor.fetchone()
+    if not session:
+        raise HTTPException(
+            status_code=400,
+            detail=f"No active session found for cashier '{cashier_username}'. Please start a session first."
+        )
+    return session.SessionID
+
 
 # --- Blockchain Logging Helper ---
 async def log_to_blockchain(
@@ -109,7 +138,6 @@ async def log_to_blockchain(
             
     except Exception as e:
         logger.error(f"❌ Blockchain logging failed for {entity_type} {entity_id}: {e}", exc_info=True)
-        # Don't raise - blockchain logging failure shouldn't break the sale
 
 # --- Helper to call Inventory Services ---
 async def trigger_inventory_deduction(url: str, cart_items: List[SaleItem], token: str, inventory_type: str):
@@ -164,47 +192,98 @@ def separate_cart_items_by_type(cart_items: List[SaleItem]):
     
     return products, merchandise
 
-# --- Helper function for calculations ---
-async def calculate_totals_and_discounts(sale_data: Sale, cursor):
-    subtotal = Decimal('0.0')
-    for item in sale_data.cartItems:
-        item_price = Decimal(str(item.price))
-        addons_price = Decimal('0.0')
-        if item.addons:
-            for addon in item.addons:
-                addons_price += Decimal(str(addon.price)) * addon.quantity
-        subtotal += (item_price + addons_price) * item.quantity
-
-    total_discount_amount = Decimal('0.0')
-    applied_discounts_details = []
+# ✅ UPDATED: New helper function to process applied discounts
+async def process_applied_discounts(sale_data: Sale, cursor):
+    """
+    Process the applied discounts from frontend and return structured data
+    including item-level discount information
+    """
+    total_manual_discount = Decimal(str(sale_data.manualDiscountAmount or 0.0))
+    
+    # Build discount details list for database insertion
+    discount_details = []
     discount_names_with_amounts = []
     
-    if not sale_data.appliedDiscounts:
-        return subtotal, total_discount_amount, applied_discounts_details, discount_names_with_amounts
-
-    placeholders = ','.join(['?' for _ in sale_data.appliedDiscounts])
-    sql_fetch_discounts = f"SELECT id, name, discount_type, discount_value, minimum_spend FROM discounts WHERE name IN ({placeholders}) AND status = 'active'"
-    await cursor.execute(sql_fetch_discounts, sale_data.appliedDiscounts)
-    valid_discounts = await cursor.fetchall()
-
-    for discount in valid_discounts:
-        min_spend = discount.minimum_spend or Decimal('0.0')
-        if subtotal >= min_spend:
-            discount_value = Decimal('0.0')
-            if discount.discount_type == 'percentage' and discount.discount_value is not None:
-                discount_value = (subtotal * Decimal(str(discount.discount_value))) / Decimal('100')
-            elif discount.discount_type == 'fixed_amount' and discount.discount_value is not None:
-                discount_value = Decimal(str(discount.discount_value))
-            total_discount_amount += discount_value
-            applied_discounts_details.append({"id": discount.id, "amount": discount_value})
-            discount_names_with_amounts.append({
-                "name": discount.name,
-                "type": discount.discount_type,
-                "amount": float(discount_value)
+    for discount_data in sale_data.appliedDiscounts:
+        # Verify discount exists and is active
+        await cursor.execute(
+            "SELECT id, name, discount_type, discount_value FROM discounts WHERE id = ? AND status = 'active'",
+            discount_data.discountId
+        )
+        db_discount = await cursor.fetchone()
+        
+        if not db_discount:
+            logger.warning(f"Discount ID {discount_data.discountId} not found or inactive")
+            continue
+        
+        # Build item-level discount information
+        item_discounts_list = []
+        for item_disc in discount_data.itemDiscounts:
+            item_discounts_list.append({
+                'item_index': item_disc.itemIndex,
+                'quantity': item_disc.quantity,
+                'discount_amount': item_disc.discountAmount
             })
+        
+        discount_info = {
+            'id': db_discount.id,
+            'name': db_discount.name,
+            'item_discounts': item_discounts_list
+        }
+        
+        discount_details.append(discount_info)
+        
+        # Calculate total discount for this discount
+        total_disc_amount = sum(item['discount_amount'] for item in item_discounts_list)
+        discount_names_with_amounts.append({
+            "name": db_discount.name,
+            "type": db_discount.discount_type,
+            "amount": float(total_disc_amount)
+        })
     
-    final_discount = min(total_discount_amount, subtotal)
-    return subtotal, final_discount, applied_discounts_details, discount_names_with_amounts
+    return discount_details, discount_names_with_amounts
+
+# ✅ UPDATED: Save item-level discounts with sale_item_id mapping
+async def apply_item_level_discounts(sale_id: int, applied_discounts_details: list, items_data: list, cursor):
+    """
+    Save per-item discount details to SaleItemDiscounts table.
+    Maps item_index from frontend to actual sale_item_id in database.
+    """
+    for discount_data in applied_discounts_details:
+        discount_id = discount_data['id']
+        
+        if 'item_discounts' not in discount_data:
+            continue
+            
+        for item_discount in discount_data['item_discounts']:
+            item_index = item_discount['item_index']
+            quantity_discounted = item_discount['quantity']
+            discount_amount = item_discount['discount_amount']
+            
+            # Map item_index to actual sale_item_id
+            if item_index >= len(items_data):
+                logger.error(f"Invalid item_index {item_index} for sale {sale_id}")
+                continue
+                
+            sale_item_id = items_data[item_index]['sale_item_id']
+            
+            if quantity_discounted > 0 and discount_amount > 0:
+                sql_item_discount = """
+                    INSERT INTO SaleItemDiscounts 
+                    (SaleItemID, DiscountID, QuantityDiscounted, DiscountAmount)
+                    VALUES (?, ?, ?, ?)
+                """
+                await cursor.execute(
+                    sql_item_discount,
+                    sale_item_id,
+                    discount_id,
+                    quantity_discounted,
+                    Decimal(str(discount_amount))
+                )
+                logger.info(
+                    f"✅ Applied discount (ID: {discount_id}) to {quantity_discounted} "
+                    f"units of SaleItem {sale_item_id}, amount: ₱{discount_amount:.2f}"
+                )
 
 # --- Helper function to build detailed change description ---
 def build_detailed_change_description(
@@ -216,12 +295,10 @@ def build_detailed_change_description(
 ) -> str:
     """Build a detailed human-readable description for blockchain logging"""
     
-    # Build items summary
     items_summary = []
     for item in items_data:
         item_desc = f"{item['name']} (₱{item['price']:.2f})"
         
-        # Add addons if present
         if item.get('addons') and len(item['addons']) > 0:
             addon_parts = []
             for addon in item['addons']:
@@ -230,18 +307,15 @@ def build_detailed_change_description(
         
         items_summary.append(item_desc)
     
-    # Build the description - no "created with" prefix
     item_count = len(items_data)
     item_word = "item" if item_count == 1 else "items"
     
     description = f"New sale created with {item_count} {item_word}: {items_summary[0]}"
     
-    # Add additional items if more than one
     if item_count > 1:
         for additional_item in items_summary[1:]:
             description += f", {additional_item}"
     
-    # Add discounts if present
     if discount_names:
         discount_parts = []
         for disc in discount_names:
@@ -251,7 +325,6 @@ def build_detailed_change_description(
     if promo_discount > 0:
         description += f" | Promotional Discount (-₱{promo_discount:.2f})"
     
-    # Add total and payment
     description += f" | Total: ₱{final_total:.2f} | Payment: {payment_method}"
     
     return description
@@ -272,15 +345,31 @@ async def create_sale(
         conn.autocommit = False 
         
         async with conn.cursor() as cursor:
-            subtotal, manual_discount, discount_details, discount_names = await calculate_totals_and_discounts(sale, cursor)
+            # Calculate subtotal
+            subtotal = Decimal('0.0')
+            for item in sale.cartItems:
+                item_price = Decimal(str(item.price))
+                addons_price = Decimal('0.0')
+                if item.addons:
+                    for addon in item.addons:
+                        addons_price += Decimal(str(addon.price)) * addon.quantity
+                subtotal += (item_price + addons_price) * item.quantity
+            
+            # ✅ UPDATED: Process applied discounts with new structure
+            discount_details, discount_names = await process_applied_discounts(sale, cursor)
+            
+            manual_discount = Decimal(str(sale.manualDiscountAmount or 0.0))
             promo_discount = Decimal(str(sale.promotionalDiscountAmount or 0.0))
             cashier_name = current_user.get("username", "SystemUser")
+            
+            # GET ACTIVE SESSION
+            session_id = await get_active_session(cashier_name, cursor)
 
             sql_sale = """
                 DECLARE @InsertedSales TABLE (SaleID INT);
                 
                 INSERT INTO Sales (
-                    OrderType, PaymentMethod, CashierName, 
+                    OrderType, PaymentMethod, SessionID,
                     TotalDiscountAmount, PromotionalDiscountAmount, 
                     GCashReferenceNumber, Status
                 ) 
@@ -292,7 +381,7 @@ async def create_sale(
             
             await cursor.execute(
                 sql_sale, 
-                sale.orderType, sale.paymentMethod, cashier_name, 
+                sale.orderType, sale.paymentMethod, session_id, 
                 manual_discount, promo_discount, 
                 sale.gcashReference
             )
@@ -306,7 +395,6 @@ async def create_sale(
                 raise HTTPException(status_code=500, detail="Failed to create sale record, starting rollback.")
             sale_id = sale_id_row[0]
 
-            # Prepare detailed sale items data for blockchain
             items_data = []
             
             for item in sale.cartItems:
@@ -330,7 +418,6 @@ async def create_sale(
                     raise HTTPException(status_code=500, detail=f"Failed to insert sale item: {item.name}")
                 sale_item_id = sale_item_id_row[0]
                 
-                # Collect item data for blockchain
                 item_data = {
                     "sale_item_id": sale_item_id,
                     "name": item.name,
@@ -350,7 +437,6 @@ async def create_sale(
                         
                         await cursor.execute("INSERT INTO SaleItemAddons (SaleItemID, AddonID, Quantity) VALUES (?, ?, ?)", sale_item_id, addon.addonId, addon.quantity)
                         
-                        # Add addon to item data
                         item_data["addons"].append({
                             "addon_id": addon.addonId,
                             "addon_name": addon.addonName,
@@ -360,17 +446,20 @@ async def create_sale(
                 
                 items_data.append(item_data)
 
+            # Insert sale-level discounts
             for discount in discount_details:
+                total_discount_for_this = sum(item['discount_amount'] for item in discount.get('item_discounts', []))
                 sql_sale_discount = "INSERT INTO SaleDiscounts (SaleID, DiscountID, DiscountAppliedAmount) VALUES (?, ?, ?)"
-                await cursor.execute(sql_sale_discount, sale_id, discount['id'], discount['amount'])
+                await cursor.execute(sql_sale_discount, sale_id, discount['id'], Decimal(str(total_discount_for_this)))
+            
+            # ✅ UPDATED: Insert item-level discount tracking with proper mapping
+            await apply_item_level_discounts(sale_id, discount_details, items_data, cursor)
 
             await conn.commit()
             
-        # Prepare comprehensive blockchain data
         total_combined_discount = manual_discount + promo_discount
         final_total = subtotal - total_combined_discount
         
-        # Build detailed change description
         detailed_description = build_detailed_change_description(
             items_data=items_data,
             final_total=float(final_total),
@@ -384,6 +473,7 @@ async def create_sale(
             "order_type": sale.orderType,
             "payment_method": sale.paymentMethod,
             "cashier_name": cashier_name,
+            "session_id": session_id,
             "items": items_data,
             "subtotal": float(subtotal),
             "manual_discount": float(manual_discount),
@@ -398,11 +488,9 @@ async def create_sale(
             "total_quantity": sum(item.quantity for item in sale.cartItems)
         }
         
-        # Schedule inventory deductions as background task
         products, merchandise = separate_cart_items_by_type(sale.cartItems)
         background_tasks.add_task(process_inventory_deductions_background, products, merchandise, current_user['access_token'])
         
-        # Schedule blockchain logging as background task with detailed description
         background_tasks.add_task(
             log_to_blockchain,
             service_identifier="POS_SALES",
@@ -415,7 +503,6 @@ async def create_sale(
             token=current_user['access_token']
         )
         
-        # Return immediately without waiting for background tasks
         return {
             "saleId": sale_id,
             "subtotal": float(subtotal),
@@ -432,7 +519,7 @@ async def create_sale(
         if conn:
             conn.autocommit = True 
             await conn.close()
-            
+
 
 @router_sales.get("/status/{status}")
 async def get_orders_by_status(
@@ -448,10 +535,11 @@ async def get_orders_by_status(
         conn = await get_db_connection()
         async with conn.cursor() as cursor:
             sql_sales = """
-                SELECT s.SaleID, s.OrderType, s.PaymentMethod, s.CreatedAt, s.CashierName, 
-                       s.TotalDiscountAmount, s.PromotionalDiscountAmount, 
+                SELECT s.SaleID, s.OrderType, s.PaymentMethod, s.CreatedAt, 
+                       cs.CashierName, s.TotalDiscountAmount, s.PromotionalDiscountAmount, 
                        s.Status, s.GCashReferenceNumber
                 FROM Sales s 
+                LEFT JOIN CashierSessions cs ON s.SessionID = cs.SessionID
                 WHERE s.Status = ?
                 ORDER BY s.CreatedAt DESC
             """
@@ -483,13 +571,35 @@ async def get_orders_by_status(
                         total_addons_cost += addon_cost
                         addons_list.append({'name': addon.AddonName, 'price': float(addon.Price), 'quantity': addon.Quantity})
                     
+                    # ✅ NEW: Fetch item-level discounts
+                    sql_item_discounts = """
+                        SELECT 
+                            d.name AS DiscountName,
+                            sid.QuantityDiscounted,
+                            sid.DiscountAmount
+                        FROM SaleItemDiscounts sid
+                        JOIN discounts d ON sid.DiscountID = d.id
+                        WHERE sid.SaleItemID = ?
+                    """
+                    await cursor.execute(sql_item_discounts, item.SaleItemID)
+                    item_discount_rows = await cursor.fetchall()
+                    
+                    item_discounts_list = []
+                    for disc_row in item_discount_rows:
+                        item_discounts_list.append({
+                            'discountName': disc_row.DiscountName,
+                            'quantityDiscounted': disc_row.QuantityDiscounted,
+                            'discountAmount': float(disc_row.DiscountAmount)
+                        })
+                    
                     order_items.append({
                         'saleItemId': item.SaleItemID,
                         'name': item.ItemName, 
                         'quantity': item.Quantity, 
                         'price': float(item.UnitPrice), 
                         'category': item.Category, 
-                        'addons': addons_list
+                        'addons': addons_list,
+                        'itemDiscounts': item_discounts_list  # ✅ NEW field
                     })
                 
                 manual_discount = Decimal(str(sale.TotalDiscountAmount or 0))
@@ -505,7 +615,7 @@ async def get_orders_by_status(
                     'paymentMethod': sale.PaymentMethod,
                     'date': sale.CreatedAt.isoformat(),
                     'status': sale.Status,
-                    'cashierName': sale.CashierName,
+                    'cashierName': sale.CashierName or 'Unknown',
                     'gcashReference': sale.GCashReferenceNumber,
                     'orderItems': order_items,
                     'subtotal': float(full_subtotal),

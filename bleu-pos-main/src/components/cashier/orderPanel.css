@@ -192,6 +192,44 @@
   text-align: left;
 }
 
+/* Discount badges display for each item in order panel */
+.orderpanel-item-discount-badges {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  margin-top: 6px;
+}
+
+.orderpanel-discount-badge {
+  display: inline-block;
+  background-color: #d1fae5;
+  color: #059669;
+  font-size: 11px;
+  font-weight: 600;
+  padding: 3px 8px;
+  border-radius: 4px;
+  white-space: nowrap;
+  line-height: 1.4;
+}
+
+/* Adjust item name container to accommodate badges */
+.orderpanel-item-name {
+  font-weight: 500;
+  font-size: 14px;
+  color: #333;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+/* Ensure proper spacing in item details */
+.orderpanel-item-details {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  flex: 1;
+}
+
 .orderpanel-item {
   display: grid;
   grid-template-columns: 1fr 60px 80px;
@@ -312,10 +350,6 @@
   color: #4197a2;
   font-weight: 500;
   white-space: nowrap;
-}
-
-.orderpanel-discount-wrapper:hover {
-  background-color: #ececef;
 }
 
 .orderpanel-promotions-label {
@@ -808,6 +842,36 @@
 }
 
 .orderpanel-addon {
+  margin-left: 8px;
+}
+
+.orderpanel-item-discounts {
+  margin-top: 6px;
+  padding: 6px 10px;
+  background-color: #d4edda;
+  border-radius: 6px;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.orderpanel-item-discount-applied {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  font-size: 12px;
+  line-height: 1.4;
+}
+
+.orderpanel-discount-name {
+  color: #155724;
+  font-weight: 600;
+  flex: 1;
+}
+
+.orderpanel-discount-value {
+  color: #28a745;
+  font-weight: 700;
   margin-left: 8px;
 }
 

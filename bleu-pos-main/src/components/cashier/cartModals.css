@@ -242,6 +242,12 @@
   position: relative;
 }
 
+/* Wide modal for two-panel layout */
+.cDiscount-modal-wide {
+  max-width: 920px;
+  width: 95%;
+}
+
 .cDiscount-modal-header {
   display: flex;
   justify-content: space-between;
@@ -258,6 +264,123 @@
   letter-spacing: -0.01em;
 }
 
+.cDiscount-close-modal {
+  background: none;
+  border: none;
+  font-size: 28px;
+  color: #999;
+  cursor: pointer;
+  padding: 0;
+  width: 32px;
+  height: 32px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 50%;
+  transition: all 0.2s ease;
+  line-height: 1;
+}
+
+.cDiscount-close-modal:hover {
+  background: #f5f5f5;
+  color: #333;
+}
+
+/* Two-panel split layout */
+.cDiscount-content-split {
+  display: flex;
+  gap: 1px;
+  background: #e8e8e8;
+  min-height: 420px;
+  max-height: calc(85vh - 180px);
+  overflow: hidden;
+}
+
+.cDiscount-panel {
+  flex: 1;
+  background: white;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+.cDiscount-panel-left {
+  flex: 0 0 42%;
+}
+
+.cDiscount-panel-right {
+  flex: 0 0 58%;
+}
+
+.cDiscount-panel-header {
+  display: flex;
+  align-items: center;
+  padding: 16px 20px;
+  gap: 10px;
+  border-bottom: 1px solid #f0f0f0;
+  background: #fff;
+}
+
+.cDiscount-remove-all-btn {
+  margin-left: auto;
+  background: none;
+  border: none;
+  color: #dc3545;
+  cursor: pointer;
+  padding: 6px;
+  border-radius: 6px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: all 0.15s ease;
+}
+
+.cDiscount-remove-all-btn:hover {
+  background-color: #fff5f5;
+  color: #c82333;
+}
+
+.cDiscount-select-all-checkbox {
+  width: 18px;
+  height: 18px;
+  cursor: pointer;
+  accent-color: #4197a2;
+  flex-shrink: 0;
+}
+
+.cDiscount-panel-title {
+  font-size: 15px;
+  font-weight: 600;
+  color: #1a1a1a;
+  margin: 0;
+  padding: 0;
+  line-height: 1.3;
+}
+
+.cDiscount-select-all-btn {
+  padding: 6px 14px;
+  background: white;
+  border: 1px solid #d1d1d6;
+  border-radius: 6px;
+  font-size: 13px;
+  font-weight: 500;
+  color: #4197a2;
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.cDiscount-select-all-btn:hover {
+  background: #f8fdff;
+  border-color: #4197a2;
+}
+
+/* Discount list (left panel) */
+.cDiscount-list {
+  flex: 1;
+  overflow-y: auto;
+  padding: 12px 16px;
+}
+
 .cDiscount-content {
   padding: 24px;
   max-height: 450px;
@@ -267,23 +390,25 @@
 .cDiscount-item {
   display: flex;
   align-items: center;
-  padding: 16px;
+  padding: 14px 16px;
   border: 1px solid #e8e8e8;
   border-radius: 8px;
-  margin-bottom: 12px;
+  margin-bottom: 10px;
   cursor: pointer;
   transition: all 0.15s ease;
   background-color: white;
 }
 
-.cDiscount-item:hover {
+.cDiscount-item:hover:not(.cDiscount-disabled) {
   border-color: #4197a2;
   background-color: #f8fdff;
+  box-shadow: 0 2px 4px rgba(65, 151, 162, 0.08);
 }
 
 .cDiscount-item.cDiscount-selected {
   border-color: #4197a2;
   background-color: #f0f9fa;
+  box-shadow: 0 2px 6px rgba(65, 151, 162, 0.15);
 }
 
 .cDiscount-item.cDiscount-disabled {
@@ -295,22 +420,74 @@
 .cDiscount-item.cDiscount-disabled:hover {
   border-color: #e8e8e8;
   background-color: #fafafa;
+  box-shadow: none;
 }
 
 .cDiscount-checkbox {
-  margin-right: 10px;
+  margin-right: 12px;
+  display: flex;
+  align-items: center;
 }
 
-/* Hide the actual radio button */
-.cDiscount-checkbox input[type="radio"] {
-  display: none; /* hides the radio button */
+.cDiscount-checkbox input[type="radio"],
+.cDiscount-item-checkbox input[type="checkbox"] {
+  width: 18px;
+  height: 18px;
+  cursor: pointer;
+  accent-color: #4197a2;
 }
 
-/* When radio is checked, style the parent item */
-.cDiscount-checkbox input[type="radio"]:checked + .cDiscount-item {
-  border-color: #4197a2;
-  background-color: #f0f9fa;
+.cDiscount-checkbox input[type="radio"]:disabled,
+.cDiscount-item-checkbox input[type="checkbox"]:disabled {
+  cursor: not-allowed;
+}
+
+.cDiscount-qty-controls {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex-shrink: 0;
+}
+
+.cDiscount-qty-controls button {
+  width: 32px;
+  height: 32px;
+  border: none;
+  background: #F2F2F2;
+  border-radius: 32px;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 16px;
+  color: #333;
+  transition: all 0.15s ease;
+}
+
+.cDiscount-qty-controls button:last-of-type {
+  background: #4B929D;
+  color: white;
+}
+
+.cDiscount-qty-controls button:hover:not(:disabled) {
+  opacity: 0.85;
+}
+
+.cDiscount-qty-controls button:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
+.cDiscount-qty-controls button:active:not(:disabled) {
+  transform: scale(0.95);
+}
+
+.cDiscount-qty-display {
+  font-size: 15px;
+  font-weight: 600;
   color: #1a1a1a;
+  min-width: 28px;
+  text-align: center;
 }
 
 .cDiscount-info {
@@ -321,14 +498,20 @@
 }
 
 .cDiscount-name {
-  font-size: 16px;
-  font-weight: 500;
+  font-size: 15px;
+  font-weight: 600;
   color: #1a1a1a;
+  line-height: 1.3;
 }
 
 .cDiscount-description {
   font-size: 13px;
   color: #666;
+  line-height: 1.4;
+}
+
+.cDiscount-min-spend {
+  color: #888;
 }
 
 .cDiscount-min-requirement {
@@ -339,20 +522,101 @@
 .cDiscount-icon {
   margin-left: 12px;
   color: #4197a2;
-  font-size: 16px;
+  font-size: 18px;
+  flex-shrink: 0;
 }
 
 .cDiscount-item.cDiscount-disabled .cDiscount-icon {
   color: #ccc;
 }
 
-.cDiscount-error-message {
-  color: #e74c3c;
-  font-size: 13px;
-  text-align: center;
-  padding: 8px;
+/* Items list (right panel) */
+.cDiscount-items-list {
+  flex: 1;
+  overflow-y: auto;
+  padding: 12px 16px;
 }
 
+.cDiscount-placeholder {
+  text-align: center;
+  color: #999;
+  padding: 60px 20px;
+  font-size: 14px;
+  line-height: 1.6;
+}
+
+.cDiscount-cart-item {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 12px;
+  margin-bottom: 10px;
+  border: 1px solid #e8e8e8;
+  border-radius: 8px;
+  cursor: pointer;
+  transition: all 0.15s ease;
+  background: white;
+}
+
+.cDiscount-cart-item:hover {
+  border-color: #4197a2;
+  background: #f8fdff;
+}
+
+.cDiscount-cart-item.cDiscount-item-selected {
+  border-color: #4197a2;
+  background: #f0f9fa;
+  box-shadow: 0 2px 4px rgba(65, 151, 162, 0.12);
+}
+
+.cDiscount-item-checkbox {
+  display: flex;
+  align-items: center;
+  flex-shrink: 0;
+}
+
+.cDiscount-item-image {
+  width: 56px;
+  height: 56px;
+  object-fit: cover;
+  border-radius: 6px;
+  flex-shrink: 0;
+}
+
+.cDiscount-item-details {
+  flex: 1;
+  min-width: 0;
+}
+
+.cDiscount-item-name {
+  font-weight: 600;
+  font-size: 14px;
+  color: #1a1a1a;
+  margin-bottom: 4px;
+  line-height: 1.3;
+}
+
+.cDiscount-item-meta {
+  font-size: 12px;
+  color: #666;
+  margin-bottom: 3px;
+}
+
+.cDiscount-item-subtotal {
+  font-size: 13px;
+  color: #333;
+  font-weight: 500;
+  margin-top: 4px;
+}
+
+.cDiscount-item-discount {
+  font-size: 13px;
+  color: #28a745;
+  font-weight: 600;
+  margin-top: 3px;
+}
+
+/* Footer */
 .cDiscount-modal-footer {
   display: flex;
   align-items: center;
@@ -360,19 +624,41 @@
   padding: 16px 24px;
   border-top: 1px solid #f0f0f0;
   background-color: #fafafa;
-  gap: 16px;
+  gap: 20px;
 }
 
 .cDiscount-summary {
   flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  min-width: 0;
+}
+
+.cDiscount-summary-row {
+  display: flex;
+  justify-content: space-between;
+  font-size: 13px;
+  color: #666;
+  line-height: 1.4;
+}
+
+.cDiscount-summary-row span:first-child {
+  font-weight: 500;
+}
+
+.cDiscount-summary-total {
   font-size: 15px;
-  font-weight: 600;
-  color: #1a1a1a;
+  font-weight: 700;
+  color: #28a745;
+  padding-top: 8px;
+  border-top: 1px solid #e8e8e8;
+  margin-top: 4px;
 }
 
 .cDiscount-apply-btn {
-  flex: 1;
-  padding: 12px 20px;
+  flex-shrink: 0;
+  padding: 12px 28px;
   border: none;
   border-radius: 8px;
   font-size: 15px;
@@ -383,10 +669,67 @@
   color: white;
   text-align: center;
   letter-spacing: -0.01em;
+  white-space: nowrap;
 }
 
-.cDiscount-apply-btn:hover {
+.cDiscount-apply-btn:hover:not(:disabled) {
   background-color: #357b88;
+  box-shadow: 0 4px 8px rgba(65, 151, 162, 0.2);
+}
+
+.cDiscount-apply-btn:disabled {
+  background-color: #ccc;
+  cursor: not-allowed;
+  opacity: 0.6;
+}
+
+.cDiscount-error-message {
+  color: #e74c3c;
+  font-size: 13px;
+  text-align: center;
+  padding: 12px;
+  background: #ffebee;
+  border-radius: 6px;
+  margin: 8px;
+}
+
+/* Scrollbar styling */
+.cDiscount-list::-webkit-scrollbar,
+.cDiscount-items-list::-webkit-scrollbar,
+.cDiscount-content::-webkit-scrollbar {
+  width: 6px;
+}
+
+.cDiscount-list::-webkit-scrollbar-track,
+.cDiscount-items-list::-webkit-scrollbar-track,
+.cDiscount-content::-webkit-scrollbar-track {
+  background: #f1f1f1;
+  border-radius: 3px;
+}
+
+.cDiscount-list::-webkit-scrollbar-thumb,
+.cDiscount-items-list::-webkit-scrollbar-thumb,
+.cDiscount-content::-webkit-scrollbar-thumb {
+  background: #c1c1c1;
+  border-radius: 3px;
+}
+
+.cDiscount-list::-webkit-scrollbar-thumb:hover,
+.cDiscount-items-list::-webkit-scrollbar-thumb:hover,
+.cDiscount-content::-webkit-scrollbar-thumb:hover {
+  background: #a8a8a8;
+}
+
+/* Animation */
+@keyframes modalSlideIn {
+  from {
+    opacity: 0;
+    transform: translateY(-20px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
 }
 
 /* ==================== TRANSACTION SUMMARY MODAL ==================== */

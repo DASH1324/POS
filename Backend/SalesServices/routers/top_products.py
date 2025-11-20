@@ -80,7 +80,6 @@ async def get_top_products_today(
     try:
         conn = await get_db_connection()
         async with conn.cursor() as cursor:
-            # Build the query with refund deduction
             base_sql = """
                 WITH SaleItemsWithRefunds AS (
                     SELECT 
@@ -91,25 +90,23 @@ async def get_top_products_today(
                         si.Quantity - ISNULL(SUM(ri.RefundedQuantity), 0) AS NetQuantity
                     FROM Sales AS s 
                     JOIN SaleItems AS si ON s.SaleID = si.SaleID
+                    JOIN CashierSessions AS cs ON s.SessionID = cs.SessionID
                     LEFT JOIN RefundedItems ri ON si.SaleItemID = ri.SaleItemID
                     WHERE s.Status = 'completed' 
-                        AND s.CashierName = ? 
+                        AND cs.CashierName = ? 
                         AND CAST(s.CreatedAt AS DATE) = CAST(GETDATE() AS DATE)
             """
             
             params = [request.cashierName]
             
-            # Add order type filter
             if request.orderType == "Store":
                 base_sql += " AND s.OrderType IN ('Dine in', 'Take out')"
             elif request.orderType == "Online":
                 base_sql += " AND s.OrderType IN ('Pick up', 'Delivery')"
             
-            # Add product type filter
             product_type_condition = get_product_type_condition(request.productType)
             base_sql += product_type_condition
             
-            # Complete the CTE and add aggregation
             final_sql = base_sql + """
                     GROUP BY si.SaleItemID, si.ItemName, si.Quantity
                 )
@@ -117,7 +114,7 @@ async def get_top_products_today(
                     ItemName,
                     SUM(NetQuantity) AS TotalQuantitySold
                 FROM SaleItemsWithRefunds
-                WHERE NetQuantity > 0  -- Only include items with positive net quantity
+                WHERE NetQuantity > 0
                 GROUP BY ItemName
                 ORDER BY TotalQuantitySold DESC;
             """
@@ -137,7 +134,7 @@ async def get_top_products_today(
         if conn:
             await conn.close()
 
-# --- API Endpoint to Get Top Selling Products by Date for a Cashier ---
+
 @router_top_products.post(
     "/by_date",
     response_model=List[TopProductItem],
@@ -166,25 +163,23 @@ async def get_top_products_by_date(
                         si.Quantity - ISNULL(SUM(ri.RefundedQuantity), 0) AS NetQuantity
                     FROM Sales AS s 
                     JOIN SaleItems AS si ON s.SaleID = si.SaleID
+                    JOIN CashierSessions AS cs ON s.SessionID = cs.SessionID
                     LEFT JOIN RefundedItems ri ON si.SaleItemID = ri.SaleItemID
                     WHERE s.Status = 'completed'
-                        AND s.CashierName = ?
+                        AND cs.CashierName = ?
                         AND CAST(s.CreatedAt AS DATE) = ?
             """
             
             params = [request.cashierName, request.date]
             
-            # Add order type filter
             if request.orderType == "Store":
                 base_sql += " AND s.OrderType IN ('Dine in', 'Take out')"
             elif request.orderType == "Online":
                 base_sql += " AND s.OrderType IN ('Pick up', 'Delivery')"
             
-            # Add product type filter
             product_type_condition = get_product_type_condition(request.productType)
             base_sql += product_type_condition
             
-            # Complete the CTE and add aggregation
             final_sql = base_sql + """
                     GROUP BY si.SaleItemID, si.ItemName, si.Quantity
                 )
@@ -192,7 +187,7 @@ async def get_top_products_by_date(
                     ItemName,
                     SUM(NetQuantity) AS TotalQuantitySold
                 FROM SaleItemsWithRefunds
-                WHERE NetQuantity > 0  -- Only include items with positive net quantity
+                WHERE NetQuantity > 0
                 GROUP BY ItemName
                 ORDER BY TotalQuantitySold DESC;
             """

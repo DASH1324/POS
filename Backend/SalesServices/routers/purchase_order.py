@@ -357,7 +357,6 @@ class PartialRefundOrderRequest(BaseModel):
             raise ValueError('At least one item must be selected for refund')
         return v
 
-
 @router_purchase_order.get(
     "/status/processing",
     response_model=List[ProcessingOrder],
@@ -378,13 +377,16 @@ async def get_processing_orders(
         async with conn.cursor() as cursor:
             logged_in_username = current_user.get("username")
             
+            # ✅ UPDATED SQL - Join with CashierSessions
             sql = """
                 SELECT
-                    s.SaleID, s.OrderType, s.PaymentMethod, s.CreatedAt, s.CashierName,
+                    s.SaleID, s.OrderType, s.PaymentMethod, s.CreatedAt, 
+                    cs.CashierName,  -- ✅ Get from CashierSessions
                     s.TotalDiscountAmount, s.Status,
                     si.SaleItemID, si.ItemName, si.Quantity AS ItemQuantity, si.UnitPrice, si.Category,
                     a.AddonID, a.AddonName, a.Price AS AddonPrice, sia.Quantity AS AddonQuantity
                 FROM Sales AS s
+                LEFT JOIN CashierSessions cs ON s.SessionID = cs.SessionID  -- ✅ Added JOIN
                 LEFT JOIN SaleItems AS si ON s.SaleID = si.SaleID
                 LEFT JOIN SaleItemAddons AS sia ON si.SaleItemID = sia.SaleItemID
                 LEFT JOIN Addons AS a ON sia.AddonID = a.AddonID
@@ -393,10 +395,10 @@ async def get_processing_orders(
             params = []
             if user_role in ["admin", "manager"]:
                 if cashierName:
-                    sql += " AND s.CashierName = ? "
+                    sql += " AND cs.CashierName = ? "  # ✅ Changed from s.CashierName
                     params.append(cashierName)
             else:
-                sql += " AND s.CashierName = ? "
+                sql += " AND cs.CashierName = ? "  # ✅ Changed from s.CashierName
                 params.append(logged_in_username)
             sql += " ORDER BY s.CreatedAt ASC, s.SaleID ASC, si.SaleItemID ASC;"
             
@@ -411,7 +413,8 @@ async def get_processing_orders(
                     orders_dict[sale_id] = {
                         "id": f"SO-{sale_id}", "date": row.CreatedAt.strftime("%B %d, %Y %I:%M %p"),
                         "status": row.Status, "orderType": row.OrderType,
-                        "paymentMethod": row.PaymentMethod, "cashierName": row.CashierName,
+                        "paymentMethod": row.PaymentMethod, 
+                        "cashierName": row.CashierName or "Unknown",  # ✅ Handle null
                         "items": 0, "orderItems": [], "total": 0, "_totalDiscount": row.TotalDiscountAmount,
                         "_subtotal": Decimal('0.0'), "_processed_items": set()
                     }
@@ -508,13 +511,30 @@ async def save_online_order(
             logger.info(f"Reference: {final_reference_number}")
             logger.info(f"Cashier: {order_data.cashier_name}")
 
+            # ✅ Try to get session (allow NULL for online orders)
+            session_id = None
             try:
+                await cursor.execute(
+                    "SELECT SessionID FROM CashierSessions WHERE CashierName = ? AND Status = 'Active'",
+                    order_data.cashier_name
+                )
+                session_result = await cursor.fetchone()
+                if session_result:
+                    session_id = session_result.SessionID
+                    logger.info(f"Found active session {session_id} for cashier {order_data.cashier_name}")
+                else:
+                    logger.info(f"No active session for {order_data.cashier_name}, using NULL SessionID for online order")
+            except Exception as session_error:
+                logger.warning(f"Could not fetch session: {session_error}")
+
+            try:
+                # ✅ UPDATED SQL - Remove CashierName, add SessionID
                 sql_insert_sale = """
                     SET NOCOUNT ON;
                     DECLARE @InsertedSaleID TABLE (SaleID INT);
                     
                     INSERT INTO Sales (
-                        OrderType, PaymentMethod, CashierName, CustomerName, 
+                        OrderType, PaymentMethod, SessionID, CustomerName, 
                         TotalDiscountAmount, Status, GCashReferenceNumber
                     )
                     OUTPUT INSERTED.SaleID INTO @InsertedSaleID
@@ -527,7 +547,7 @@ async def save_online_order(
                     sql_insert_sale, 
                     order_data.order_type,
                     corrected_payment_method,
-                    order_data.cashier_name,
+                    session_id,  # ✅ Changed from order_data.cashier_name
                     order_data.customer_name,
                     discount_amount,
                     pos_order_status, 
@@ -541,9 +561,10 @@ async def save_online_order(
                 logger.warning(f"OUTPUT method failed: {output_error}. Trying @@IDENTITY method.")
                 await conn.rollback()
                 
+                # ✅ UPDATED FALLBACK SQL
                 sql_insert_sale_fallback = """
                     INSERT INTO Sales (
-                        OrderType, PaymentMethod, CashierName, CustomerName, 
+                        OrderType, PaymentMethod, SessionID, CustomerName, 
                         TotalDiscountAmount, Status, GCashReferenceNumber
                     )
                     VALUES (?, ?, ?, ?, ?, ?, ?);
@@ -554,7 +575,7 @@ async def save_online_order(
                     sql_insert_sale_fallback,
                     order_data.order_type,
                     corrected_payment_method,
-                    order_data.cashier_name,
+                    session_id,  # ✅ Changed from order_data.cashier_name
                     order_data.customer_name,
                     discount_amount,
                     pos_order_status,
@@ -570,8 +591,8 @@ async def save_online_order(
             
             logger.info(f"✅ Created Sale with auto-generated SaleID: {new_sale_id}")
 
+            # Rest of the function remains the same...
             for item in order_data.items:
-                # Map "All Items" to "Merchandise" category
                 raw_category = (item.category or '').strip().lower()
                 
                 if raw_category in ['all items', 'allitems']:
@@ -589,7 +610,7 @@ async def save_online_order(
                 await cursor.execute(
                     sql_insert_item, 
                     new_sale_id, item.name, item.quantity, 
-                    Decimal(str(item.price)), item_category  # Use mapped category
+                    Decimal(str(item.price)), item_category
                 )
                 
                 await cursor.execute("SELECT CAST(@@IDENTITY AS INT)")
@@ -602,17 +623,15 @@ async def save_online_order(
                 
                 logger.info(f"✅ Created SaleItem '{item.name}' with auto-generated SaleItemID: {new_sale_item_id}")
                 
-                # Process each addon for this item
                 for addon in item.addons:
                     await cursor.execute("SELECT AddonID FROM Addons WHERE AddonName = ?", addon.addon_name)
                     addon_id_row = await cursor.fetchone()
                     
-                    correct_pos_addon_id = None  # Initialize for this addon
+                    correct_pos_addon_id = None
                     
                     if not addon_id_row:
                         logger.info(f"Addon '{addon.addon_name}' not found in POS. Creating it with price {addon.price}")
                         
-                        # ✅ FIXED: Use OUTPUT clause method like the Sale creation
                         try:
                             sql_insert_addon = """
                                 SET NOCOUNT ON;
@@ -634,7 +653,6 @@ async def save_online_order(
                             correct_pos_addon_id = addon_id_row_new[0] if addon_id_row_new else None
                             
                         except Exception as output_error:
-                            # ✅ Fallback method if OUTPUT doesn't work
                             logger.warning(f"OUTPUT method failed for addon creation: {output_error}. Trying @@IDENTITY method.")
                             
                             sql_insert_addon_fallback = """
@@ -658,20 +676,19 @@ async def save_online_order(
                     else:
                         correct_pos_addon_id = addon_id_row.AddonID
 
-                    # Insert into SaleItemAddons for THIS specific addon
                     sql_insert_sale_item_addon = "INSERT INTO SaleItemAddons (SaleItemID, AddonID, Quantity) VALUES (?, ?, ?)"
                     await cursor.execute(sql_insert_sale_item_addon, new_sale_item_id, correct_pos_addon_id, 1)
                     logger.info(f"✅ Linked addon '{addon.addon_name}' (ID: {correct_pos_addon_id}) to SaleItem {new_sale_item_id}")
 
-            # Get customer's full name for blockchain logging
+            await conn.commit()
+
             customer_full_name = await get_full_name_from_username(
                 order_data.customer_name, 
                 current_user['access_token']
             )
             
-            # Build detailed item description
             item_descriptions = []
-            for item in order_data.items[:3]:  # Show up to 3 items
+            for item in order_data.items[:3]:
                 item_desc = f"{item.quantity}x {item.name}"
                 if item.addons:
                     addon_names = [addon.addon_name for addon in item.addons]
@@ -684,13 +701,11 @@ async def save_online_order(
             
             friendly_order_type = order_data.order_type.replace('-', ' ').title()
             
-            # Create detailed blockchain description (without customer name, frontend will add it)
             blockchain_description = (
                 f"created: Received an Online Order: "
                 f"\"{items_text}\" - {friendly_order_type}"
             )
             
-            # --- Blockchain Logging (CREATE) ---
             blockchain_payload = {
                 "sale_id": new_sale_id,
                 "order_type": order_data.order_type,
@@ -701,7 +716,8 @@ async def save_online_order(
                 "status": pos_order_status,
                 "reference_number": final_reference_number,
                 "total_items": len(order_data.items),
-                "total_amount": float(order_data.total_amount)
+                "total_amount": float(order_data.total_amount),
+                "session_id": session_id  # ✅ Added
             }
             
             background_tasks.add_task(
@@ -728,7 +744,6 @@ async def save_online_order(
             if order_type_lower in ["delivery", "pick-up"]:
                 logger.info(f"✅ Condition met. Triggering notification for SaleID {new_sale_id}.")
                 
-                # Build notification message
                 notification_items = []
                 for item in order_data.items[:3]:
                     notification_items.append(f"{item.quantity} {item.name}")
@@ -776,13 +791,16 @@ async def get_all_orders(current_user: dict = Depends(get_current_active_user)):
     try:
         conn = await get_db_connection()
         async with conn.cursor() as cursor:
+            # ✅ UPDATED SQL - Join with CashierSessions
             sql = """
                 SELECT
-                    s.SaleID, s.OrderType, s.PaymentMethod, s.CreatedAt, s.CashierName,
+                    s.SaleID, s.OrderType, s.PaymentMethod, s.CreatedAt, 
+                    cs.CashierName,  -- ✅ Get from CashierSessions
                     s.TotalDiscountAmount, s.Status, s.GCashReferenceNumber,
                     si.SaleItemID, si.ItemName, si.Quantity AS ItemQuantity, si.UnitPrice, si.Category,
                     a.AddonID, a.AddonName, a.Price AS AddonPrice, sia.Quantity AS AddonQuantity
                 FROM Sales AS s
+                LEFT JOIN CashierSessions cs ON s.SessionID = cs.SessionID  -- ✅ Added JOIN
                 LEFT JOIN SaleItems AS si ON s.SaleID = si.SaleID
                 LEFT JOIN SaleItemAddons AS sia ON si.SaleItemID = sia.SaleItemID
                 LEFT JOIN Addons AS a ON sia.AddonID = a.AddonID
@@ -800,7 +818,8 @@ async def get_all_orders(current_user: dict = Depends(get_current_active_user)):
                     orders_dict[sale_id] = {
                         "id": f"SO-{sale_id}", "date": row.CreatedAt.strftime("%B %d, %Y %I:%M %p"),
                         "status": row.Status, "orderType": row.OrderType,
-                        "paymentMethod": row.PaymentMethod, "cashierName": row.CashierName,
+                        "paymentMethod": row.PaymentMethod, 
+                        "cashierName": row.CashierName or "Unknown",  # ✅ Handle null
                         "GCashReferenceNumber": row.GCashReferenceNumber, "items": 0, "orderItems": [],
                         "total": 0, "_totalDiscount": row.TotalDiscountAmount,
                         "_subtotal": Decimal('0.0'), "_processed_items": set()
@@ -1066,7 +1085,13 @@ async def update_pos_status_for_online_order(
             logger.info(f"New Status: {request.newStatus}")
             logger.info(f"Cashier Name from Request: {request.cashier_name}")
             
-            check_sql = "SELECT SaleID, Status, CashierName FROM Sales WHERE GCashReferenceNumber = ?"
+            # ✅ UPDATED SQL - Join with CashierSessions to get cashier name
+            check_sql = """
+                SELECT s.SaleID, s.Status, s.SessionID, cs.CashierName
+                FROM Sales s
+                LEFT JOIN CashierSessions cs ON s.SessionID = cs.SessionID
+                WHERE s.GCashReferenceNumber = ?
+            """
             await cursor.execute(check_sql, reference_number)
             existing_order = await cursor.fetchone()
             
@@ -1080,13 +1105,33 @@ async def update_pos_status_for_online_order(
                     detail=f"No POS sale found with reference number '{reference_number}'."
                 )
             
-            logger.info(f"Found POS Sale - ID: {existing_order.SaleID}, Current Status: {existing_order.Status}, Current Cashier: {existing_order.CashierName}")
+            current_cashier_name = existing_order.CashierName or "Unknown"
+            logger.info(f"Found POS Sale - ID: {existing_order.SaleID}, Current Status: {existing_order.Status}, Current Cashier: {current_cashier_name}, SessionID: {existing_order.SessionID}")
             
             cashier_to_update = request.cashier_name or current_user.get('username')
             old_status = existing_order.Status
             actor = current_user.get("username")
             
-            logger.info(f"Will update CashierName to: {cashier_to_update}")
+            logger.info(f"Will update to cashier: {cashier_to_update}")
+            
+            # ✅ Find or create session for the new cashier
+            new_session_id = existing_order.SessionID  # Default to current session
+            
+            if cashier_to_update:
+                # Try to find an active session for the cashier
+                await cursor.execute(
+                    "SELECT SessionID FROM CashierSessions WHERE CashierName = ? AND Status = 'Active'",
+                    cashier_to_update
+                )
+                session_result = await cursor.fetchone()
+                
+                if session_result:
+                    new_session_id = session_result.SessionID
+                    logger.info(f"Found active session {new_session_id} for cashier {cashier_to_update}")
+                else:
+                    # For online orders, allow NULL session if no active session exists
+                    new_session_id = None
+                    logger.info(f"No active session for {cashier_to_update}, setting SessionID to NULL")
             
             # Generate detailed description BEFORE updating
             detailed_description = await build_simple_update_description(
@@ -1094,14 +1139,15 @@ async def update_pos_status_for_online_order(
                 request.newStatus
             )
             
+            # ✅ UPDATED SQL - Update SessionID instead of CashierName
             update_sql = """
                 UPDATE Sales 
                 SET Status = ?, 
-                    CashierName = ?, 
+                    SessionID = ?, 
                     UpdatedAt = GETDATE() 
                 WHERE GCashReferenceNumber = ?
             """
-            await cursor.execute(update_sql, request.newStatus, cashier_to_update, reference_number)
+            await cursor.execute(update_sql, request.newStatus, new_session_id, reference_number)
             
             if cursor.rowcount == 0:
                 logger.error(f"Update affected 0 rows for reference '{reference_number}'")
@@ -1125,7 +1171,8 @@ async def update_pos_status_for_online_order(
                     "old_status": old_status,
                     "new_status": request.newStatus,
                     "reference_number": reference_number,
-                    "cashier_updated_to": cashier_to_update
+                    "cashier_updated_to": cashier_to_update,
+                    "session_id": new_session_id
                 },
                 token=current_user['access_token']
             )
@@ -1133,7 +1180,7 @@ async def update_pos_status_for_online_order(
             logger.info(
                 f"✅ Successfully updated POS status for reference '{reference_number}' "
                 f"from '{old_status}' to '{request.newStatus}' "
-                f"and cashier from '{existing_order.CashierName}' to '{cashier_to_update}'"
+                f"and updated SessionID to {new_session_id} (cashier: {cashier_to_update})"
             )
             
             return {
@@ -1142,7 +1189,8 @@ async def update_pos_status_for_online_order(
                 "sale_id": existing_order.SaleID,
                 "previous_status": old_status,
                 "new_status": request.newStatus,
-                "cashier_name": cashier_to_update
+                "cashier_name": cashier_to_update,
+                "session_id": new_session_id
             }
 
     except HTTPException:

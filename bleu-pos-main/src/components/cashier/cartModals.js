@@ -1,73 +1,11 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
-import { Receipt, CreditCard } from 'lucide-react';
+import { Receipt, CreditCard, Trash2 } from 'lucide-react';
 import { HiOutlineCheck } from 'react-icons/hi';
 import { faPercent } from '@fortawesome/free-solid-svg-icons';
+import { FiMinus, FiPlus } from "react-icons/fi";
 import './cartModals.css';
-
-export const ManagerPinModal = ({
-  show,
-  onClose,
-  onSubmit,
-  isProcessing,
-  error,
-}) => {
-  const [pin, setPin] = useState('');
-
-  useEffect(() => {
-    if (!show) {
-      setPin('');
-    }
-  }, [show]);
-
-  const handlePinChange = (e) => {
-    const value = e.target.value;
-    if (/^\d*$/.test(value) && value.length <= 6) {
-      setPin(value);
-    }
-  };
-
-  const handleSubmit = () => {
-    if (pin.length >= 4) {
-      onSubmit(pin);
-    }
-  };
-
-  if (!show) return null;
-
-  return (
-    <div className="discPin-modal-overlay" onClick={onClose}>
-      <div className="discPin-modal" onClick={(e) => e.stopPropagation()}>
-        <div className="discPin-modal-header">
-          <h3>Manager PIN Required</h3>
-          <button className="discPin-close-modal" onClick={onClose}>×</button>
-        </div>
-        <div className="discPin-modal-content">
-          <p>Please ask a manager to enter their PIN to apply discount.</p>
-          <input
-            type="password"
-            inputMode="numeric"
-            value={pin}
-            onChange={handlePinChange}
-            placeholder="Enter PIN"
-            className="discPin-input"
-            autoFocus
-          />
-          {error && <p className="discPin-error-message">{error}</p>}
-        </div>
-        <div className="discPin-modal-footer">
-          <button onClick={onClose} disabled={isProcessing} className="discPin-btn-cancel">
-            Cancel
-          </button>
-          <button onClick={handleSubmit} disabled={isProcessing || pin.length < 4} className="discPin-btn-confirm">
-            {isProcessing ? 'Verifying...' : 'Confirm'}
-          </button>
-        </div>
-      </div>
-    </div>
-  );
-};
 
 export const AddonsModal = ({
   showAddonsModal,
@@ -137,143 +75,66 @@ export const AddonsModal = ({
   );
 };
 
-export const ItemDiscountModal = ({
-  showItemDiscountModal,
-  closeItemDiscountModal,
-  isLoading,
+export const ManagerPinModal = ({
+  show,
+  onClose,
+  onSubmit,
+  isProcessing,
   error,
-  availableDiscounts,
-  stagedItemDiscounts,
-  toggleStagedItemDiscount,
-  applyItemDiscounts,
-  selectedItem,
-  isItemDiscountApplicable,
-  calculateItemDiscount
 }) => {
-  const [showPinModal, setShowPinModal] = useState(false);
-  const [pinError, setPinError] = useState('');
-  const [isVerifyingPin, setIsVerifyingPin] = useState(false);
+  const [pin, setPin] = useState('');
 
-  const handleDiscountRequest = () => {
-    if (stagedItemDiscounts.length > 0) {
-      setPinError(''); 
-      setShowPinModal(true);
-    } else {
-      applyItemDiscounts();
-    }
-  };
-
-  const handlePinVerification = async (pin) => {
-    setIsVerifyingPin(true);
-    setPinError('');
-    try {
-      const token = localStorage.getItem('authToken');
-      const response = await fetch('http://127.0.0.1:4000/users/verify-pin', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${token}`
-        },
-        body: JSON.stringify({ pin })
-      });
-
-      if (!response.ok) {
-        const errorData = await response.json();
-        throw new Error(errorData.detail || 'Invalid Manager PIN.');
-      }
-
-      setShowPinModal(false);
-      applyItemDiscounts();
-
-    } catch (err) {
-      setPinError(err.message);
-    } finally {
-      setIsVerifyingPin(false);
-    }
-  };
-  
   useEffect(() => {
-    if (!showItemDiscountModal) {
-      setShowPinModal(false);
+    if (!show) {
+      setPin('');
     }
-  }, [showItemDiscountModal]);
+  }, [show]);
 
-  if (!showItemDiscountModal) return null;
+  const handlePinChange = (e) => {
+    const value = e.target.value;
+    if (/^\d*$/.test(value) && value.length <= 6) {
+      setPin(value);
+    }
+  };
+
+  const handleSubmit = () => {
+    if (pin.length >= 4) {
+      onSubmit(pin);
+    }
+  };
+
+  if (!show) return null;
 
   return (
-    <>
-      <div className="cDiscount-modal-overlay" onClick={closeItemDiscountModal}>
-        <div className="cDiscount-modal" onClick={(e) => e.stopPropagation()}>
-          <div className="cDiscount-modal-header">
-            <h3>Item Discount {selectedItem && `- ${selectedItem.name}`}</h3>
-            <button className="cDiscount-close-modal" onClick={closeItemDiscountModal}>×</button>
-          </div>
-          <div className="cDiscount-content">
-            {isLoading && <p>Loading discounts...</p>}
-            {error && <p className="cDiscount-error-message">{error}</p>}
-            {!isLoading && !error && selectedItem && availableDiscounts.map(discount => {
-              const isStaged = stagedItemDiscounts.includes(discount.id);
-              const isEligible = isItemDiscountApplicable(discount, selectedItem);
-              const isDisabled = !isEligible || (stagedItemDiscounts.length > 0 && !isStaged);
-              
-              return (
-                <div 
-                  key={discount.id} 
-                  className={`cDiscount-item ${isStaged ? 'cDiscount-selected' : ''} ${isDisabled ? 'cDiscount-disabled' : ''}`} 
-                  onClick={() => !isDisabled && toggleStagedItemDiscount(discount.id)}
-                >
-                  <div className="cDiscount-checkbox">
-                    <input 
-                      type="radio" 
-                      checked={isStaged} 
-                      onChange={() => !isDisabled && toggleStagedItemDiscount(discount.id)} 
-                      disabled={isDisabled} 
-                    />
-                  </div>
-                  <div className="cDiscount-info">
-                    <div className="cDiscount-name">{discount.name}</div>
-                    <div className="cDiscount-description">
-                      <span>
-                        {discount.type === 'percentage'
-                          ? `Discount: ${discount.value}%`
-                          : `Discount: ₱${Number(discount.value).toFixed(2)}`}
-                      </span>
-
-                      {discount.minAmount && (
-                        <span className="cDiscount-min-spend">
-                          {' | '}Min. Spend: ₱{Number(discount.minAmount).toFixed(2)}
-                        </span>
-                      )}
-
-                      {!isEligible && (
-                        <span className="cDiscount-min-requirement"> (Not applicable)</span>
-                      )}
-                    </div>
-                  </div>
-                  <div className="cDiscount-icon">
-                    <FontAwesomeIcon icon={faPercent} />
-                  </div>
-                </div>
-              );
-            })}
-          </div>
-          <div className="cDiscount-modal-footer">
-            <div className="cDiscount-summary">
-              <span>Total Discount: ₱{calculateItemDiscount(stagedItemDiscounts).toFixed(2)}</span>
-            </div>
-            <button className="cDiscount-apply-btn" onClick={handleDiscountRequest}>Apply</button>
-          </div>
+    <div className="discPin-modal-overlay" onClick={onClose}>
+      <div className="discPin-modal" onClick={(e) => e.stopPropagation()}>
+        <div className="discPin-modal-header">
+          <h3>Manager PIN Required</h3>
+          <button className="discPin-close-modal" onClick={onClose}>×</button>
+        </div>
+        <div className="discPin-modal-content">
+          <p>Please ask a manager to enter their PIN to apply discount.</p>
+          <input
+            type="password"
+            inputMode="numeric"
+            value={pin}
+            onChange={handlePinChange}
+            placeholder="Enter PIN"
+            className="discPin-input"
+            autoFocus
+          />
+          {error && <p className="discPin-error-message">{error}</p>}
+        </div>
+        <div className="discPin-modal-footer">
+          <button onClick={onClose} disabled={isProcessing} className="discPin-btn-cancel">
+            Cancel
+          </button>
+          <button onClick={handleSubmit} disabled={isProcessing || pin.length < 4} className="discPin-btn-confirm">
+            {isProcessing ? 'Verifying...' : 'Confirm'}
+          </button>
         </div>
       </div>
-
-      <ManagerPinModal
-        show={showPinModal}
-        onClose={() => setShowPinModal(false)}
-        onSubmit={handlePinVerification}
-        isProcessing={isVerifyingPin}
-        error={pinError}
-      />
-    </>
+    </div>
   );
 };
 
@@ -283,29 +144,185 @@ export const DiscountsModal = ({
   isLoading,
   error,
   availableDiscounts,
-  stagedDiscounts,
-  toggleStagedDiscount,
+  cartItems,
   getSubtotal,
-  getStagedDiscount,
-  applyDiscounts,
-  isDiscountApplicable
+  getTotalAddonsPrice,
+  applyDiscountWithItems,
+  appliedDiscounts = [],
+  removeAllDiscounts, // NEW PROP
 }) => {
+  const [selectedDiscount, setSelectedDiscount] = useState(null);
+  const [selectedItemsQty, setSelectedItemsQty] = useState({});
   const [showPinModal, setShowPinModal] = useState(false);
   const [pinError, setPinError] = useState('');
   const [isVerifyingPin, setIsVerifyingPin] = useState(false);
+  const [discountData, setDiscountData] = useState(null);
 
-  const handleDiscountRequest = () => {
-    if (stagedDiscounts.length > 0) {
-      setPinError(''); 
-      setShowPinModal(true);
-    } else {
-      applyDiscounts();
+  useEffect(() => {
+    if (!showDiscountsModal) {
+      setSelectedDiscount(null);
+      setSelectedItemsQty({});
+      setShowPinModal(false);
+      setPinError('');
+      setDiscountData(null);
     }
+  }, [showDiscountsModal]);
+
+  const handleDiscountSelect = (discount) => {
+    const subtotal = getSubtotal();
+    const isEligible = !discount.minAmount || subtotal >= discount.minAmount;
+    
+    if (!isEligible) return;
+    
+    if (selectedDiscount?.id === discount.id) {
+      setSelectedDiscount(null);
+      setSelectedItemsQty({});
+    } else {
+      setSelectedDiscount(discount);
+      setSelectedItemsQty({});
+    }
+  };
+
+  const itemHasDiscount = (itemIndex) => {
+    return appliedDiscounts.some(discount => 
+      discount.selectedItemsQty && discount.selectedItemsQty[itemIndex] > 0
+    );
+  };
+
+  const getAvailableQuantity = (itemIndex) => {
+    const item = cartItems[itemIndex];
+    const discountedQty = appliedDiscounts.reduce((total, discount) => {
+      return total + (discount.selectedItemsQty?.[itemIndex] || 0);
+    }, 0);
+    return item.quantity - discountedQty;
+  };
+
+  const handleItemQuantityChange = (itemIndex, change) => {
+    setSelectedItemsQty(prev => {
+      const currentQty = prev[itemIndex] || 0;
+      const availableQty = getAvailableQuantity(itemIndex);
+      const newQty = Math.max(0, Math.min(availableQty, currentQty + change));
+      
+      if (newQty === 0) {
+        const updated = { ...prev };
+        delete updated[itemIndex];
+        return updated;
+      }
+      
+      return { ...prev, [itemIndex]: newQty };
+    });
+  };
+
+  const handleSelectAll = () => {
+    if (!selectedDiscount) return;
+    
+    const eligibleItems = cartItems
+      .map((item, index) => ({ item, index }))
+      .filter(({ item, index }) => 
+        isItemEligible(item, selectedDiscount) && getAvailableQuantity(index) > 0
+      );
+    
+    const allSelected = eligibleItems.every(({ index }) => 
+      selectedItemsQty[index] === getAvailableQuantity(index)
+    );
+    
+    if (allSelected) {
+      setSelectedItemsQty({});
+    } else {
+      const newSelected = {};
+      eligibleItems.forEach(({ index }) => {
+        newSelected[index] = getAvailableQuantity(index);
+      });
+      setSelectedItemsQty(newSelected);
+    }
+  };
+
+  const isItemEligible = (item, discount) => {
+    if (!discount) return false;
+    
+    switch (discount.applicationType) {
+      case 'all_products':
+        return true;
+      case 'specific_products':
+        return discount.applicableProducts?.includes(item.name);
+      case 'specific_categories':
+        return discount.applicableCategories?.includes(item.category);
+      default:
+        return false;
+    }
+  };
+
+  const calculateSelectedSubtotal = () => {
+    return Object.entries(selectedItemsQty).reduce((total, [itemIndex, qty]) => {
+      const item = cartItems[itemIndex];
+      const itemPrice = item.price + getTotalAddonsPrice(item.addons);
+      return total + (itemPrice * qty);
+    }, 0);
+  };
+
+  const calculateItemDiscount = (itemIndex) => {
+    const qty = selectedItemsQty[itemIndex];
+    if (!selectedDiscount || !qty) return 0;
+    
+    const item = cartItems[itemIndex];
+    const itemSubtotal = (item.price + getTotalAddonsPrice(item.addons)) * qty;
+    const selectedSubtotal = calculateSelectedSubtotal();
+    
+    if (selectedSubtotal === 0) return 0;
+    
+    let totalDiscountValue = 0;
+    
+    if (selectedDiscount.type === 'percentage') {
+      totalDiscountValue = selectedSubtotal * (selectedDiscount.value / 100);
+    } else if (selectedDiscount.type === 'fixed') {
+      totalDiscountValue = Math.min(selectedDiscount.value, selectedSubtotal);
+    }
+    
+    const itemDiscount = (itemSubtotal / selectedSubtotal) * totalDiscountValue;
+    return itemDiscount;
+  };
+
+  const calculateTotalDiscount = () => {
+    if (!selectedDiscount || Object.keys(selectedItemsQty).length === 0) return 0;
+    
+    const selectedSubtotal = calculateSelectedSubtotal();
+    
+    if (selectedDiscount.type === 'percentage') {
+      return selectedSubtotal * (selectedDiscount.value / 100);
+    } else if (selectedDiscount.type === 'fixed') {
+      return Math.min(selectedDiscount.value, selectedSubtotal);
+    }
+    
+    return 0;
+  };
+
+  const handleApplyDiscount = () => {
+    if (!selectedDiscount || Object.keys(selectedItemsQty).length === 0) {
+      alert('Please select a discount and at least one item with quantity.');
+      return;
+    }
+
+    const data = {
+      discount: selectedDiscount,
+      selectedItemsQty: selectedItemsQty,
+      selectedSubtotal: calculateSelectedSubtotal(),
+      totalDiscount: calculateTotalDiscount(),
+      itemDiscounts: Object.entries(selectedItemsQty).map(([itemIndex, qty]) => ({
+        itemIndex: parseInt(itemIndex),
+        quantity: qty,
+        discountAmount: calculateItemDiscount(parseInt(itemIndex))
+      }))
+    };
+
+    setDiscountData(data);
+    setPinError('');
+    setShowPinModal(true);
   };
 
   const handlePinVerification = async (pin) => {
     setIsVerifyingPin(true);
     setPinError('');
+    
     try {
       const token = localStorage.getItem('authToken');
       const response = await fetch('http://127.0.0.1:4000/users/verify-pin', {
@@ -323,87 +340,228 @@ export const DiscountsModal = ({
       }
 
       setShowPinModal(false);
-      applyDiscounts();
-
+      applyDiscountWithItems(discountData);
+      closeDiscountsModal();
+      
     } catch (err) {
       setPinError(err.message);
     } finally {
       setIsVerifyingPin(false);
     }
   };
-  
-  useEffect(() => {
-    if (!showDiscountsModal) {
-      setShowPinModal(false);
+
+  // NEW FUNCTION: Handle remove all discounts
+  const handleRemoveAllDiscounts = () => {
+    if (window.confirm('Are you sure you want to remove all applied discounts?')) {
+      if (removeAllDiscounts) {
+        removeAllDiscounts();
+      }
     }
-  }, [showDiscountsModal]);
+  };
 
   if (!showDiscountsModal) return null;
+
+  const subtotal = getSubtotal();
+  const eligibleItems = cartItems.filter((item, index) => 
+    selectedDiscount ? isItemEligible(item, selectedDiscount) && getAvailableQuantity(index) > 0 : false
+  );
+  
+  const allEligibleSelected = eligibleItems.length > 0 && 
+    eligibleItems.every((item, idx) => {
+      const itemIndex = cartItems.findIndex(ci => ci === item);
+      return selectedItemsQty[itemIndex] === getAvailableQuantity(itemIndex);
+    });
+
+  const getTotalSelectedQuantity = () => {
+    return Object.values(selectedItemsQty).reduce((sum, qty) => sum + qty, 0);
+  };
 
   return (
     <>
       <div className="cDiscount-modal-overlay" onClick={closeDiscountsModal}>
-        <div className="cDiscount-modal" onClick={(e) => e.stopPropagation()}>
+        <div className="cDiscount-modal cDiscount-modal-wide" onClick={(e) => e.stopPropagation()}>
           <div className="cDiscount-modal-header">
-            <h3>Discounts</h3>
+            <h3>Apply Discount</h3>
             <button className="cDiscount-close-modal" onClick={closeDiscountsModal}>×</button>
           </div>
-          <div className="cDiscount-content">
-            {isLoading && <p>Loading discounts...</p>}
-            {error && <p className="cDiscount-error-message">{error}</p>}
-            {!isLoading && !error && availableDiscounts.map(discount => {
-              const isStaged = stagedDiscounts.includes(discount.id);
-              const subtotal = getSubtotal();
-              const isEligible = !discount.minAmount || subtotal >= discount.minAmount;
-              
-              const isDisabled = !isEligible || (stagedDiscounts.length > 0 && !isStaged);
-              
-              return (
-                <div 
-                  key={discount.id} 
-                  className={`cDiscount-item ${isStaged ? 'cDiscount-selected' : ''} ${isDisabled ? 'cDiscount-disabled' : ''}`} 
-                  onClick={() => !isDisabled && toggleStagedDiscount(discount.id)}
-                >
-                  <div className="cDiscount-checkbox">
-                    <input 
-                      type="radio" 
-                      checked={isStaged} 
-                      onChange={() => !isDisabled && toggleStagedDiscount(discount.id)} 
-                      disabled={isDisabled} 
-                    />
-                  </div>
-                  <div className="cDiscount-info">
-                    <div className="cDiscount-name">{discount.name}</div>
-                    <div className="cDiscount-description">
-                      <span>
-                        {discount.type === 'percentage'
-                          ? `Discount: ${discount.value}%`
-                          : `Discount: ₱${Number(discount.value).toFixed(2)}`}
-                      </span>
-
-                      {discount.minAmount && (
-                        <span className="cDiscount-min-spend">
-                          {' | '}Min. Spend: ₱{Number(discount.minAmount).toFixed(2)}
-                        </span>
-                      )}
-
-                      {!isEligible && discount.minAmount && (
-                        <span className="cDiscount-min-requirement"> (Not eligible)</span>
-                      )}
+          
+          <div className="cDiscount-content-split">
+            {/* Left Panel - Discount Selection */}
+            <div className="cDiscount-panel cDiscount-panel-left">
+              <div className="cDiscount-panel-header">
+                <h4 className="cDiscount-panel-title">Select Discount</h4>
+                {appliedDiscounts.length > 0 && (
+                  <button 
+                    className="cDiscount-remove-all-btn"
+                    onClick={handleRemoveAllDiscounts}
+                    title="Remove all applied discounts"
+                  >
+                    <Trash2 size={18} />
+                  </button>
+                )}
+              </div>
+              <div className="cDiscount-list">
+                {isLoading && <p>Loading discounts...</p>}
+                {error && <p className="cDiscount-error-message">{error}</p>}
+                {!isLoading && !error && availableDiscounts.map(discount => {
+                  const isSelected = selectedDiscount?.id === discount.id;
+                  const isEligible = !discount.minAmount || subtotal >= discount.minAmount;
+                  const isDisabled = !isEligible;
+                  
+                  return (
+                    <div 
+                      key={discount.id} 
+                      className={`cDiscount-item ${isSelected ? 'cDiscount-selected' : ''} ${isDisabled ? 'cDiscount-disabled' : ''}`} 
+                      onClick={() => !isDisabled && handleDiscountSelect(discount)}
+                    >
+                      <div className="cDiscount-checkbox">
+                        <input 
+                          type="radio" 
+                          checked={isSelected} 
+                          onChange={() => !isDisabled && handleDiscountSelect(discount)} 
+                          disabled={isDisabled} 
+                        />
+                      </div>
+                      <div className="cDiscount-info">
+                        <div className="cDiscount-name">{discount.name}</div>
+                        <div className="cDiscount-description">
+                          <span>
+                            {discount.type === 'percentage'
+                              ? `${discount.value}% off`
+                              : `₱${Number(discount.value).toFixed(2)} off`}
+                          </span>
+                          {discount.minAmount && (
+                            <span className="cDiscount-min-spend">
+                              {' | '}Min. Spend: ₱{Number(discount.minAmount).toFixed(2)}
+                            </span>
+                          )}
+                          {!isEligible && discount.minAmount && (
+                            <span className="cDiscount-min-requirement"> (Not eligible)</span>
+                          )}
+                        </div>
+                      </div>
+                      <div className="cDiscount-icon">
+                        <FontAwesomeIcon icon={faPercent} />
+                      </div>
                     </div>
-                  </div>
-                  <div className="cDiscount-icon">
-                    <FontAwesomeIcon icon={faPercent} />
-                  </div>
-                </div>
-              );
-            })}
+                  );
+                })}
+              </div>
+            </div>
+
+            {/* Right Panel - Item Selection with Quantity */}
+            <div className="cDiscount-panel cDiscount-panel-right">
+              <div className="cDiscount-panel-header">
+                {selectedDiscount && eligibleItems.length > 0 && (
+                  <input
+                    type="checkbox"
+                    checked={allEligibleSelected}
+                    onChange={handleSelectAll}
+                    className="cDiscount-select-all-checkbox"
+                  />
+                )}
+                <h4 className="cDiscount-panel-title">Select Items & Quantity</h4>
+              </div>
+              
+              <div className="cDiscount-items-list">
+                {!selectedDiscount && (
+                  <p className="cDiscount-placeholder">Select a discount to choose items</p>
+                )}
+                
+                {selectedDiscount && eligibleItems.length === 0 && (
+                  <p className="cDiscount-placeholder">No eligible items for this discount</p>
+                )}
+                
+                {selectedDiscount && eligibleItems.length > 0 && cartItems.map((item, index) => {
+                  if (!isItemEligible(item, selectedDiscount)) return null;
+                  
+                  const availableQty = getAvailableQuantity(index);
+                  if (availableQty === 0) return null;
+                  
+                  const selectedQty = selectedItemsQty[index] || 0;
+                  const itemPrice = item.price + getTotalAddonsPrice(item.addons);
+                  const itemSubtotal = itemPrice * selectedQty;
+                  const itemDiscount = calculateItemDiscount(index);
+                  
+                  const hasOtherDiscounts = appliedDiscounts.some(discount => 
+                    discount.selectedItemsQty && discount.selectedItemsQty[index] > 0
+                  );
+                  
+                  return (
+                    <div 
+                      key={index}
+                      className={`cDiscount-cart-item ${selectedQty > 0 ? 'cDiscount-item-selected' : ''}`}
+                    >
+                      <img src={item.image} alt={item.name} className="cDiscount-item-image" />
+                      
+                      <div className="cDiscount-item-details">
+                        <div className="cDiscount-item-name">{item.name}</div>
+                        <div className="cDiscount-item-meta">
+                          Available: {availableQty} × ₱{itemPrice.toFixed(2)}
+                          {hasOtherDiscounts && (
+                            <span style={{color: '#ff9800', marginLeft: '8px'}}>
+                              ({item.quantity - availableQty} already discounted)
+                            </span>
+                          )}
+                        </div>
+                        {selectedQty > 0 && (
+                          <>
+                            <div className="cDiscount-item-subtotal">
+                              Subtotal: ₱{itemSubtotal.toFixed(2)}
+                            </div>
+                            {itemDiscount > 0 && (
+                              <div className="cDiscount-item-discount">
+                                Discount: -₱{itemDiscount.toFixed(2)}
+                              </div>
+                            )}
+                          </>
+                        )}
+                      </div>
+
+                      <div className="cDiscount-qty-controls">
+                        <button 
+                          onClick={() => handleItemQuantityChange(index, -1)}
+                          disabled={selectedQty === 0}
+                        >
+                          <FiMinus />
+                        </button>
+                        <span className="cDiscount-qty-display">{selectedQty}</span>
+                        <button 
+                          onClick={() => handleItemQuantityChange(index, 1)}
+                          disabled={selectedQty >= availableQty}
+                        >
+                          <FiPlus />
+                        </button>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
           </div>
+
           <div className="cDiscount-modal-footer">
             <div className="cDiscount-summary">
-              <span>Total Discount: ₱{getStagedDiscount().toFixed(2)}</span>
+              <div className="cDiscount-summary-row">
+                <span>Selected Quantity:</span>
+                <span>{getTotalSelectedQuantity()}</span>
+              </div>
+              <div className="cDiscount-summary-row">
+                <span>Selected Subtotal:</span>
+                <span>₱{calculateSelectedSubtotal().toFixed(2)}</span>
+              </div>
+              <div className="cDiscount-summary-row cDiscount-summary-total">
+                <span>Total Discount:</span>
+                <span>-₱{calculateTotalDiscount().toFixed(2)}</span>
+              </div>
             </div>
-            <button className="cDiscount-apply-btn" onClick={handleDiscountRequest}>Apply</button>
+            <button 
+              className="cDiscount-apply-btn" 
+              onClick={handleApplyDiscount}
+              disabled={!selectedDiscount || Object.keys(selectedItemsQty).length === 0}
+            >
+              Apply Discount
+            </button>
           </div>
         </div>
       </div>
@@ -414,8 +572,6 @@ export const DiscountsModal = ({
         onSubmit={handlePinVerification}
         isProcessing={isVerifyingPin}
         error={pinError}
-        title="Manager Authorization"
-        description="Please enter a manager PIN to apply discounts."
       />
     </>
   );
@@ -427,32 +583,19 @@ export const TransactionSummaryModal = ({
   cartItems,
   orderType,
   paymentMethod,
-  appliedDiscounts,
-  availableDiscounts,
+  appliedDiscounts = [],
   getTotalAddonsPrice,
   getSubtotal,
   promotionalDiscountValue,
   manualDiscountValue,
-  itemDiscountsValue,
   autoPromotion,
   getTotal,
   confirmTransaction,
   isProcessing,
-  calculateItemDiscount,
-  getItemDiscountsSummary
+  getItemDiscount,
+  getItemDiscountedQty
 }) => {
   if (!showTransactionSummary) return null;
-
-  const allAppliedDiscountNames = [];
-  if (autoPromotion) {
-    allAppliedDiscountNames.push(autoPromotion.name);
-  }
-  const manualDiscountNames = appliedDiscounts.map(discountId => {
-    const discount = availableDiscounts.find(d => d.id === discountId);
-    return discount ? discount.name : '';
-  }).filter(Boolean);
-
-  allAppliedDiscountNames.push(...manualDiscountNames);
 
   return (
     <div className="trnsSummary-modal-overlay" onClick={() => setShowTransactionSummary(false)}>
@@ -478,74 +621,54 @@ export const TransactionSummaryModal = ({
               <span className="trnsSummary-value">{paymentMethod}</span>
             </div>
           </div>
-
-          {allAppliedDiscountNames.length > 0 && (
-            <div className="trnsSummary-applied-discounts">
-              <div className="trnsSummary-applied-discounts-header">
-                <h4>Applied Discounts & Promotions</h4>
-                <div className="trnsSummary-applied-discounts-list">
-                  {autoPromotion && (
-                    <div className="trnsSummary-discount-item-summary">
-                      <FontAwesomeIcon icon={faPercent} />
-                      <span>Promo: {autoPromotion.name}</span>
-                    </div>
-                  )}
-                  {appliedDiscounts.map((discountId, index) => {
-                    const discount = availableDiscounts.find(d => d.id === discountId);
-                    if (!discount) return null;
-                    return (
-                      <div key={index} className="trnsSummary-discount-item-summary">
-                        <FontAwesomeIcon icon={faPercent} />
-                        <span>Discount: {discount.name}</span>
-                      </div>
-                    );
-                  })}
-                </div>
-              </div>
-            </div>
-          )}
           
           <div className="trnsSummary-order-items">
-          <h4>Order Items</h4>
-          <div className="trnsSummary-items-scrollable">
-            {cartItems.map((item, index) => {
-              const itemDiscount = calculateItemDiscount ? calculateItemDiscount(item) : 0;
-              const itemTotal = (item.price + getTotalAddonsPrice(item.addons)) * item.quantity;
-              const itemDiscountSummary = getItemDiscountsSummary ? getItemDiscountsSummary(item) : null;
-              
-              return (
-                <div key={index} className="trnsSummary-summary-item">
-                  <div className="trnsSummary-item-header">
-                    <span className="trnsSummary-item-name">{item.name}</span>
-                    <span className="trnsSummary-item-total">
-                      ₱{(itemTotal - itemDiscount).toFixed(2)}
-                    </span>
-                  </div>
-                  <div className="trnsSummary-item-details">
-                    <span className="trnsSummary-quantity">Qty: {item.quantity}</span>
-                    <span className="trnsSummary-base-price">₱{item.price.toFixed(2)} each</span>
-                  </div>
-                  {item.addons && item.addons.length > 0 && (
-                    <div className="trnsSummary-item-addons">
-                      {item.addons.map(addon => (
-                        <span key={addon.addonId}>
-                          • {addon.quantity} {addon.addonName} (+₱{(addon.price * addon.quantity).toFixed(2)})
-                        </span>
-                      ))}
-                    </div>
-                  )}
-                  {itemDiscountSummary && itemDiscount > 0 && (
-                    <div className="trnsSummary-item-discount">
-                      <span>
-                        🏷️ {itemDiscountSummary}: -₱{itemDiscount.toFixed(2)}
+            <h4>Order Items</h4>
+            <div className="trnsSummary-items-scrollable">
+              {cartItems.map((item, index) => {
+                const itemDiscount = getItemDiscount ? getItemDiscount(index) : 0;
+                const discountedQty = getItemDiscountedQty ? getItemDiscountedQty(index) : 0;
+                const itemTotal = (item.price + getTotalAddonsPrice(item.addons)) * item.quantity;
+                
+                return (
+                  <div key={index} className="trnsSummary-summary-item">
+                    <div className="trnsSummary-item-header">
+                      <span className="trnsSummary-item-name">{item.name}</span>
+                      <span className="trnsSummary-item-total">
+                        ₱{(itemTotal - itemDiscount).toFixed(2)}
                       </span>
                     </div>
-                  )}
-                </div>
-              );
-            })}
+                    <div className="trnsSummary-item-details">
+                      <span className="trnsSummary-quantity">Qty: {item.quantity}</span>
+                      <span className="trnsSummary-base-price">₱{item.price.toFixed(2)} each</span>
+                    </div>
+                    {item.addons && item.addons.length > 0 && (
+                      <div className="trnsSummary-item-addons">
+                        {item.addons.map(addon => (
+                          <span key={addon.addonId}>
+                            • {addon.quantity * item.quantity} {addon.addonName} (+₱{(addon.price * addon.quantity * item.quantity).toFixed(2)})
+                          </span>
+                        ))}
+                      </div>
+                    )}
+                    {itemDiscount > 0 && (
+                      <div className="trnsSummary-item-discount">
+                        {appliedDiscounts.map((discountData, discIdx) => {
+                          const itemDiscountInfo = discountData.itemDiscounts?.find(d => d.itemIndex === index);
+                          if (!itemDiscountInfo || itemDiscountInfo.discountAmount === 0) return null;
+                          return (
+                            <span key={discIdx}>
+                              {discountData.discount?.name || 'Discount'} ({itemDiscountInfo.quantity}): -₱{itemDiscountInfo.discountAmount.toFixed(2)}
+                            </span>
+                          );
+                        })}
+                      </div>
+                    )}
+                  </div>
+                );
+              })}
+            </div>
           </div>
-        </div>
           
           <div className="trnsSummary-price-breakdown">
             <div className="trnsSummary-breakdown-row">
@@ -555,22 +678,17 @@ export const TransactionSummaryModal = ({
 
             {promotionalDiscountValue > 0 && (
               <div className="trnsSummary-breakdown-row trnsSummary-discount">
-                <span>Promotion:</span>
+                <span>{autoPromotion?.name || 'Promotion'}:</span>
                 <span>-₱{promotionalDiscountValue.toFixed(2)}</span>
               </div>
             )}
 
             {manualDiscountValue > 0 && (
               <div className="trnsSummary-breakdown-row trnsSummary-discount">
-                <span>Discount:</span>
+                <span>
+                  Discount:
+                </span>
                 <span>-₱{manualDiscountValue.toFixed(2)}</span>
-              </div>
-            )}
-
-            {itemDiscountsValue > 0 && (
-              <div className="trnsSummary-breakdown-row trnsSummary-discount">
-                <span>Item Discounts:</span>
-                <span>-₱{itemDiscountsValue.toFixed(2)}</span>
               </div>
             )}
             

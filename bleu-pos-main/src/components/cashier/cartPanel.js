@@ -1,6 +1,6 @@
-import React, { useState, useEffect, useMemo, useCallback } from 'react';
+import React, { useState, useEffect } from 'react';
 import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
-import { faTrash, faMoneyBills, faQrcode, faPercent } from '@fortawesome/free-solid-svg-icons';
+import { faTrash, faMoneyBills, faQrcode } from '@fortawesome/free-solid-svg-icons';
 import { FiMinus, FiPlus } from "react-icons/fi";
 import './cartPanel.css';
 import { 
@@ -8,8 +8,7 @@ import {
   DiscountsModal, 
   TransactionSummaryModal, 
   GCashReferenceModal,
-  OrderConfirmationModal,
-  ItemDiscountModal
+  OrderConfirmationModal
 } from './cartModals';
 
 const SALES_API_URL = 'http://127.0.0.1:9000';
@@ -28,30 +27,24 @@ const CartPanel = ({
   promotions = []
 }) => {
   // Component states
+  const [showDiscountsModal, setShowDiscountsModal] = useState(false);
+  const [appliedDiscounts, setAppliedDiscounts] = useState([]);
+  const [availableDiscounts, setAvailableDiscounts] = useState([]);
+  const [isLoading, setIsLoading] = useState(false);
+  const [error, setError] = useState(null);
+  const [showTransactionSummary, setShowTransactionSummary] = useState(false);
+  const [showGCashReference, setShowGCashReference] = useState(false);
+  const [isProcessing, setIsProcessing] = useState(false);
+  const [showConfirmation, setShowConfirmation] = useState(false);
+  
+  const [autoPromotion, setAutoPromotion] = useState(null);
+
+  // Add-ons states
   const [showAddonsModal, setShowAddonsModal] = useState(false);
   const [selectedItemIndex, setSelectedItemIndex] = useState(null);
   const [addons, setAddons] = useState([]);
   const [availableAddons, setAvailableAddons] = useState([]);
   const [isAddonsLoading, setIsAddonsLoading] = useState(false);
-
-  const [showDiscountsModal, setShowDiscountsModal] = useState(false);
-  const [appliedDiscounts, setAppliedDiscounts] = useState([]);
-  const [stagedDiscounts, setStagedDiscounts] = useState([]);
-  const [showTransactionSummary, setShowTransactionSummary] = useState(false);
-  const [showGCashReference, setShowGCashReference] = useState(false);
-  const [availableDiscounts, setAvailableDiscounts] = useState([]);
-  const [isLoading, setIsLoading] = useState(false);
-  const [isProcessing, setIsProcessing] = useState(false);
-  const [error, setError] = useState(null);
-  const [showConfirmation, setShowConfirmation] = useState(false);
-
-  // Item-level discount states
-  const [showItemDiscountModal, setShowItemDiscountModal] = useState(false);
-  const [itemDiscounts, setItemDiscounts] = useState([]);
-  const [stagedItemDiscounts, setStagedItemDiscounts] = useState([]);
-
-  // --- STATE FOR AUTOMATIC PROMOTIONS ---
-  const [autoPromotion, setAutoPromotion] = useState(null);
 
   // Recalculate max quantities whenever cart changes
   useEffect(() => {
@@ -94,14 +87,14 @@ const CartPanel = ({
           headers: { 'Authorization': `Bearer ${token}` }
         });
         if (!response.ok) {
-            const errorData = await response.json();
-            throw new Error(errorData.detail || 'Failed to fetch discounts. Please log in again.');
+          const errorData = await response.json();
+          throw new Error(errorData.detail || 'Failed to fetch discounts. Please log in again.');
         }
         const data = await response.json();
         const mappedAndFilteredDiscounts = data
           .filter(d => d.status === 'active')
           .map(d => ({
-            id: d.name, 
+            id: d.id,
             name: d.name,
             type: d.type === 'fixed_amount' ? 'fixed' : d.type,
             value: parseFloat(d.discount.replace(/[^0-9.]/g, '')),
@@ -120,7 +113,7 @@ const CartPanel = ({
     fetchDiscounts();
   }, [isCartOpen]);
 
-  // --- AUTOMATIC PROMOTION CALCULATION (CORRECTED) ---
+  // Calculate automatic promotion
   useEffect(() => {
     const calculateBestPromotion = () => {
       let bestPromo = null;
@@ -258,24 +251,72 @@ const CartPanel = ({
     calculateBestPromotion();
   }, [cartItems, promotions, isCartOpen]);
 
-  const isDiscountApplicable = (discount) => {
-    const subtotal = getSubtotal();
-    if (subtotal < discount.minAmount) return false;
-    switch (discount.applicationType) {
-      case 'all_products': return true;
-      case 'specific_products': return cartItems.some(item => discount.applicableProducts.includes(item.name));
-      case 'specific_categories': return cartItems.some(item => discount.applicableCategories.includes(item.category));
-      default: return false;
+  useEffect(() => {
+    if (!isCartOpen) {
+      setCartItems([]);
+      setAppliedDiscounts([]);
+      setAutoPromotion(null);
+      setPaymentMethod('Cash');
+      setOrderType('Dine in');
     }
+  }, [isCartOpen, setCartItems, setPaymentMethod, setOrderType]);
+
+  const getTotalAddonsPrice = (itemAddons) => {
+    if (!Array.isArray(itemAddons)) return 0;
+    return itemAddons.reduce((total, addon) => total + (addon.price * addon.quantity), 0);
   };
 
-  const isItemDiscountApplicable = (discount, item) => {
-    switch (discount.applicationType) {
-      case 'all_products': return true;
-      case 'specific_products': return discount.applicableProducts.includes(item.name);
-      case 'specific_categories': return discount.applicableCategories.includes(item.category);
-      default: return false;
-    }
+  const getSubtotal = () => cartItems.reduce((acc, item) => acc + (item.price * item.quantity), 0);
+
+  const getTotalAddonsCost = () => cartItems.reduce((acc, item) => acc + (getTotalAddonsPrice(item.addons) * item.quantity), 0);
+
+  const getItemDiscount = (itemIndex) => {
+    return appliedDiscounts.reduce((total, discountData) => {
+      const itemDiscountInfo = discountData.itemDiscounts?.find(d => d.itemIndex === itemIndex);
+      return total + (itemDiscountInfo ? itemDiscountInfo.discountAmount : 0);
+    }, 0);
+  };
+
+  const getItemDiscountedQty = (itemIndex) => {
+    return appliedDiscounts.reduce((total, discountData) => {
+      const itemDiscountInfo = discountData.itemDiscounts?.find(d => d.itemIndex === itemIndex);
+      return total + (itemDiscountInfo ? itemDiscountInfo.quantity : 0);
+    }, 0);
+  };
+
+  const getTotalManualDiscount = () => {
+    return appliedDiscounts.reduce((total, discountData) => {
+      return total + (discountData.totalDiscount || 0);
+    }, 0);
+  };
+
+  const promotionalDiscountValue = autoPromotion?.discountAmount || 0;
+  const manualDiscountValue = getTotalManualDiscount();
+
+  const getTotal = () => {
+    const total = getSubtotal() + getTotalAddonsCost() - manualDiscountValue - promotionalDiscountValue;
+    return Math.max(0, parseFloat(total.toFixed(2)));
+  };
+
+  const openDiscountsModal = () => {
+    setShowDiscountsModal(true);
+  };
+
+  const closeDiscountsModal = () => {
+    setShowDiscountsModal(false);
+  };
+
+  const applyDiscountWithItems = (discountData) => {
+    setAppliedDiscounts(prev => [...prev, discountData]);
+    setShowDiscountsModal(false);
+  };
+
+  const removeDiscount = (discountIndex) => {
+    setAppliedDiscounts(prev => prev.filter((_, idx) => idx !== discountIndex));
+  };
+
+  const removeAllDiscounts = () => {
+    setAppliedDiscounts([]);
   };
 
   const openAddonsModal = async (itemIndex) => {
@@ -308,66 +349,6 @@ const CartPanel = ({
     setAvailableAddons([]);
   };
 
-  const openItemDiscountModal = (itemIndex) => {
-    const item = cartItems[itemIndex];
-    if (!item) return;
-    setSelectedItemIndex(itemIndex);
-    setStagedItemDiscounts(item.itemDiscounts || []);
-    setShowItemDiscountModal(true);
-  };
-
-  const closeItemDiscountModal = () => {
-    setShowItemDiscountModal(false);
-    setSelectedItemIndex(null);
-    setStagedItemDiscounts([]);
-  };
-
-  const toggleStagedItemDiscount = (discountId) => {
-    const item = cartItems[selectedItemIndex];
-    const discount = availableDiscounts.find(d => d.id === discountId);
-    if (!discount || !isItemDiscountApplicable(discount, item)) return;
-    if (stagedItemDiscounts.includes(discountId)) {
-      setStagedItemDiscounts([]);
-    } else {
-      setStagedItemDiscounts([discountId]);
-    }
-  };
-
-  const applyItemDiscounts = () => {
-    if (selectedItemIndex !== null) {
-      const updatedCart = [...cartItems];
-      updatedCart[selectedItemIndex].itemDiscounts = [...stagedItemDiscounts];
-      setCartItems(updatedCart);
-    }
-    closeItemDiscountModal();
-  };
-
-  const openDiscountsModal = () => {
-    setStagedDiscounts([...appliedDiscounts]);
-    setShowDiscountsModal(true);
-  };
-
-  const closeDiscountsModal = () => {
-    setShowDiscountsModal(false);
-    setStagedDiscounts([]);
-  };
-
-  const applyDiscounts = () => {
-    setAppliedDiscounts([...stagedDiscounts]);
-    setShowDiscountsModal(false);
-    setStagedDiscounts([]);
-  };
-
-  const toggleStagedDiscount = (discountId) => {
-    const discount = availableDiscounts.find(d => d.id === discountId);
-    if (!discount || !isDiscountApplicable(discount)) return;
-    if (stagedDiscounts.includes(discountId)) {
-      setStagedDiscounts([]);
-    } else {
-      setStagedDiscounts([discountId]);
-    }
-  };
-
   const updateAddons = (addonId, addonName, price, quantity) => {
     setAddons(prev => {
         const existingIndex = prev.findIndex(a => a.addonId === addonId);
@@ -391,88 +372,6 @@ const CartPanel = ({
       setCartItems(updatedCart);
     }
     closeAddonsModal();
-  };
-
-  useEffect(() => {
-    if (!isCartOpen) {
-      setCartItems([]);
-      setAppliedDiscounts([]);
-      setStagedDiscounts([]);
-      setAutoPromotion(null);
-      setPaymentMethod('Cash');
-      setOrderType('Dine in');
-    }
-  }, [isCartOpen, setCartItems, setPaymentMethod, setOrderType]);
-
-  const getTotalAddonsPrice = (itemAddons) => {
-    if (!Array.isArray(itemAddons)) return 0;
-    return itemAddons.reduce((total, addon) => total + (addon.price * addon.quantity), 0);
-  };
-
-  const getTotalAddonsCost = () => cartItems.reduce((acc, item) => acc + (getTotalAddonsPrice(item.addons) * item.quantity), 0);
-
-  const getSubtotal = () => cartItems.reduce((acc, item) => acc + (item.price * item.quantity), 0);
-
-  const calculateItemDiscount = (item) => {
-    if (!item.itemDiscounts || item.itemDiscounts.length === 0) return 0;
-    const discountId = item.itemDiscounts[0];
-    const discount = availableDiscounts.find(d => d.id === discountId);
-    if (!discount || !isItemDiscountApplicable(discount, item)) return 0;
-    
-    const itemPrice = item.price + getTotalAddonsPrice(item.addons);
-    let discountAmount = 0;
-    
-    if (discount.type === 'percentage') {
-      discountAmount = (itemPrice * parseFloat(discount.value)) / 100;
-    } else if (discount.type === 'fixed') {
-      discountAmount = Math.min(parseFloat(discount.value), itemPrice);
-    }
-    
-    return discountAmount * item.quantity;
-  };
-
-  const getTotalItemDiscounts = () => {
-    return cartItems.reduce((total, item) => total + calculateItemDiscount(item), 0);
-  };
-
-  const calculateManualDiscount = (discountList) => {
-    const subtotal = getSubtotal();
-    if (discountList.length === 0) return 0;
-    const discountId = discountList[0];
-    const discount = availableDiscounts.find(d => d.id === discountId);
-    if (!discount || !isDiscountApplicable(discount)) return 0;
-    let eligibleItemPrice = 0;
-    let highestPricedItem = null;
-    if (discount.applicationType === 'all_products') {
-        highestPricedItem = cartItems.reduce((highest, item) => (!highest || item.price > highest.price ? item : highest), null);
-    } else if (discount.applicationType === 'specific_products') {
-        highestPricedItem = cartItems.filter(item => discount.applicableProducts.includes(item.name)).reduce((highest, item) => (!highest || item.price > highest.price ? item : highest), null);
-    } else if (discount.applicationType === 'specific_categories') {
-        highestPricedItem = cartItems.filter(item => discount.applicableCategories.includes(item.category)).reduce((highest, item) => (!highest || item.price > highest.price ? item : highest), null);
-    }
-    if (highestPricedItem) {
-        eligibleItemPrice = highestPricedItem.price + getTotalAddonsPrice(highestPricedItem.addons);
-    }
-    let discountAmount = 0;
-    if (discount.type === 'percentage') {
-      discountAmount = (eligibleItemPrice * parseFloat(discount.value)) / 100;
-    } else if (discount.type === 'fixed') {
-      discountAmount = Math.min(parseFloat(discount.value), eligibleItemPrice);
-    }
-    return Math.min(discountAmount, subtotal);
-  };
-
-  const manualDiscountValue = calculateManualDiscount(appliedDiscounts);
-  const isManualDiscountActive = appliedDiscounts.length > 0;
-  
-  const promotionalDiscountValue = autoPromotion?.discountAmount || 0;
-  const itemDiscountsValue = getTotalItemDiscounts();
-  
-  const getAppliedDiscountNames = () => appliedDiscounts.map(id => availableDiscounts.find(d => d.id === id)?.name).filter(Boolean);
-  
-  const getTotal = () => {
-    const total = getSubtotal() + getTotalAddonsCost() - manualDiscountValue - promotionalDiscountValue - itemDiscountsValue;
-    return Math.max(0, parseFloat(total.toFixed(2)));
   };
 
   const checkQuantityConflicts = async (cartItemToIncrease, simulatedCart) => {
@@ -504,6 +403,7 @@ const CartPanel = ({
   const updateQuantity = async (index, amount) => {
     const currentItem = cartItems[index];
     const newQuantity = currentItem.quantity + amount;
+    
     if (amount > 0 && currentItem.type === 'product') {
       const simulatedCart = cartItems.map((item, i) => i === index ? { ...item, quantity: newQuantity } : item);
       const conflictCheck = await checkQuantityConflicts(currentItem, simulatedCart);
@@ -513,6 +413,7 @@ const CartPanel = ({
         return;
       }
     }
+    
     setCartItems(prev => {
       const updated = [...prev];
       if (amount > 0 && currentItem.maxQuantity && newQuantity > currentItem.maxQuantity) {
@@ -520,16 +421,38 @@ const CartPanel = ({
         return prev;
       }
       if (newQuantity <= 0) {
+        const hasDiscount = appliedDiscounts.some(d => d.selectedItemsQty?.[index]);
+        if (hasDiscount) {
+          setAppliedDiscounts(prevDiscounts => 
+            prevDiscounts.filter(d => !d.selectedItemsQty?.[index])
+          );
+        }
         return updated.filter((_, i) => i !== index);
       } else {
+        const totalDiscountedQty = appliedDiscounts.reduce((sum, d) => {
+          return sum + (d.selectedItemsQty?.[index] || 0);
+        }, 0);
+        
+        if (newQuantity < totalDiscountedQty) {
+          alert(`Cannot reduce quantity below ${totalDiscountedQty} as discounts are applied to ${totalDiscountedQty} ${totalDiscountedQty === 1 ? 'item' : 'items'}. Remove discounts first.`);
+          return prev;
+        }
         updated[index] = { ...currentItem, quantity: newQuantity };
         return updated;
       }
     });
   };
 
-  const removeFromCart = (index) => setCartItems(prev => prev.filter((_, i) => i !== index));
-  
+  const removeFromCart = (index) => {
+    const hasDiscount = appliedDiscounts.some(d => d.selectedItemsQty?.[index]);
+    if (hasDiscount) {
+      setAppliedDiscounts(prevDiscounts => 
+        prevDiscounts.filter(d => !d.selectedItemsQty?.[index])
+      );
+    }
+    setCartItems(prev => prev.filter((_, i) => i !== index));
+  };
+
   const handleProcessTransaction = () => {
     if (cartItems.length === 0) {
       alert('Please add items to your cart before processing the transaction.');
@@ -565,15 +488,18 @@ const CartPanel = ({
     const saleData = {
         cartItems: cartItems.map(item => ({
           ...item, 
-          addons: item.addons || [],
-          itemDiscounts: item.itemDiscounts || []
+          addons: item.addons || []
         })),
         orderType, 
         paymentMethod, 
-        appliedDiscounts: getAppliedDiscountNames(),
+        appliedDiscounts: appliedDiscounts.map(d => ({
+          discountName: d.discount.name,
+          discountId: d.discount.id,
+          itemDiscounts: d.itemDiscounts || []
+        })),
         promotionalDiscountAmount: promotionalDiscountValue,
         promotionalDiscountName: autoPromotion?.name || null,
-        itemDiscountsAmount: itemDiscountsValue,
+        manualDiscountAmount: manualDiscountValue,
         gcashReference: gcashRef
     };
 
@@ -598,205 +524,240 @@ const CartPanel = ({
     }
   };
 
-  const getAddonsSummary = (itemAddons, quantity = 1) => {
-    if (!Array.isArray(itemAddons) || itemAddons.length === 0) return null;
-    return itemAddons.map(addon => `+${addon.quantity * quantity} ${addon.addonName}`).join(', ');
-  };
-
-  const getItemDiscountsSummary = (item) => {
-    if (!item.itemDiscounts || item.itemDiscounts.length === 0) return null;
-    return item.itemDiscounts.map(id => {
-      const discount = availableDiscounts.find(d => d.id === id);
-      return discount ? discount.name : '';
-    }).filter(Boolean).join(', ');
-  };
-
   return (
     <>
-        <div className={`cart-panel ${isCartOpen ? 'open' : ''}`}>
-            <div className="order-section">
-                <h2>Order Details</h2>
-                <div className="order-type-toggle">
-                    <button className={orderType === 'Dine in' ? 'active' : ''} onClick={() => setOrderType('Dine in')}>Dine in</button>
-                    <button className={orderType === 'Take out' ? 'active' : ''} onClick={() => setOrderType('Take out')}>Take out</button>
-                </div>
-                <div className="cart-items">
-                    {cartItems.length > 0 ? (cartItems.map((item, index) => (
-                        <div key={item.cartId || `${item.id}-${index}`} className="cart-item">
-                            <img src={item.image} alt={item.name} />
-                            <div className="item-details">
-                                <div className="item-name">{item.name}</div>
-                                {item.maxQuantity && item.quantity >= item.maxQuantity * 0.8 && (
-                                    <div className="max-qty-warning" style={{fontSize: '11px', color: '#ff9800', marginTop: '2px'}}>
-                                        Max: {item.maxQuantity} {item.limitedBy ? `(${item.limitedBy})` : ''}
-                                    </div>
-                                )}
-                                {item.hasAddons && (<div className="addons-link" onClick={() => openAddonsModal(index)}>Add on</div>)}
-                                {item.addons && item.addons.length > 0 && (<div className="addons-summary"><span>{getAddonsSummary(item.addons, item.quantity)}</span></div>)}
-                                {item.itemDiscounts && item.itemDiscounts.length > 0 && (
-                                  <div className="item-discounts-summary">
-                                    <span>{getItemDiscountsSummary(item)} (-₱{calculateItemDiscount(item).toFixed(2)})</span>
-                                  </div>
-                                )}
-                                <div className="flex-spacer" />
-                                <div className="qty-price">
-                                    <button onClick={() => updateQuantity(index, -1)}><FiMinus /></button>
-                                    <span>{item.quantity}</span>
-                                    <button onClick={() => updateQuantity(index, 1)} disabled={item.maxQuantity && item.quantity >= item.maxQuantity} style={{ opacity: item.maxQuantity && item.quantity >= item.maxQuantity ? 0.5 : 1, cursor: item.maxQuantity && item.quantity >= item.maxQuantity ? 'not-allowed' : 'pointer' }}>
-                                        <FiPlus />
-                                    </button>
-                                    <span className="item-price">₱{((item.price + getTotalAddonsPrice(item.addons)) * item.quantity - calculateItemDiscount(item)).toFixed(0)}</span>
-                                </div>
-                            </div>
-                            <div className="item-actions">
-                              <button className="discount-item" onClick={() => openItemDiscountModal(index)}>
-                                <FontAwesomeIcon icon={faPercent} />
-                              </button>
-                              <button className="remove-item" onClick={() => removeFromCart(index)}>
-                                <FontAwesomeIcon icon={faTrash} />
-                              </button>
-                            </div>
+      <div className={`cart-panel ${isCartOpen ? 'open' : ''}`}>
+        <div className="order-section">
+          <h2>Order Details</h2>
+          <div className="order-type-toggle">
+            <button className={orderType === 'Dine in' ? 'active' : ''} onClick={() => setOrderType('Dine in')}>
+              Dine in
+            </button>
+            <button className={orderType === 'Take out' ? 'active' : ''} onClick={() => setOrderType('Take out')}>
+              Take out
+            </button>
+          </div>
+
+          <div className="cart-items">
+            {cartItems.length > 0 ? (
+              cartItems.map((item, index) => {
+                const itemDiscount = getItemDiscount(index);
+                const discountedQty = getItemDiscountedQty(index);
+                return (
+                  <div key={item.cartId || `${item.id}-${index}`} className="cart-item">
+                    <img src={item.image} alt={item.name} />
+                    <div className="item-details">
+                      <div className="item-name">{item.name}</div>
+                      {item.maxQuantity && item.quantity >= item.maxQuantity * 0.8 && (
+                        <div className="max-qty-warning" style={{fontSize: '11px', color: '#ff9800', marginTop: '2px'}}>
+                          Max: {item.maxQuantity} {item.limitedBy ? `(${item.limitedBy})` : ''}
                         </div>
-                    ))) : (
-                        <div style={{ textAlign: 'center', padding: '80px 20px', color: '#999' }}>
-                            Your cart is empty.
+                      )}
+                      {item.type === 'product' && (
+                        <div className="addons-link" onClick={() => openAddonsModal(index)}>Add on</div>
+                      )}
+                      {item.addons && item.addons.length > 0 && (
+                        <div className="addons-summary">
+                          {item.addons.map(addon => (
+                            <span key={addon.addonId}>+{addon.quantity * item.quantity} {addon.addonName}</span>
+                          ))}
                         </div>
-                    )}
-                </div>
-                
-                <div className="discount-section" onClick={openDiscountsModal}>
-                  <div className="discount-input-wrapper">
-                    <div className="discount-row">
-
-                      <input
-                        type="text"
-                        placeholder="Discounts:"
-                        readOnly
-                      />
-
-                      <div className="discount-tags">
-                        {autoPromotion && (
-                          <span className="discount-tag">Promo: {autoPromotion.name}</span>
-                        )}
-
-                        {appliedDiscounts.map(id => {
-                          const d = availableDiscounts.find(x => x.id === id);
-                          return d ? (
-                            <span key={id} className="discount-tag">
-                              Discount: {d.name}
-                            </span>
-                          ) : null;
-                        })}
+                      )}
+                      {getItemDiscount(index) > 0 && (
+                        <div className="item-discount-applied" style={{fontSize: '11px', color: '#28a745', marginTop: '4px', fontWeight: 600}}>
+                          {appliedDiscounts.map((discountData, discIdx) => {
+                            const itemDiscountInfo = discountData.itemDiscounts?.find(d => d.itemIndex === index);
+                            if (!itemDiscountInfo || itemDiscountInfo.discountAmount === 0) return null;
+                            return (
+                              <div key={discIdx}>
+                                {itemDiscountInfo.quantity} {item.name} • {discountData.discount?.name || 'Discount'}: -₱{itemDiscountInfo.discountAmount.toFixed(2)}
+                              </div>
+                            );
+                          })}
+                        </div>
+                      )}
+                      <div className="flex-spacer" />
+                      <div className="qty-price">
+                        <button onClick={() => updateQuantity(index, -1)}>
+                          <FiMinus />
+                        </button>
+                        <span>{item.quantity}</span>
+                        <button 
+                          onClick={() => updateQuantity(index, 1)} 
+                          disabled={item.maxQuantity && item.quantity >= item.maxQuantity}
+                          style={{ 
+                            opacity: item.maxQuantity && item.quantity >= item.maxQuantity ? 0.5 : 1, 
+                            cursor: item.maxQuantity && item.quantity >= item.maxQuantity ? 'not-allowed' : 'pointer' 
+                          }}
+                        >
+                          <FiPlus />
+                        </button>
+                        <span className="item-price">
+                          ₱{((item.price + getTotalAddonsPrice(item.addons)) * item.quantity).toFixed(0)}
+                        </span>
                       </div>
-
+                    </div>
+                    <div className="item-actions">
+                      <button className="remove-item" onClick={() => removeFromCart(index)}>
+                        <FontAwesomeIcon icon={faTrash} />
+                      </button>
                     </div>
                   </div>
-                    <div className="summary">
-                        <div className="line"><span>Subtotal:</span><span>₱{getSubtotal().toFixed(2)}</span></div>
+                );
+              })
+            ) : (
+              <div style={{ textAlign: 'center', padding: '80px 20px', color: '#999' }}>
+                Your cart is empty.
+              </div>
+            )}
+          </div>
 
-                        {getTotalAddonsCost() > 0 && (
-                            <div className="line">
-                                <span>Add-ons:</span>
-                                <span>₱{getTotalAddonsCost().toFixed(2)}</span>
-                            </div>
-                        )}
-
-                        {promotionalDiscountValue > 0 && (
-                            <div className="line">
-                                <span>Promotion:</span>
-                                <span>-₱{promotionalDiscountValue.toFixed(2)}</span>
-                            </div>
-                        )}
-
-                        {manualDiscountValue > 0 && (
-                            <div className="line">
-                                <span>Discount:</span>
-                                <span>-₱{manualDiscountValue.toFixed(2)}</span>
-                            </div>
-                        )}
-
-                        {itemDiscountsValue > 0 && (
-                            <div className="line">
-                                <span>Item Discounts:</span>
-                                <span>-₱{itemDiscountsValue.toFixed(2)}</span>
-                            </div>
-                        )}
-
-                        <hr />
-                        <div className="line total"><span>Total:</span><span>₱{getTotal().toFixed(2)}</span></div>
-                    </div>
+          <div className="discount-section" onClick={openDiscountsModal}>
+            <div className="discount-input-wrapper">
+              <div className="discount-row">
+                <input type="text" placeholder="Discounts:" readOnly />
+                <div className="discount-tags">
+                  {autoPromotion && (
+                    <span className="discount-tag">{autoPromotion.name}</span>
+                  )}
+                  {appliedDiscounts.map((discount, idx) => (
+                    <span 
+                      key={idx} 
+                      className="discount-tag removable"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        removeDiscount(idx);
+                      }}
+                      title="Click to remove"
+                    >
+                      {discount.discount.name} ×
+                    </span>
+                  ))}
                 </div>
-
-                <div className="payment-section">
-                    <h3>Payment Method</h3>
-                    <div className="payment-options">
-                        <button className={`cash ${paymentMethod === 'Cash' ? 'active' : ''}`} onClick={() => setPaymentMethod('Cash')}><FontAwesomeIcon icon={faMoneyBills} /><span>Cash</span></button>
-                        <button className={`gcash ${paymentMethod === 'GCash' ? 'active' : ''}`} onClick={() => setPaymentMethod('GCash')}><FontAwesomeIcon icon={faQrcode} /><span>GCash</span></button>
-                    </div>
-                </div>
-                <button className="process-button" onClick={handleProcessTransaction} disabled={isProcessing}>
-                  {isProcessing ? 'Processing...' : 'Process Transaction'}
-                </button>
+              </div>
             </div>
-        </div>
 
-        <AddonsModal showAddonsModal={showAddonsModal} closeAddonsModal={closeAddonsModal} addons={addons} availableAddons={availableAddons} isLoading={isAddonsLoading} updateAddons={updateAddons} saveAddons={saveAddons} />
-        
-        <DiscountsModal showDiscountsModal={showDiscountsModal} closeDiscountsModal={closeDiscountsModal} isLoading={isLoading} error={error} availableDiscounts={availableDiscounts} stagedDiscounts={stagedDiscounts} toggleStagedDiscount={toggleStagedDiscount} applyDiscounts={applyDiscounts} getStagedDiscount={() => calculateManualDiscount(stagedDiscounts)} getSubtotal={getSubtotal} isDiscountApplicable={isDiscountApplicable} />
-        
-        <ItemDiscountModal
-          showItemDiscountModal={showItemDiscountModal}
-          closeItemDiscountModal={closeItemDiscountModal}
-          isLoading={isLoading}
-          error={error}
-          availableDiscounts={availableDiscounts}
-          stagedItemDiscounts={stagedItemDiscounts}
-          toggleStagedItemDiscount={toggleStagedItemDiscount}
-          applyItemDiscounts={applyItemDiscounts}
-          selectedItem={selectedItemIndex !== null ? cartItems[selectedItemIndex] : null}
-          isItemDiscountApplicable={isItemDiscountApplicable}
-          calculateItemDiscount={(discountList) => {
-            if (selectedItemIndex === null) return 0;
-            const item = cartItems[selectedItemIndex];
-            if (!discountList || discountList.length === 0) return 0;
-            const discountId = discountList[0];
-            const discount = availableDiscounts.find(d => d.id === discountId);
-            if (!discount || !isItemDiscountApplicable(discount, item)) return 0;
-            
-            const itemPrice = item.price + getTotalAddonsPrice(item.addons);
-            let discountAmount = 0;
-            
-            if (discount.type === 'percentage') {
-              discountAmount = (itemPrice * parseFloat(discount.value)) / 100;
-            } else if (discount.type === 'fixed') {
-              discountAmount = Math.min(parseFloat(discount.value), itemPrice);
-            }
-            
-            return discountAmount * item.quantity;
-          }}
-        />
-        
-        <TransactionSummaryModal
-          showTransactionSummary={showTransactionSummary}
-          setShowTransactionSummary={setShowTransactionSummary}
-          cartItems={cartItems}
-          orderType={orderType}
-          paymentMethod={paymentMethod}
-          appliedDiscounts={appliedDiscounts}
-          availableDiscounts={availableDiscounts}
-          getTotalAddonsPrice={getTotalAddonsPrice}
-          getSubtotal={getSubtotal}
-          promotionalDiscountValue={promotionalDiscountValue}
-          manualDiscountValue={manualDiscountValue}
-          itemDiscountsValue={itemDiscountsValue}
-          autoPromotion={autoPromotion}
-          getTotal={getTotal}
-          confirmTransaction={handleConfirmTransaction}
-          isProcessing={isProcessing}
-        />
-        
-        <GCashReferenceModal showGCashReference={showGCashReference} setShowGCashReference={setShowGCashReference} onSubmit={handleGCashSubmit} isProcessing={isProcessing} />
-        <OrderConfirmationModal showConfirmation={showConfirmation} setShowConfirmation={setShowConfirmation} onClose={() => setShowConfirmation(false)} />
+            <div className="summary">
+              <div className="line">
+                <span>Subtotal:</span>
+                <span>₱{getSubtotal().toFixed(2)}</span>
+              </div>
+
+              {getTotalAddonsCost() > 0 && (
+                <div className="line">
+                  <span>Add-ons:</span>
+                  <span>₱{getTotalAddonsCost().toFixed(2)}</span>
+                </div>
+              )}
+
+              {promotionalDiscountValue > 0 && (
+                <div className="line">
+                  <span>{autoPromotion?.name || 'Promotion'}:</span>
+                  <span>-₱{promotionalDiscountValue.toFixed(2)}</span>
+                </div>
+              )}
+
+              {manualDiscountValue > 0 && (
+                <div className="line">
+                  <span>
+                    {appliedDiscounts.length === 1 
+                      ? appliedDiscounts[0].discount?.name 
+                      : `${appliedDiscounts.length} Discounts`}:
+                  </span>
+                  <span>-₱{manualDiscountValue.toFixed(2)}</span>
+                </div>
+              )}
+
+              <hr />
+              <div className="line total">
+                <span>Total:</span>
+                <span>₱{getTotal().toFixed(2)}</span>
+              </div>
+            </div>
+          </div>
+
+          <div className="payment-section">
+            <h3>Payment Method</h3>
+            <div className="payment-options">
+              <button 
+                className={`cash ${paymentMethod === 'Cash' ? 'active' : ''}`} 
+                onClick={() => setPaymentMethod('Cash')}
+              >
+                <FontAwesomeIcon icon={faMoneyBills} />
+                <span>Cash</span>
+              </button>
+              <button 
+                className={`gcash ${paymentMethod === 'GCash' ? 'active' : ''}`} 
+                onClick={() => setPaymentMethod('GCash')}
+              >
+                <FontAwesomeIcon icon={faQrcode} />
+                <span>GCash</span>
+              </button>
+            </div>
+          </div>
+
+          <button className="process-button" onClick={handleProcessTransaction} disabled={isProcessing}>
+            {isProcessing ? 'Processing...' : 'Process Transaction'}
+          </button>
+        </div>
+      </div>
+
+      <DiscountsModal
+        showDiscountsModal={showDiscountsModal}
+        closeDiscountsModal={closeDiscountsModal}
+        isLoading={isLoading}
+        error={error}
+        availableDiscounts={availableDiscounts}
+        cartItems={cartItems}
+        getSubtotal={getSubtotal}
+        getTotalAddonsPrice={getTotalAddonsPrice}
+        applyDiscountWithItems={applyDiscountWithItems}
+        appliedDiscounts={appliedDiscounts}
+        removeAllDiscounts={removeAllDiscounts}
+      />
+
+      <AddonsModal 
+        showAddonsModal={showAddonsModal} 
+        closeAddonsModal={closeAddonsModal} 
+        addons={addons} 
+        availableAddons={availableAddons} 
+        isLoading={isAddonsLoading} 
+        updateAddons={updateAddons} 
+        saveAddons={saveAddons} 
+      />
+
+      <TransactionSummaryModal
+        showTransactionSummary={showTransactionSummary}
+        setShowTransactionSummary={setShowTransactionSummary}
+        cartItems={cartItems}
+        orderType={orderType}
+        paymentMethod={paymentMethod}
+        appliedDiscounts={appliedDiscounts}
+        getTotalAddonsPrice={getTotalAddonsPrice}
+        getSubtotal={getSubtotal}
+        promotionalDiscountValue={promotionalDiscountValue}
+        manualDiscountValue={manualDiscountValue}
+        autoPromotion={autoPromotion}
+        getTotal={getTotal}
+        confirmTransaction={handleConfirmTransaction}
+        isProcessing={isProcessing}
+        getItemDiscount={getItemDiscount}
+        getItemDiscountedQty={getItemDiscountedQty}
+      />
+
+      <GCashReferenceModal 
+        showGCashReference={showGCashReference} 
+        setShowGCashReference={setShowGCashReference} 
+        onSubmit={handleGCashSubmit} 
+        isProcessing={isProcessing} 
+        error={error}
+      />
+
+      <OrderConfirmationModal 
+        showConfirmation={showConfirmation} 
+        setShowConfirmation={setShowConfirmation} 
+        onClose={() => setShowConfirmation(false)} 
+      />
     </>
   );
 };

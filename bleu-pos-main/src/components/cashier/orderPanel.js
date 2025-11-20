@@ -3,7 +3,6 @@ import "./orderPanel.css";
 import dayjs from 'dayjs';
 import { toast } from 'react-toastify';
 import OrderModals from './orderModals';
-import "./orderPanel.css";
 
 const AUTH_API_BASE_URL = 'http://127.0.0.1:4000';
 const SALES_API_BASE_URL = 'http://127.0.0.1:9000';
@@ -455,8 +454,21 @@ function OrderPanel({ order, onClose, isOpen, isStore, onUpdateStatus, onFullRef
           </div>
         )}
 
-        <div className="orderpanel-items-section">
-          {order.orderItems.map((item, idx) => (
+      <div className="orderpanel-items-section">
+        {order.orderItems.map((item, idx) => {
+          const itemDiscounts = appliedDiscountNames
+            .map((discountData, discIdx) => {
+              const itemDiscountInfo = discountData.itemDiscounts?.find(d => d.itemIndex === idx);
+              if (!itemDiscountInfo || itemDiscountInfo.discountAmount === 0) return null;
+              return {
+                name: discountData.discount?.name || 'Discount',
+                quantity: itemDiscountInfo.quantity,
+                amount: itemDiscountInfo.discountAmount
+              };
+            })
+            .filter(Boolean);
+          
+          return (
             <div key={idx} className="orderpanel-item">
               <div className="orderpanel-item-details">
                 <div className="orderpanel-item-name">
@@ -469,6 +481,16 @@ function OrderPanel({ order, onClose, isOpen, isStore, onUpdateStatus, onFullRef
                           {addon.quantity && addon.quantity > 1 && ` (x${addon.quantity})`} 
                           - ₱{((addon.price || 0) * (addon.quantity || 1)).toFixed(2)}
                         </div>
+                      ))}
+                    </div>
+                  )}
+                  {/* NEW: Display discount badges for this item */}
+                  {itemDiscounts.length > 0 && (
+                    <div className="orderpanel-item-discount-badges">
+                      {itemDiscounts.map((discount, discIdx) => (
+                        <span key={discIdx} className="orderpanel-discount-badge">
+                          {discount.name} ({discount.quantity}): -₱{discount.amount.toFixed(2)}
+                        </span>
                       ))}
                     </div>
                   )}
@@ -508,12 +530,15 @@ function OrderPanel({ order, onClose, isOpen, isStore, onUpdateStatus, onFullRef
                       addonTotal += (addon.price || 0) * (addon.quantity || 1);
                     });
                   }
-                  return (baseTotal + addonTotal).toFixed(2);
+                  // Subtract the item's discount from its subtotal
+                  const itemTotalDiscount = itemDiscounts.reduce((sum, d) => sum + d.amount, 0);
+                  return (baseTotal + addonTotal - itemTotalDiscount).toFixed(2);
                 })()}
               </div>
             </div>
-          ))}
-        </div>
+          );
+        })}
+      </div>
 
         {hasRefunds && (
           <div className="orderpanel-refunded-items-section">
@@ -538,29 +563,6 @@ function OrderPanel({ order, onClose, isOpen, isStore, onUpdateStatus, onFullRef
         )}
 
         <div className="orderpanel-summary">
-            <div className="orderpanel-discount-wrapper">
-              <div className="orderpanel-discount-row">
-                <input
-                  type="text"
-                  placeholder="Discounts:"
-                  readOnly
-                  className="orderpanel-discount-input"
-                />
-                <div className="orderpanel-discount-tags">
-                  {promotionalDiscount > 0 && (
-                    <span className="orderpanel-discount-tag">
-                      Promo: ₱{promotionalDiscount.toFixed(2)}
-                    </span>
-                  )}
-                  {manualDiscount > 0 && (
-                    <span className="orderpanel-discount-tag">
-                      Discount: ₱{manualDiscount.toFixed(2)}
-                    </span>
-                  )}
-                </div>
-              </div>
-            </div>
-
             <div className="orderpanel-calculation">
                 {isStore && (
                   <>
@@ -568,13 +570,6 @@ function OrderPanel({ order, onClose, isOpen, isStore, onUpdateStatus, onFullRef
                         <span className="orderpanel-calc-label">Subtotal:</span>
                         <span className="orderpanel-calc-value">₱{subtotal.toFixed(2)}</span>
                     </div>
-                    
-                    {addOnsCost > 0 && (
-                        <div className="orderpanel-calc-row">
-                            <span className="orderpanel-calc-label">Add-ons:</span>
-                            <span className="orderpanel-calc-value">+ ₱{addOnsCost.toFixed(2)}</span>
-                        </div>
-                    )}
                   </>
                 )}
 
@@ -641,7 +636,6 @@ function OrderPanel({ order, onClose, isOpen, isStore, onUpdateStatus, onFullRef
             {renderActionButtons()}
         </div>
 
-        {/* All modals rendered from OrderModals component */}
         <OrderModals
           showPinModal={showPinModal}
           setShowPinModal={setShowPinModal}

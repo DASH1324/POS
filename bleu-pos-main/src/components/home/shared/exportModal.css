@@ -1,0 +1,188 @@
+/* ==================== EXPORT MODAL ==================== */
+.salesMon-export-overlay {
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  background: rgba(0, 0, 0, 0.4);
+  z-index: 10000;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.salesMon-export-modal {
+  background: #fff;
+  border-radius: 10px;
+  padding: 40px;
+  width: 440px;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.12);
+  position: relative;
+  text-align: center;
+  overflow: hidden;
+}
+
+.salesMon-export-close {
+  position: absolute;
+  top: 16px;
+  right: 16px;
+  font-size: 24px;
+  cursor: pointer;
+  color: #999;
+  transition: color 0.2s ease;
+}
+
+.salesMon-export-close:hover {
+  color: #333;
+}
+
+.salesMon-export-icon {
+  width: 64px;
+  height: 64px;
+  margin: 0 auto 20px auto;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background-color: #e3f2fd;
+  color: #2196f3;
+}
+
+.salesMon-export-icon svg {
+  width: 40px;
+  height: 40px;
+}
+
+.salesMon-export-modal h1 {
+  font-size: 22px;
+  font-weight: 700;
+  color: #1a1a1a;
+  margin-bottom: 8px;
+}
+
+.salesMon-export-modal p {
+  font-size: 16px;
+  color: #666;
+  margin-bottom: 28px;
+}
+
+.salesMon-export-button-group {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  gap: 14px;
+  flex-wrap: wrap;
+}
+
+.salesMon-export-modal-btn {
+  flex: 1;
+  min-width: 150px;
+  padding: 12px 20px;
+  font-size: 16px;
+  border-radius: 8px;
+  cursor: pointer;
+  border: none;
+  transition: all 0.2s ease;
+  font-weight: 600;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  box-shadow: 0 3px 6px rgba(0, 0, 0, 0.08);
+}
+
+.salesMon-export-modal-btn svg {
+  width: 20px;
+  height: 20px;
+}
+
+.salesMon-export-pdf {
+  background-color: #2196f3;
+  color: white;
+}
+
+.salesMon-export-pdf:hover {
+  background-color: #1976d2;
+}
+
+.salesMon-export-csv {
+  background-color: #42a5f5;
+  color: white;
+}
+
+.salesMon-export-csv:hover {
+  background-color: #1e88e5;
+}
+
+/* No Data Modal */
+.salesMon-export-nodata {
+  width: 440px;
+  padding: 40px;
+}
+
+.salesMon-export-nodata h1 {
+  font-size: 22px;
+  font-weight: 700;
+  color: #1a1a1a;
+  margin-bottom: 8px;
+}
+
+.salesMon-export-nodata p {
+  font-size: 16px;
+  color: #666;
+  margin-bottom: 10px;
+}
+
+.salesMon-export-warning {
+  background: linear-gradient(135deg, #fff3cd 0%, #ffe69c 100%);
+  color: #ffc107;
+}
+
+/* Responsive Design for Modals */
+@media (max-width: 768px) {
+  .salesMon-export-modal {
+    width: 90%;
+    max-width: 440px;
+    padding: 30px 20px;
+  }
+
+  .salesMon-export-modal h1 {
+    font-size: 20px;
+  }
+
+  .salesMon-export-modal p {
+    font-size: 14px;
+  }
+
+  .salesMon-export-button-group {
+    flex-direction: column;
+    gap: 10px;
+  }
+
+  .salesMon-export-modal-btn {
+    width: 100%;
+    min-width: unset;
+  }
+}
+
+@media (max-width: 480px) {
+  .salesMon-export-icon {
+    width: 56px;
+    height: 56px;
+  }
+
+  .salesMon-export-icon svg {
+    width: 32px;
+    height: 32px;
+  }
+
+  .salesMon-export-modal h1 {
+    font-size: 18px;
+  }
+
+  .salesMon-export-modal p {
+    font-size: 13px;
+    margin-bottom: 20px;
+  }
+}

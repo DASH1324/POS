@@ -109,12 +109,12 @@ async def get_cancelled_and_refunded_orders_by_date(
             order_type_condition = get_order_type_condition(request.orderType)
             product_type_condition = get_product_type_condition(request.productType)
 
-            # CORRECTED SQL: Properly calculate proportional discounts and refunds
+            # CORRECTED SQL: Join with CashierSessions to get CashierName
             base_sql = f"""
             WITH SaleItemDetails AS (
                 SELECT
                     s.SaleID, s.OrderType, s.PaymentMethod, s.CreatedAt, s.UpdatedAt,
-                    s.CashierName, s.GCashReferenceNumber, s.Status,
+                    cs.CashierName, s.GCashReferenceNumber, s.Status,
                     si.SaleItemID, si.ItemName, si.Quantity, si.UnitPrice, si.Category,
                     -- Calculate item subtotal including addons
                     (si.UnitPrice * si.Quantity) + ISNULL((
@@ -126,6 +126,7 @@ async def get_cancelled_and_refunded_orders_by_date(
                     -- Get total discount for the entire sale
                     ISNULL(s.TotalDiscountAmount, 0) + ISNULL(s.PromotionalDiscountAmount, 0) AS TotalSaleDiscount
                 FROM Sales AS s
+                LEFT JOIN CashierSessions AS cs ON s.SessionID = cs.SessionID
                 LEFT JOIN SaleItems AS si ON s.SaleID = si.SaleID
                 WHERE (
                     s.Status IN ('cancelled', 'refunded')
@@ -134,7 +135,7 @@ async def get_cancelled_and_refunded_orders_by_date(
                         WHERE ro.SaleID = s.SaleID AND ro.RefundType = 'partial'
                     )
                 )
-                AND s.CashierName = ?
+                AND cs.CashierName = ?
                 AND CAST(s.UpdatedAt AS DATE) = ?
                 {order_type_condition}
                 {product_type_condition}
@@ -212,7 +213,7 @@ async def get_cancelled_and_refunded_orders_by_date(
                         "status": row.Status,
                         "orderType": row.OrderType,
                         "paymentMethod": row.PaymentMethod,
-                        "cashierName": row.CashierName,
+                        "cashierName": row.CashierName or "Unknown",
                         "GCashReferenceNumber": row.GCashReferenceNumber,
                         "items": 0,
                         "orderItems": [],

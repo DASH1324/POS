@@ -19,7 +19,8 @@ import { FaFileExport, FaFilter, FaSearch, FaCashRegister, FaCheckCircle } from 
 import { RiSmartphoneFill } from "react-icons/ri";
 import { HiReceiptRefund } from "react-icons/hi2";
 import { MdPayments } from "react-icons/md";
-import handleExport from "./transactionHistoryExport";
+import { generatePDFReport, generateCSVReport } from "./transactionHistoryExport";
+import { ExportModal, NoDataModal } from "../shared/exportModal";
 import Loading from "../shared/loading";
 import '../../confirmAlertCustom.css';
 
@@ -38,27 +39,43 @@ const getPeriodText = (dateRange, customStart, customEnd) => {
 
   switch (dateRange) {
     case "today": {
-      const options = { year: 'numeric', month: 'short', day: 'numeric' };
-      return today.toLocaleDateString('en-US', options);
+      const options = { year: "numeric", month: "short", day: "numeric" };
+      return today.toLocaleDateString("en-US", options);
     }
-    case "thisWeek": {
-      // Last 7 days from today
+    case "week": {
       const sevenDaysAgo = new Date(today);
       sevenDaysAgo.setDate(today.getDate() - 6);
-      const start = sevenDaysAgo.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
-      const end = today.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
+
+      const start = sevenDaysAgo.toLocaleDateString("en-US", {
+        month: "short",
+        day: "numeric",
+      });
+
+      const end = today.toLocaleDateString("en-US", {
+        month: "short",
+        day: "numeric",
+        year: "numeric",
+      });
+
       return `${start} - ${end}`;
     }
-    case "thisMonth": {
-      return today.toLocaleDateString('en-US', { month: 'short', year: 'numeric' });
+    case "month": {
+      return today.toLocaleDateString("en-US", { month: "short", year: "numeric" });
     }
-    case "thisYear": {
-      return today.toLocaleDateString('en-US', { year: 'numeric' });
+    case "year": {
+      return today.toLocaleDateString("en-US", { year: "numeric" });
     }
     case "custom": {
       if (customStart && customEnd) {
-        const start = new Date(customStart).toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
-        const end = new Date(customEnd).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
+        const start = new Date(customStart).toLocaleDateString("en-US", {
+          month: "short",
+          day: "numeric",
+        });
+        const end = new Date(customEnd).toLocaleDateString("en-US", {
+          month: "short",
+          day: "numeric",
+          year: "numeric",
+        });
         return `${start} - ${end}`;
       }
       return "Custom Range";
@@ -128,6 +145,8 @@ function TransactionHistory() {
   const [isFilterOpen, setIsFilterOpen] = useState(false);
   const [currentPeriodText, setCurrentPeriodText] = useState(getPeriodText('today', '', ''));
   const [loadingOrderDetails, setLoadingOrderDetails] = useState(false);
+  const [isExportModalOpen, setIsExportModalOpen] = useState(false);
+  const [isNoDataModalOpen, setIsNoDataModalOpen] = useState(false);
   
   // New state for statistics from backend
   const [statistics, setStatistics] = useState({
@@ -686,6 +705,37 @@ function TransactionHistory() {
     );
   }
 
+  const handleExportClick = () => {
+    if (!filteredTransactions || filteredTransactions.length === 0) {
+      setIsNoDataModalOpen(true);
+      return;
+    } 
+    setIsExportModalOpen(true);
+  };
+
+  const handleExportPDF = () => {
+    setIsExportModalOpen(false);
+
+    const exportedBy = "Admin";
+    const dateFilterLabel = dateRange === "custom"
+      ? `${new Date(customStart).toLocaleDateString()} - ${new Date(customEnd).toLocaleDateString()}`
+      : dateRange.charAt(0).toUpperCase() + dateRange.slice(1);
+
+    generatePDFReport(
+      filteredTransactions,
+      activeTab,
+      statusFilter || "All",
+      exportedBy,
+      dateFilterLabel,
+      cashiersMap
+    );
+  };
+
+  const handleExportCSV = () => {
+    setIsExportModalOpen(false);
+    generateCSVReport(filteredTransactions, cashiersMap);
+  };
+
   return (
     <div className="transHis-page">
       <Sidebar />
@@ -731,11 +781,13 @@ function TransactionHistory() {
                   </select>
                 </div>
                 <button className="transHis-clear-btn" onClick={handleClearFilters}>Clear Filters</button>
-                <button className="transHis-export-btn" onClick={() => {
-                    const exportedBy = "Admin";
-                    const dateFilterLabel = dateRange === "custom" ? `${new Date(customStart).toLocaleDateString()} - ${new Date(customEnd).toLocaleDateString()}`: dateRange.charAt(0).toUpperCase() + dateRange.slice(1);
-                    handleExport(filteredTransactions, activeTab, statusFilter || "All", exportedBy, dateFilterLabel);
-                  }}><FaFileExport /> Export</button>
+                <button 
+                  className="transHis-export-btn" 
+                  onClick={handleExportClick}
+                  disabled={!filteredTransactions || filteredTransactions.length === 0}
+                >
+                  <FaFileExport /> Export
+                </button>
               </div>
             )}
           </div>
@@ -809,6 +861,17 @@ function TransactionHistory() {
           )}
         </div>
       </div>
+      {isExportModalOpen && (
+        <ExportModal
+          onClose={() => setIsExportModalOpen(false)}
+          onExportPDF={handleExportPDF}
+          onExportCSV={handleExportCSV}
+        />
+      )}
+
+      {isNoDataModalOpen && (
+        <NoDataModal onClose={() => setIsNoDataModalOpen(false)} />
+      )}
     </div>
   );
 }
