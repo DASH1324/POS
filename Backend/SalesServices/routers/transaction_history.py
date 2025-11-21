@@ -57,11 +57,23 @@ class AddonItem(BaseModel):
     price: float
     quantity: int
 
+class ItemDiscountInfo(BaseModel):
+    discountName: str
+    quantityDiscounted: int
+    discountAmount: float
+
+class ItemPromotionInfo(BaseModel):
+    promotionName: str
+    quantityPromoted: int
+    promotionAmount: float
+
 class TransactionItem(BaseModel):
     name: str
     quantity: int
     price: float
     details: Optional[str] = None
+    itemDiscounts: Optional[List[ItemDiscountInfo]] = []
+    itemPromotions: Optional[List[ItemPromotionInfo]] = []
 
 class TransactionRecord(BaseModel):
     id: str
@@ -109,6 +121,7 @@ class RefundedItemInfo(BaseModel):
     refundAmount: float
 
 class TransactionItemWithRefund(BaseModel):
+    saleItemId: Optional[int] = None
     name: str
     quantity: int
     price: float
@@ -116,6 +129,8 @@ class TransactionItemWithRefund(BaseModel):
     refundedQuantity: Optional[int] = 0
     refundAmount: Optional[float] = 0.0
     isFullyRefunded: Optional[bool] = False
+    itemDiscounts: Optional[List[ItemDiscountInfo]] = []
+    itemPromotions: Optional[List[ItemPromotionInfo]] = []
 
 # Update the TransactionRecord model
 class TransactionRecordWithRefunds(BaseModel):
@@ -162,11 +177,10 @@ def get_discount_promotion_text(discount, promo_discount, discount_name, promo_n
         parts.append(f"Promotion: {promo_names}")
     return " | ".join(parts) if parts else "None"
 
-# Update the get_all_transaction_history endpoint
 @router_transaction_history.get(
     "/all",
     response_model=List[TransactionRecordWithRefunds],
-    summary="Get All Transaction History with Refund Details"
+    summary="Get All Transaction History with Refund Details and Item-Level Discounts/Promotions"
 )
 async def get_all_transaction_history(
     start_date: Optional[str] = Query(None, description="Start date filter (YYYY-MM-DD)"),
@@ -176,9 +190,7 @@ async def get_all_transaction_history(
     current_user: dict = Depends(get_current_active_user)
 ):
     """
-    Get all transaction history with comprehensive refund information.
-    Includes individual item refund tracking and displays refund amounts properly.
-    Now also includes discount and promotion information.
+    Get all transaction history with comprehensive refund information and item-level discounts/promotions.
     """
     allowed_roles = ["admin", "manager"]
     if current_user.get("userRole") not in allowed_roles:
@@ -191,11 +203,11 @@ async def get_all_transaction_history(
     try:
         conn = await get_db_connection()
         async with conn.cursor() as cursor:
-            # ✅ SQL QUERY IS FIXED HERE
+            # Main query for sales and items
             sql = """
                 SELECT
                     s.SaleID, s.OrderType, s.PaymentMethod, s.CreatedAt, 
-                    cs.CashierName, -- ✅ FIX 1: Get CashierName from CashierSessions table (cs)
+                    cs.CashierName,
                     s.TotalDiscountAmount, s.PromotionalDiscountAmount, s.Status, s.GCashReferenceNumber,
                     si.SaleItemID, si.ItemName, si.Quantity AS ItemQuantity, si.UnitPrice, si.Category,
                     a.AddonID, a.AddonName, a.Price AS AddonPrice, sia.Quantity AS AddonQuantity,
@@ -206,23 +218,10 @@ async def get_all_transaction_history(
                      JOIN discounts d ON sd.DiscountID = d.id 
                      WHERE sd.SaleID = s.SaleID) AS DiscountName,
                     (SELECT STRING_AGG(p.name, ', ')
-                     FROM promotions p
-                     WHERE p.id IN (
-                         SELECT DISTINCT promotion_id 
-                         FROM (
-                             SELECT pap.promotion_id
-                             FROM promotion_applicable_products pap
-                             JOIN SaleItems si2 ON si2.ItemName = pap.product_name
-                             WHERE si2.SaleID = s.SaleID
-                             UNION
-                             SELECT pac.promotion_id
-                             FROM promotion_applicable_categories pac
-                             JOIN SaleItems si2 ON si2.Category = pac.category_name
-                             WHERE si2.SaleID = s.SaleID
-                         ) AS applied_promos
-                     )) AS PromotionNames
+                     FROM SalePromotions sp
+                     JOIN promotions p ON sp.PromotionID = p.id
+                     WHERE sp.SaleID = s.SaleID) AS PromotionNames
                 FROM Sales AS s
-                -- ✅ FIX 2: JOIN with CashierSessions to access the CashierName
                 LEFT JOIN CashierSessions AS cs ON s.SessionID = cs.SessionID 
                 LEFT JOIN SaleItems AS si ON s.SaleID = si.SaleID
                 LEFT JOIN SaleItemAddons AS sia ON si.SaleItemID = sia.SaleItemID
@@ -256,112 +255,168 @@ async def get_all_transaction_history(
             await cursor.execute(sql, *params)
             rows = await cursor.fetchall()
             
-            # (The rest of your Python logic for processing the results remains the same)
+            # Get item-level discounts
+            item_discounts_sql = """
+                SELECT 
+                    sid.SaleItemID, d.name AS DiscountName, sid.QuantityDiscounted, sid.DiscountAmount
+                FROM SaleItemDiscounts sid
+                JOIN discounts d ON sid.DiscountID = d.id JOIN SaleItems si ON sid.SaleItemID = si.SaleItemID JOIN Sales s ON si.SaleID = s.SaleID
+                WHERE 1=1
+            """
+            discount_params = []
+            if start_date:
+                item_discounts_sql += " AND CAST(s.CreatedAt AS DATE) >= ?"
+                discount_params.append(start_date)
+            if end_date:
+                item_discounts_sql += " AND CAST(s.CreatedAt AS DATE) <= ?"
+                discount_params.append(end_date)
+            if status_filter:
+                item_discounts_sql += " AND s.Status = ?"
+                discount_params.append(status_filter)
+            if order_type_filter:
+                if order_type_filter.lower() == "store":
+                    item_discounts_sql += " AND s.OrderType IN ('Dine in', 'Take Out')"
+                elif order_type_filter.lower() == "online":
+                    item_discounts_sql += " AND s.OrderType IN ('Delivery', 'Pick Up')"
+            await cursor.execute(item_discounts_sql, *discount_params)
+            discount_rows = await cursor.fetchall()
+            
+            # Get item-level promotions
+            item_promotions_sql = """
+                SELECT 
+                    sip.SaleItemID, p.name AS PromotionName, sip.QuantityPromoted, sip.PromotionAmount
+                FROM SaleItemPromotions sip
+                JOIN promotions p ON sip.PromotionID = p.id JOIN SaleItems si ON sip.SaleItemID = si.SaleItemID JOIN Sales s ON si.SaleID = s.SaleID
+                WHERE 1=1
+            """
+            promotion_params = []
+            if start_date:
+                item_promotions_sql += " AND CAST(s.CreatedAt AS DATE) >= ?"
+                promotion_params.append(start_date)
+            if end_date:
+                item_promotions_sql += " AND CAST(s.CreatedAt AS DATE) <= ?"
+                promotion_params.append(end_date)
+            if status_filter:
+                item_promotions_sql += " AND s.Status = ?"
+                promotion_params.append(status_filter)
+            if order_type_filter:
+                if order_type_filter.lower() == "store":
+                    item_promotions_sql += " AND s.OrderType IN ('Dine in', 'Take Out')"
+                elif order_type_filter.lower() == "online":
+                    item_promotions_sql += " AND s.OrderType IN ('Delivery', 'Pick Up')"
+            await cursor.execute(item_promotions_sql, *promotion_params)
+            promotion_rows = await cursor.fetchall()
+            
+            item_discounts_map = {}
+            for row in discount_rows:
+                if row.SaleItemID not in item_discounts_map:
+                    item_discounts_map[row.SaleItemID] = []
+                item_discounts_map[row.SaleItemID].append({'discountName': row.DiscountName, 'quantityDiscounted': row.QuantityDiscounted, 'discountAmount': float(row.DiscountAmount)})
+            
+            item_promotions_map = {}
+            for row in promotion_rows:
+                if row.SaleItemID not in item_promotions_map:
+                    item_promotions_map[row.SaleItemID] = []
+                item_promotions_map[row.SaleItemID].append({'promotionName': row.PromotionName, 'quantityPromoted': row.QuantityPromoted, 'promotionAmount': float(row.PromotionAmount)})
+            
             transactions_dict: Dict[int, dict] = {}
             
             for row in rows:
                 sale_id = row.SaleID
                 if sale_id not in transactions_dict:
                     transaction_type = "Store" if row.OrderType in ["Dine in", "Take Out"] else "Online"
-                    
                     transactions_dict[sale_id] = {
-                        "id": f"SO-{sale_id}",
-                        "date": row.CreatedAt.isoformat(),
-                        "orderType": row.OrderType,
-                        "status": row.Status.capitalize() if row.Status else "Unknown",
-                        "paymentMethod": row.PaymentMethod,
-                        "cashierName": row.CashierName or "",
-                        "GCashReferenceNumber": row.GCashReferenceNumber,
-                        "type": transaction_type,
-                        "items": [],
-                        "total": 0,
-                        "originalSubtotal": Decimal('0.0'),
-                        "subtotal": Decimal('0.0'),
-                        "discount": row.TotalDiscountAmount or Decimal('0.0'),
-                        "promotionalDiscount": row.PromotionalDiscountAmount or Decimal('0.0'),
-                        "discountName": row.DiscountName,
-                        "promotionNames": row.PromotionNames,
-                        "_processed_items": {},
-                        "refundInfo": None,
-                        "_item_refund_map": {}
+                        "id": f"SO-{sale_id}", "date": row.CreatedAt.isoformat(), "orderType": row.OrderType,
+                        "status": row.Status.capitalize() if row.Status else "Unknown", "paymentMethod": row.PaymentMethod,
+                        "cashierName": row.CashierName or "", "GCashReferenceNumber": row.GCashReferenceNumber,
+                        "type": transaction_type, "items": [], "originalSubtotal": Decimal('0.0'),
+                        "discount": row.TotalDiscountAmount or Decimal('0.0'), "promotionalDiscount": row.PromotionalDiscountAmount or Decimal('0.0'),
+                        "discountName": row.DiscountName, "promotionNames": row.PromotionNames,
+                        "_processed_items": set(), "_processed_addons": set(), "refundInfo": None, "_item_refund_map": {}
                     }
-                    
                     if row.RefundType:
-                        transactions_dict[sale_id]["refundInfo"] = {
-                            "refundType": row.RefundType,
-                            "totalRefundAmount": float(row.TotalRefundAmount or 0),
-                            "refundReason": row.RefundReason
-                        }
+                        transactions_dict[sale_id]["refundInfo"] = {"refundType": row.RefundType, "totalRefundAmount": float(row.TotalRefundAmount or 0), "refundReason": row.RefundReason}
 
-                if row.SaleItemID and row.RefundedQuantity:
-                    item_key = row.SaleItemID
+                item_key = row.SaleItemID
+                if item_key and row.RefundedQuantity is not None:
                     if item_key not in transactions_dict[sale_id]["_item_refund_map"]:
-                        transactions_dict[sale_id]["_item_refund_map"][item_key] = {
-                            "refundedQuantity": 0,
-                            "refundAmount": Decimal('0.0')
-                        }
-                    transactions_dict[sale_id]["_item_refund_map"][item_key]["refundedQuantity"] += row.RefundedQuantity or 0
+                        transactions_dict[sale_id]["_item_refund_map"][item_key] = {"refundedQuantity": 0, "refundAmount": Decimal('0.0')}
+                    transactions_dict[sale_id]["_item_refund_map"][item_key]["refundedQuantity"] += row.RefundedQuantity
                     transactions_dict[sale_id]["_item_refund_map"][item_key]["refundAmount"] += row.ItemRefundAmount or Decimal('0.0')
 
-                if row.SaleItemID:
-                    if row.SaleItemID not in transactions_dict[sale_id]["_processed_items"]:
-                        item_quantity = row.ItemQuantity or 0
-                        item_price = row.UnitPrice or Decimal('0.0')
-                        
-                        refund_info = transactions_dict[sale_id]["_item_refund_map"].get(row.SaleItemID, {})
-                        refunded_qty = refund_info.get("refundedQuantity", 0)
-                        item_refund_amount = float(refund_info.get("refundAmount", Decimal('0.0')))
-                        
-                        item_total = item_price * item_quantity
-                        transactions_dict[sale_id]["originalSubtotal"] += item_total
-                        
-                        effective_quantity = item_quantity - refunded_qty
-                        transactions_dict[sale_id]["subtotal"] += item_price * effective_quantity
-                        
-                        has_addons = any(r.SaleItemID == row.SaleItemID and r.AddonID for r in rows)
-                        
-                        transactions_dict[sale_id]["items"].append({
-                            "name": row.ItemName or "",
-                            "quantity": item_quantity,
-                            "price": float(item_price),
-                            "details": "Includes add-ons" if has_addons else None,
-                            "refundedQuantity": refunded_qty,
-                            "refundAmount": item_refund_amount,
-                            "isFullyRefunded": refunded_qty >= item_quantity
-                        })
-                        
-                        transactions_dict[sale_id]["_processed_items"][row.SaleItemID] = True
+                if item_key and item_key not in transactions_dict[sale_id]["_processed_items"]:
+                    transactions_dict[sale_id]["_processed_items"].add(item_key)
+                    item_quantity = row.ItemQuantity or 0
+                    item_price = row.UnitPrice or Decimal('0.0')
+                    transactions_dict[sale_id]["originalSubtotal"] += item_price * item_quantity
+                    refund_info = transactions_dict[sale_id]["_item_refund_map"].get(item_key, {})
+                    transactions_dict[sale_id]["items"].append({
+                        "saleItemId": item_key, "name": row.ItemName or "", "quantity": item_quantity, "price": float(item_price),
+                        "refundedQuantity": refund_info.get("refundedQuantity", 0), "refundAmount": float(refund_info.get("refundAmount", Decimal('0.0'))),
+                        "isFullyRefunded": refund_info.get("refundedQuantity", 0) >= item_quantity,
+                        "itemDiscounts": item_discounts_map.get(item_key, []), "itemPromotions": item_promotions_map.get(item_key, [])
+                    })
 
-                    if row.AddonID:
-                        addon_price = row.AddonPrice or Decimal('0.0')
-                        addon_quantity = row.AddonQuantity or 0
-                        item_quantity = row.ItemQuantity or 1
-                        
-                        addon_total = addon_price * addon_quantity
-                        transactions_dict[sale_id]["originalSubtotal"] += addon_total
-                        
-                        refund_info = transactions_dict[sale_id]["_item_refund_map"].get(row.SaleItemID, {})
-                        refunded_qty = refund_info.get("refundedQuantity", 0)
-                        
-                        effective_ratio = (item_quantity - refunded_qty) / item_quantity if item_quantity > 0 else 0
-                        effective_addon_cost = addon_total * Decimal(str(effective_ratio))
-                        
-                        transactions_dict[sale_id]["subtotal"] += effective_addon_cost
-
+                addon_key = (item_key, row.AddonID)
+                if row.AddonID and addon_key not in transactions_dict[sale_id]["_processed_addons"]:
+                    transactions_dict[sale_id]["_processed_addons"].add(addon_key)
+                    addon_total = (row.AddonPrice or Decimal('0.0')) * (row.AddonQuantity or 0)
+                    transactions_dict[sale_id]["originalSubtotal"] += addon_total
+            
             response_list = []
             for sale_id, transaction_data in transactions_dict.items():
-                subtotal = transaction_data["subtotal"]
                 original_subtotal = transaction_data["originalSubtotal"]
                 discount = transaction_data["discount"]
                 promo_discount = transaction_data["promotionalDiscount"]
+
+                # 1. Calculate the original total before any refunds
+                original_total = original_subtotal - discount - promo_discount
                 
-                final_total = subtotal - discount - promo_discount
+                # 2. Calculate the total NET amount refunded
+                # This should include the proportional item-level discounts/promotions
+                total_net_refunded = Decimal('0.0')
                 
+                for item in transaction_data["items"]:
+                    sale_item_id = item.get("saleItemId")
+                    if not sale_item_id:
+                        continue
+                        
+                    refund_info = transaction_data["_item_refund_map"].get(sale_item_id, {})
+                    refunded_qty = refund_info.get("refundedQuantity", 0)
+                    
+                    if refunded_qty > 0:
+                        # Get the base price for refunded quantity (ensure Decimal type)
+                        base_refund = Decimal(str(item["price"])) * Decimal(str(refunded_qty))
+                        
+                        # Calculate item-level discount that applies to refunded items
+                        item_discount_amount = Decimal('0.0')
+                        for disc in item.get("itemDiscounts", []):
+                            # Proportionally apply the discount based on refunded quantity
+                            if disc["quantityDiscounted"] > 0:
+                                discount_per_item = Decimal(str(disc["discountAmount"])) / Decimal(str(disc["quantityDiscounted"]))
+                                applicable_discount = discount_per_item * Decimal(str(min(refunded_qty, disc["quantityDiscounted"])))
+                                item_discount_amount += applicable_discount
+                        
+                        # Calculate item-level promotion that applies to refunded items
+                        item_promotion_amount = Decimal('0.0')
+                        for promo in item.get("itemPromotions", []):
+                            # Proportionally apply the promotion based on refunded quantity
+                            if promo["quantityPromoted"] > 0:
+                                promo_per_item = Decimal(str(promo["promotionAmount"])) / Decimal(str(promo["quantityPromoted"]))
+                                applicable_promo = promo_per_item * Decimal(str(min(refunded_qty, promo["quantityPromoted"])))
+                                item_promotion_amount += applicable_promo
+                        
+                        # Net refund is base price minus the discounts/promotions that were applied
+                        net_item_refund = base_refund - item_discount_amount - item_promotion_amount
+                        total_net_refunded += net_item_refund
+
+                # 3. The final total is the original total minus the net refunded amount
+                final_total = original_total - total_net_refunded
+
+                # 4. Update the refundInfo object with the correct net amount
                 if transaction_data.get("refundInfo"):
-                    total_refunded = original_subtotal - subtotal
-                    transaction_data["refundInfo"]["totalRefundAmount"] = float(total_refunded)
-                    transaction_data["refundInfo"]["originalSubtotal"] = float(original_subtotal)
-                
+                    transaction_data["refundInfo"]["totalRefundAmount"] = float(total_net_refunded)
+
                 transaction_record = TransactionRecordWithRefunds(
                     id=transaction_data["id"],
                     date=transaction_data["date"],
@@ -387,8 +442,12 @@ async def get_all_transaction_history(
                     refundInfo=transaction_data.get("refundInfo")
                 )
                 response_list.append(transaction_record)
-            
+
+
+
             return response_list
+            
+           
             
     except Exception as e:
         logger.error(f"Error fetching transaction history: {e}", exc_info=True)
@@ -529,21 +588,46 @@ async def get_transaction_statistics(
             await cursor.execute(items_sold_sql, *items_params)
             items_result = await cursor.fetchone()
             
-            # Calculate comprehensive refund statistics
+            # Calculate comprehensive refund statistics with accurate net refund amount
             refund_stats_sql = """
+                WITH SaleItemNetValue AS (
+                    SELECT
+                        si.SaleItemID,
+                        si.Quantity,
+                        -- Calculate the total net value of the sale item line (price + addons - discounts - promos)
+                        (
+                            (si.UnitPrice * si.Quantity) +
+                            ISNULL(addons.TotalAddonPrice, 0) -
+                            ISNULL(discounts.TotalItemDiscount, 0) -
+                            ISNULL(promos.TotalItemPromotion, 0)
+                        ) AS NetLineValue
+                    FROM SaleItems si
+                    LEFT JOIN (
+                        SELECT sia.SaleItemID, SUM(a.Price * sia.Quantity) AS TotalAddonPrice
+                        FROM SaleItemAddons sia JOIN Addons a ON sia.AddonID = a.AddonID
+                        GROUP BY sia.SaleItemID
+                    ) addons ON si.SaleItemID = addons.SaleItemID
+                    LEFT JOIN (
+                        SELECT SaleItemID, SUM(DiscountAmount) AS TotalItemDiscount
+                        FROM SaleItemDiscounts
+                        GROUP BY SaleItemID
+                    ) discounts ON si.SaleItemID = discounts.SaleItemID
+                    LEFT JOIN (
+                        SELECT SaleItemID, SUM(PromotionAmount) AS TotalItemPromotion
+                        FROM SaleItemPromotions
+                        GROUP BY SaleItemID
+                    ) promos ON si.SaleItemID = promos.SaleItemID
+                )
                 SELECT 
-                    COALESCE(SUM(ri.RefundAmount), 0) as total_refund_amount,
+                    COALESCE(SUM(CASE WHEN sinv.Quantity > 0 THEN (sinv.NetLineValue / sinv.Quantity) * ri.RefundedQuantity ELSE 0 END), 0) as total_refund_amount,
                     COALESCE(SUM(ri.RefundedQuantity), 0) as total_refunded_items,
-                    COUNT(DISTINCT CASE 
-                        WHEN ro.RefundType = 'full' THEN ro.SaleID 
-                    END) as full_refunds,
-                    COUNT(DISTINCT CASE 
-                        WHEN ro.RefundType = 'partial' THEN ro.SaleID 
-                    END) as partial_refunds
+                    COUNT(DISTINCT CASE WHEN ro.RefundType = 'full' THEN s.SaleID END) as full_refunds,
+                    COUNT(DISTINCT CASE WHEN ro.RefundType = 'partial' THEN s.SaleID END) as partial_refunds
                 FROM RefundedItems ri
                 JOIN SaleItems si ON ri.SaleItemID = si.SaleItemID
                 JOIN Sales s ON si.SaleID = s.SaleID
-                LEFT JOIN RefundedOrders ro ON s.SaleID = ro.SaleID
+                JOIN RefundedOrders ro ON ri.RefundID = ro.RefundID
+                JOIN SaleItemNetValue sinv ON ri.SaleItemID = sinv.SaleItemID
                 WHERE 1=1
             """
             
@@ -608,7 +692,7 @@ async def get_refunds_summary(
 ):
     """
     Get only refund summary statistics.
-    Returns total refund amount calculated from all refunded items.
+    Returns total refund amount calculated from all refunded items after accounting for discounts and promotions.
     """
     allowed_roles = ["admin", "manager"]
     if current_user.get("userRole") not in allowed_roles:
@@ -622,19 +706,44 @@ async def get_refunds_summary(
         conn = await get_db_connection()
         async with conn.cursor() as cursor:
             refund_stats_sql = """
+                WITH SaleItemNetValue AS (
+                    SELECT
+                        si.SaleItemID,
+                        si.Quantity,
+                        -- Calculate the total net value of the sale item line (price + addons - discounts - promos)
+                        (
+                            (si.UnitPrice * si.Quantity) +
+                            ISNULL(addons.TotalAddonPrice, 0) -
+                            ISNULL(discounts.TotalItemDiscount, 0) -
+                            ISNULL(promos.TotalItemPromotion, 0)
+                        ) AS NetLineValue
+                    FROM SaleItems si
+                    LEFT JOIN (
+                        SELECT sia.SaleItemID, SUM(a.Price * sia.Quantity) AS TotalAddonPrice
+                        FROM SaleItemAddons sia JOIN Addons a ON sia.AddonID = a.AddonID
+                        GROUP BY sia.SaleItemID
+                    ) addons ON si.SaleItemID = addons.SaleItemID
+                    LEFT JOIN (
+                        SELECT SaleItemID, SUM(DiscountAmount) AS TotalItemDiscount
+                        FROM SaleItemDiscounts
+                        GROUP BY SaleItemID
+                    ) discounts ON si.SaleItemID = discounts.SaleItemID
+                    LEFT JOIN (
+                        SELECT SaleItemID, SUM(PromotionAmount) AS TotalItemPromotion
+                        FROM SaleItemPromotions
+                        GROUP BY SaleItemID
+                    ) promos ON si.SaleItemID = promos.SaleItemID
+                )
                 SELECT 
-                    COALESCE(SUM(ri.RefundAmount), 0) as total_refund_amount,
+                    COALESCE(SUM(CASE WHEN sinv.Quantity > 0 THEN (sinv.NetLineValue / sinv.Quantity) * ri.RefundedQuantity ELSE 0 END), 0) as total_refund_amount,
                     COALESCE(SUM(ri.RefundedQuantity), 0) as total_refunded_items,
-                    COUNT(DISTINCT CASE 
-                        WHEN ro.RefundType = 'full' THEN ro.SaleID 
-                    END) as full_refunds,
-                    COUNT(DISTINCT CASE 
-                        WHEN ro.RefundType = 'partial' THEN ro.SaleID 
-                    END) as partial_refunds
+                    COUNT(DISTINCT CASE WHEN ro.RefundType = 'full' THEN s.SaleID END) as full_refunds,
+                    COUNT(DISTINCT CASE WHEN ro.RefundType = 'partial' THEN s.SaleID END) as partial_refunds
                 FROM RefundedItems ri
                 JOIN SaleItems si ON ri.SaleItemID = si.SaleItemID
                 JOIN Sales s ON si.SaleID = s.SaleID
-                LEFT JOIN RefundedOrders ro ON s.SaleID = ro.SaleID
+                JOIN RefundedOrders ro ON ri.RefundID = ro.RefundID
+                JOIN SaleItemNetValue sinv ON ri.SaleItemID = sinv.SaleItemID
                 WHERE 1=1
             """
             
@@ -674,7 +783,7 @@ async def get_refunds_summary(
         if conn:
             await conn.close()
 
-# NEW ENDPOINT: Transaction Report Data for Charts
+# Transaction Report Data for Charts
 @router_transaction_history.get(
     "/report",
     response_model=TransactionReportResponse,

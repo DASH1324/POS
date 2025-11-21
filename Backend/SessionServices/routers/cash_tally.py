@@ -150,82 +150,100 @@ async def log_to_blockchain(
 # --- Calculate NET cash sales (with refunds deducted) ---
 async def calculate_net_cash_sales(cursor, cashier_name: str, session_start_time):
     """
-    Calculate net cash sales = Gross Cash Sales - Cash Refunds
-    This accounts for both full and partial refunds on cash transactions
+    Calculate net cash sales = Gross Cash Sales - Cash Refunds.
+    This version correctly joins tables and calculates net values.
     """
-    # Step 1: Calculate gross cash sales with proportional discounts
+    # Step 1: Calculate GROSS cash sales (net of discounts/promos, but before refunds)
     gross_sales_query = """
-        WITH SaleItemTotals AS (
-            SELECT 
-                s.SaleID,
-                si.SaleItemID,
-                si.Quantity,
-                (si.UnitPrice * si.Quantity) AS ItemSubtotal,
-                ISNULL((
-                    SELECT SUM(a.Price * sia.Quantity)
-                    FROM SaleItemAddons sia 
-                    JOIN Addons a ON sia.AddonID = a.AddonID
-                    WHERE sia.SaleItemID = si.SaleItemID
-                ), 0) AS AddonsTotal,
-                ISNULL(s.TotalDiscountAmount, 0) + ISNULL(s.PromotionalDiscountAmount, 0) AS TotalSaleDiscount
-            FROM Sales s 
+        WITH SaleItemNetValue AS (
+            SELECT
+                -- Calculate the net value of each item line
+                (si.UnitPrice * si.Quantity) + ISNULL(addons.TotalAddonPrice, 0) -
+                ISNULL(discounts.TotalItemDiscount, 0) - ISNULL(promos.TotalItemPromotion, 0) AS NetLineValue
+            FROM Sales s
+            JOIN CashierSessions cs ON s.SessionID = cs.SessionID
             JOIN SaleItems si ON s.SaleID = si.SaleID
+            LEFT JOIN (
+                SELECT sia.SaleItemID, SUM(a.Price * sia.Quantity) AS TotalAddonPrice
+                FROM SaleItemAddons sia JOIN Addons a ON sia.AddonID = a.AddonID
+                GROUP BY sia.SaleItemID
+            ) addons ON si.SaleItemID = addons.SaleItemID
+            LEFT JOIN (
+                SELECT SaleItemID, SUM(DiscountAmount) AS TotalItemDiscount
+                FROM SaleItemDiscounts GROUP BY SaleItemID
+            ) discounts ON si.SaleItemID = discounts.SaleItemID
+            LEFT JOIN (
+                SELECT SaleItemID, SUM(PromotionAmount) AS TotalItemPromotion
+                FROM SaleItemPromotions GROUP BY SaleItemID
+            ) promos ON si.SaleItemID = promos.SaleItemID
             WHERE s.Status = 'completed'
-                AND s.CashierName = ?
-                AND s.PaymentMethod = 'Cash'
-                AND s.CreatedAt >= ?
-        ),
-        SaleTotalsBeforeDiscount AS (
-            SELECT 
-                SaleID, 
-                SUM(ItemSubtotal + AddonsTotal) AS GrossTotal
-            FROM SaleItemTotals 
-            GROUP BY SaleID
+              AND s.PaymentMethod = 'Cash'
+              AND cs.CashierName = ?
+              AND s.CreatedAt >= ?
         )
-        SELECT 
-            ISNULL(SUM(
-                (sit.ItemSubtotal + sit.AddonsTotal) - 
-                (
-                    CASE 
-                        WHEN stbd.GrossTotal > 0 
-                        THEN ((sit.ItemSubtotal + sit.AddonsTotal) / stbd.GrossTotal) * sit.TotalSaleDiscount
-                        ELSE 0
-                    END
-                )
-            ), 0) AS GrossCashSales
-        FROM SaleItemTotals sit
-        JOIN SaleTotalsBeforeDiscount stbd ON sit.SaleID = stbd.SaleID
+        SELECT ISNULL(SUM(NetLineValue), 0) FROM SaleItemNetValue;
     """
     
     await cursor.execute(gross_sales_query, cashier_name, session_start_time)
     gross_result = await cursor.fetchone()
-    gross_cash_sales = Decimal(gross_result[0] if gross_result and gross_result[0] else 0)
+    gross_cash_sales = Decimal(gross_result[0] if gross_result and gross_result[0] is not None else 0)
     
-    # Step 2: Calculate total cash refunds during this session
+    # Step 2: Calculate total NET cash refunds during this session
     refunds_query = """
-        SELECT ISNULL(SUM(ri.RefundAmount), 0) AS TotalCashRefunds
-        FROM RefundedOrders ro
-        JOIN RefundedItems ri ON ro.RefundID = ri.RefundID
+        WITH SaleItemNetValue AS (
+            SELECT
+                si.SaleItemID,
+                si.Quantity AS OriginalQuantity,
+                (
+                    (si.UnitPrice * si.Quantity) +
+                    ISNULL(addons.TotalAddonPrice, 0) -
+                    ISNULL(discounts.TotalItemDiscount, 0) -
+                    ISNULL(promos.TotalItemPromotion, 0)
+                ) AS NetLineValue
+            FROM SaleItems si
+            LEFT JOIN (
+                SELECT sia.SaleItemID, SUM(a.Price * sia.Quantity) AS TotalAddonPrice
+                FROM SaleItemAddons sia JOIN Addons a ON sia.AddonID = a.AddonID GROUP BY sia.SaleItemID
+            ) addons ON si.SaleItemID = addons.SaleItemID
+            LEFT JOIN (
+                SELECT SaleItemID, SUM(DiscountAmount) AS TotalItemDiscount
+                FROM SaleItemDiscounts GROUP BY SaleItemID
+            ) discounts ON si.SaleItemID = discounts.SaleItemID
+            LEFT JOIN (
+                SELECT SaleItemID, SUM(PromotionAmount) AS TotalItemPromotion
+                FROM SaleItemPromotions GROUP BY SaleItemID
+            ) promos ON si.SaleItemID = promos.SaleItemID
+        )
+        SELECT
+            ISNULL(SUM(
+                CASE
+                    WHEN sinv.OriginalQuantity > 0 THEN (sinv.NetLineValue / sinv.OriginalQuantity) * ri.RefundedQuantity
+                    ELSE 0
+                END
+            ), 0) AS TotalNetCashRefunds
+        FROM RefundedItems ri
+        JOIN RefundedOrders ro ON ri.RefundID = ro.RefundID
         JOIN Sales s ON ro.SaleID = s.SaleID
+        JOIN CashierSessions cs ON s.SessionID = cs.SessionID
+        JOIN SaleItemNetValue sinv ON ri.SaleItemID = sinv.SaleItemID
         WHERE s.PaymentMethod = 'Cash'
-            AND s.CashierName = ?
-            AND ro.RefundedAt >= ?
+          AND cs.CashierName = ?
+          AND ro.RefundedAt >= ?;
     """
     
     await cursor.execute(refunds_query, cashier_name, session_start_time)
     refund_result = await cursor.fetchone()
-    total_cash_refunds = Decimal(refund_result[0] if refund_result and refund_result[0] else 0)
+    total_cash_refunds = Decimal(refund_result[0] if refund_result and refund_result[0] is not None else 0)
     
-    # Step 3: Calculate net cash sales
     net_cash_sales = gross_cash_sales - total_cash_refunds
     
-    logger.info(f"=== CASH SALES CALCULATION ===")
+    logger.info(f"=== CASH SALES CALCULATION (Corrected) ===")
     logger.info(f"Cashier: {cashier_name}")
     logger.info(f"Session Start: {session_start_time}")
-    logger.info(f"Gross Cash Sales: ₱{gross_cash_sales}")
-    logger.info(f"Total Cash Refunds: ₱{total_cash_refunds}")
-    logger.info(f"NET Cash Sales: ₱{net_cash_sales}")
-    logger.info(f"=============================")
+    logger.info(f"Gross Cash Sales (Net of discounts): ₱{gross_cash_sales}")
+    logger.info(f"Total Net Cash Refunds: ₱{total_cash_refunds}")
+    logger.info(f"NET Cash Sales (to be expected in drawer): ₱{net_cash_sales}")
+    logger.info(f"==========================================")
     
     return net_cash_sales, gross_cash_sales, total_cash_refunds
 
@@ -252,7 +270,6 @@ async def close_session(
     try:
         conn = await get_db_connection()
         async with conn.cursor() as cursor:
-            # Get session details
             await cursor.execute(
                 "SELECT SessionID, CashierName, InitialCash, Status, SessionStart FROM CashierSessions WHERE SessionID = ? AND Status = 'Active'",
                 request.sessionId
@@ -270,11 +287,10 @@ async def close_session(
                 cursor, cashier_name, session_start_time
             )
 
-            # Calculate closing cash from denominations
             denominations = {
                 'bills1000': 1000, 'bills500': 500, 'bills200': 200, 'bills100': 100,
                 'bills50': 50, 'bills20': 20, 'coins10': 10, 'coins5': 5, 'coins1': 1,
-                'cents25': '0.25', 'cents10': '0.10', 'cents05': '0.05' # Use strings for precision
+                'cents25': '0.25', 'cents10': '0.10', 'cents05': '0.05'
             }
             closing_cash = Decimal(0)
             for key, count in request.cashCounts.items():
@@ -284,16 +300,10 @@ async def close_session(
             expected_cash = initial_cash + net_cash_sales
             discrepancy = closing_cash - expected_cash
 
-            # --- FIX START: Correct for floating-point artifacts ---
-            # Define a tolerance for what is considered zero (e.g., less than 0.01 PHP)
             TOLERANCE = Decimal('0.01')
-            
-            # If the discrepancy is smaller than the tolerance, snap it to exactly zero
             if abs(discrepancy) < TOLERANCE:
                 discrepancy = Decimal('0.0')
-            # --- FIX END ---
 
-            # Update session
             update_sql = """
                 UPDATE CashierSessions
                 SET
@@ -318,7 +328,6 @@ async def close_session(
             logger.info(f"Actual Cash: ₱{closing_cash.quantize(Decimal('0.01'))}")
             logger.info(f"Discrepancy: ₱{discrepancy.quantize(Decimal('0.01'))}")
 
-            # Blockchain logging
             blockchain_data = {
                 "sessionId": request.sessionId,
                 "cashierName": cashier_name,
@@ -328,13 +337,12 @@ async def close_session(
                 "cashRefunds": float(total_refunds),
                 "netCashSales": float(net_cash_sales),
                 "expectedCash": float(expected_cash),
-                "discrepancy": float(discrepancy), # Now this will be a clean 0.0 when appropriate
+                "discrepancy": float(discrepancy),
                 "cashCounts": request.cashCounts,
                 "checkedBy": manager_username,
                 "verifiedBy": manager_full_name
             }
             
-            # Use the corrected discrepancy in the log description
             change_description = (
                 f"Session closed. Net sales: ₱{net_cash_sales:.2f}, "
                 f"Refunds: ₱{total_refunds:.2f}, Discrepancy: ₱{discrepancy:.2f}"
@@ -362,20 +370,17 @@ async def close_session(
                 "cashRefunds": float(total_refunds),
                 "netCashSales": float(net_cash_sales),
                 "expectedCash": float(expected_cash),
-                "discrepancy": float(discrepancy) # Return the corrected value
+                "discrepancy": float(discrepancy)
             }
 
     except HTTPException:
         raise
     except Exception as e:
-        if conn:
-            await conn.rollback()
+        if conn: await conn.rollback()
         logger.error(f"Failed to close session {request.sessionId}: {e}", exc_info=True)
         raise HTTPException(status_code=500, detail="An error occurred while closing the session.")
     finally:
-        if conn:
-            await conn.close()
-
+        if conn: await conn.close()
 
 # --- API Endpoint to Report Cash Discrepancy (FIXED) ---
 @router_cash_tally.post(

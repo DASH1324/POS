@@ -221,11 +221,9 @@ function CashierSales({ shiftLabel = "Morning Shift", shiftTime = "6:00AM – 2:
 
         const data = await response.json();
         
-        // Parse the selected date for comparison
         const selectedDateObj = new Date(selectedDate);
         selectedDateObj.setHours(0, 0, 0, 0);
         
-        // Format and filter based on product type AND date match
         const formattedData = data
           .map(entry => {
             const loggedDate = new Date(entry.logged_at);
@@ -238,7 +236,7 @@ function CashierSales({ shiftLabel = "Morning Shift", shiftTime = "6:00AM – 2:
                 minute: '2-digit',
                 hour12: true
               }),
-              rawDate: loggedDate, // Keep raw date for filtering
+              rawDate: loggedDate,
               category: entry.category,
               productName: entry.product_name,
               quantity: entry.quantity,
@@ -247,17 +245,15 @@ function CashierSales({ shiftLabel = "Morning Shift", shiftTime = "6:00AM – 2:
             };
           })
           .filter(entry => {
-            // First check: date must match selectedDate
             const entryDate = new Date(entry.rawDate);
             entryDate.setHours(0, 0, 0, 0);
             
             const dateMatches = entryDate.getTime() === selectedDateObj.getTime();
             
             if (!dateMatches) {
-              return false; // Skip if date doesn't match
+              return false;
             }
             
-            // Second check: Apply product type filter
             if (productTypeFilter === 'All') {
               return true;
             } else if (productTypeFilter === 'Merchandise') {
@@ -268,7 +264,6 @@ function CashierSales({ shiftLabel = "Morning Shift", shiftTime = "6:00AM – 2:
             return true;
           })
           .map(entry => {
-            // Remove rawDate before setting state (we don't need it in the display)
             const { rawDate, ...displayEntry } = entry;
             return displayEntry;
           });
@@ -281,7 +276,6 @@ function CashierSales({ shiftLabel = "Morning Shift", shiftTime = "6:00AM – 2:
       }
     };
 
-    // Fetch data based on active tab
     if (activeTab === 'summary') {
       fetchSalesMetricsByDate();
       fetchCancelledOrders();
@@ -386,23 +380,12 @@ function CashierSales({ shiftLabel = "Morning Shift", shiftTime = "6:00AM – 2:
       width: "25%",
       cell: (row) => {
         if (!row.timestamp) return "-";
-
         let dateObj = new Date(row.timestamp);
         if (isNaN(dateObj)) {
-          // fallback for formats like "2025-11-12 13:45:00"
           dateObj = new Date(row.timestamp.replace(" ", "T"));
         }
-
-        const formattedDate = dateObj.toLocaleDateString("en-PH", {
-          year: "numeric",
-          month: "short",
-          day: "numeric",
-        });
-        const formattedTime = dateObj.toLocaleTimeString("en-PH", {
-          hour: "2-digit",
-          minute: "2-digit",
-        });
-
+        const formattedDate = dateObj.toLocaleDateString("en-PH", { year: "numeric", month: "short", day: "numeric" });
+        const formattedTime = dateObj.toLocaleTimeString("en-PH", { hour: "2-digit", minute: "2-digit" });
         return (
           <div style={{ lineHeight: "1.3" }}>
             <div>{formattedDate}</div>
@@ -419,9 +402,7 @@ function CashierSales({ shiftLabel = "Morning Shift", shiftTime = "6:00AM – 2:
       cell: (row) => (
         <div style={{ lineHeight: "1.3" }}>
           <div style={{ fontWeight: "500" }}>{row.productName}</div>
-          <div style={{ fontSize: "12px", color: "#666" }}>
-            {row.category || "-"}
-          </div>
+          <div style={{ fontSize: "12px", color: "#666" }}>{row.category || "-"}</div>
         </div>
       )
     },
@@ -434,7 +415,6 @@ function CashierSales({ shiftLabel = "Morning Shift", shiftTime = "6:00AM – 2:
     },
   ];
 
-  // Columns for "View All"
   const spillageColumnsViewAll = [
     {
       name: "DATE & TIME",
@@ -443,23 +423,12 @@ function CashierSales({ shiftLabel = "Morning Shift", shiftTime = "6:00AM – 2:
       width: "20%",
       cell: (row) => {
         if (!row.timestamp) return "-";
-
         let dateObj = new Date(row.timestamp);
         if (isNaN(dateObj)) {
-          // fallback for formats like "2025-11-12 13:45:00"
           dateObj = new Date(row.timestamp.replace(" ", "T"));
         }
-
-        const formattedDate = dateObj.toLocaleDateString("en-PH", {
-          year: "numeric",
-          month: "short",
-          day: "numeric",
-        });
-        const formattedTime = dateObj.toLocaleTimeString("en-PH", {
-          hour: "2-digit",
-          minute: "2-digit",
-        });
-
+        const formattedDate = dateObj.toLocaleDateString("en-PH", { year: "numeric", month: "short", day: "numeric" });
+        const formattedTime = dateObj.toLocaleTimeString("en-PH", { hour: "2-digit", minute: "2-digit" });
         return (
           <div style={{ lineHeight: "1.3" }}>
             <div>{formattedDate}</div>
@@ -476,9 +445,7 @@ function CashierSales({ shiftLabel = "Morning Shift", shiftTime = "6:00AM – 2:
       cell: (row) => (
         <div style={{ lineHeight: "1.3" }}>
           <div style={{ fontWeight: "500" }}>{row.productName}</div>
-          <div style={{ fontSize: "12px", color: "#666" }}>
-            {row.category || "-"}
-          </div>
+          <div style={{ fontSize: "12px", color: "#666" }}>{row.category || "-"}</div>
         </div>
       )
     },
@@ -487,11 +454,7 @@ function CashierSales({ shiftLabel = "Morning Shift", shiftTime = "6:00AM – 2:
     { name: "LOGGED BY", selector: (row) => row.loggedBy, sortable: true, width: "20%" },
   ];
 
-// Columns for the card summary (without reason & logged by)
-const spillageColumnsSummary = spillageColumnsViewAll.filter(
-  col => !["REASON", "LOGGED BY"].includes(col.name)
-);
-
+  const spillageColumnsSummary = spillageColumnsViewAll.filter(col => !["REASON", "LOGGED BY"].includes(col.name));
   const modalCancelledColumns = [...cancelledProductsColumns];
   const customTableStyles = {
     headCells: { style: { fontWeight: "600", fontSize: "14px", padding: "12px", textTransform: "uppercase", textAlign: "center", letterSpacing: "1px" } },
@@ -499,11 +462,7 @@ const spillageColumnsSummary = spillageColumnsViewAll.filter(
   };
 
   const limitedCancelledProducts = useMemo(() => cancelledOrders.slice(0, 5), [cancelledOrders]);
-
-  const actualCashCounted = useMemo(() => {
-    return denominations.reduce((total, denom) => total + ((cashCounts[denom.key] || 0) * denom.value), 0);
-  }, [cashCounts]);
-
+  const actualCashCounted = useMemo(() => denominations.reduce((total, denom) => total + ((cashCounts[denom.key] || 0) * denom.value), 0), [cashCounts, denominations]);
   const expectedCashInSession = initialCash + sessionSalesData.cashSales;
   const discrepancyInSession = actualCashCounted - expectedCashInSession;
   const hasDiscrepancyInSession = Math.abs(discrepancyInSession) > 0.01;
@@ -515,24 +474,15 @@ const spillageColumnsSummary = spillageColumnsViewAll.filter(
 
   const handleTabChange = (tab) => {
     setActiveTab(tab);
-    
     if (tab === 'cash') {
       const username = localStorage.getItem('username');
       const token = localStorage.getItem('authToken');
-      
       if (token && username) {
         setIsSessionSalesLoading(true);
         fetch(`${SALES_METRICS_API_URL}/current_session`, {
           method: 'POST',
-          headers: { 
-            'Content-Type': 'application/json', 
-            'Authorization': `Bearer ${token}` 
-          },
-          body: JSON.stringify({
-            cashierName: username,
-            orderType: orderTypeFilter,
-            productType: productTypeFilter
-          })
+          headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
+          body: JSON.stringify({ cashierName: username, orderType: orderTypeFilter, productType: productTypeFilter })
         })
         .then(response => {
           if (!response.ok) throw new Error("Failed to fetch session sales.");
@@ -542,21 +492,14 @@ const spillageColumnsSummary = spillageColumnsViewAll.filter(
           setSessionSalesData(data);
           setSessionSalesError(null);
         })
-        .catch(err => {
-          setSessionSalesError(err.message);
-        })
-        .finally(() => {
-          setIsSessionSalesLoading(false);
-        });
+        .catch(err => setSessionSalesError(err.message))
+        .finally(() => setIsSessionSalesLoading(false));
       }
     }
   };
 
   const handleConfirmCount = () => {
-    if (!activeSessionId) { 
-      alert("Error: No active session found to close."); 
-      return; 
-    }
+    if (!activeSessionId) { alert("Error: No active session found to close."); return; }
     setEnteredPin("");
     setPinError("");
     setPinModalType('confirm');
@@ -564,10 +507,7 @@ const spillageColumnsSummary = spillageColumnsViewAll.filter(
   };
 
   const handleReportDiscrepancy = () => {
-    if (!activeSessionId) { 
-      alert("Error: No active session found."); 
-      return; 
-    }
+    if (!activeSessionId) { alert("Error: No active session found."); return; }
     setEnteredPin("");
     setPinError("");
     setPinModalType('discrepancy');
@@ -579,7 +519,9 @@ const spillageColumnsSummary = spillageColumnsViewAll.filter(
       setPinError("Please enter a valid PIN.");
       return;
     }
-
+    
+    // ** THE FIX IS HERE **
+    setPinError(""); // Clear previous errors on a new attempt
     setIsSubmitting(true);
     const token = localStorage.getItem('authToken');
 
@@ -587,23 +529,11 @@ const spillageColumnsSummary = spillageColumnsViewAll.filter(
       if (pinModalType === 'confirm') {
         const response = await fetch(`${CASH_TALLY_API_URL}/close_session`, {
           method: 'POST', 
-          headers: { 
-            'Content-Type': 'application/json', 
-            'Authorization': `Bearer ${token}` 
-          },
-          body: JSON.stringify({ 
-            sessionId: activeSessionId, 
-            cashCounts: cashCounts,
-            pin: enteredPin
-          })
+          headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
+          body: JSON.stringify({ sessionId: activeSessionId, cashCounts: cashCounts, pin: enteredPin })
         });
-
         const data = await response.json();
-        
-        if (!response.ok) {
-          throw new Error(data.detail || "Failed to close the session.");
-        }
-
+        if (!response.ok) throw new Error(data.detail || "Failed to close the session.");
         alert(`Session closed successfully! Verified by: ${data.checkedBy}`);
         setShowPinModal(false);
         setActiveSessionId(null);
@@ -612,10 +542,7 @@ const spillageColumnsSummary = spillageColumnsViewAll.filter(
       } else if (pinModalType === 'discrepancy') {
         const response = await fetch(`${CASH_TALLY_API_URL}/report_discrepancy`, {
           method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            'Authorization': `Bearer ${token}`
-          },
+          headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
           body: JSON.stringify({
             sessionId: activeSessionId,
             discrepancyAmount: discrepancyInSession,
@@ -624,14 +551,9 @@ const spillageColumnsSummary = spillageColumnsViewAll.filter(
             cashCounts: cashCounts
           })
         });
-
         const data = await response.json();
-
-        if (!response.ok) {
-          throw new Error(data.detail || "Failed to report discrepancy.");
-        }
-
-        alert(`Discrepancy of ₱${Math.abs(discrepancyInSession).toFixed(2)} has been reported and session closed.\nVerified by: ${data.checkedBy}\nClosing Cash: ₱${data.closingCash.toFixed(2)}\nCash Sales: ₱${data.cashSalesAtClose.toFixed(2)}`);
+        if (!response.ok) throw new Error(data.detail || "Failed to report discrepancy.");
+        alert(`Discrepancy of ₱${Math.abs(discrepancyInSession).toFixed(2)} has been reported and session closed.\nVerified by: ${data.checkedBy}\nClosing Cash: ₱${data.closingCash.toFixed(2)}\nCash Sales: ₱${data.grossCashSales.toFixed(2)}`);
         setShowPinModal(false);
         setActiveSessionId(null);
         setError(`Session ${data.sessionId} has been closed with discrepancy reported.`);
@@ -643,11 +565,8 @@ const spillageColumnsSummary = spillageColumnsViewAll.filter(
       setIsSubmitting(false);
     }
   };
-
-  const handleDateChange = (e) => {
-    setSelectedDate(e.target.value);
-  };
-
+  
+  const handleDateChange = (e) => setSelectedDate(e.target.value);
   const renderModal = () => {
     if (!modalType) return null;
     let modalTitle = '';
@@ -669,7 +588,7 @@ const spillageColumnsSummary = spillageColumnsViewAll.filter(
       case 'spillage':
         modalTitle = 'Spillage Records';
         data = spillageEntries;
-        columns = spillageColumnsViewAll; // use the expanded version for the modal
+        columns = spillageColumnsViewAll;
         break;
       default:
         return null;

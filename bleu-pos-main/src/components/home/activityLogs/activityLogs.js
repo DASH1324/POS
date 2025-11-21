@@ -25,6 +25,14 @@ import CustomDateModal from "../shared/customDateModal";
 const BLOCKCHAIN_API_URL = "http://localhost:9005/blockchain";
 const USER_API_URL = "http://127.0.0.1:4000/users";
 
+// Services to show by default in the Transaction Logs tab
+const REQUIRED_TRANSACTION_SERVICES = [
+  'PURCHASE_ORDER_SERVICE',
+  'POS_SALES',
+  'CASH_TALLY',
+  'CASHIER_SESSION'
+];
+
 // Helper function to format dates for the API (YYYY-MM-DD)
 const formatDateForAPI = (date) => {
   const year = date.getFullYear();
@@ -79,7 +87,7 @@ function BlockchainActivityLogs() {
   const [currentPeriodText, setCurrentPeriodText] = useState(getPeriodText("all"));
   const [groupedLogs, setGroupedLogs] = useState([]);
   const [error, setError] = useState(null);
-  
+
   // State to store the mapping of username -> FullName
   const [actorNameMap, setActorNameMap] = useState({});
 
@@ -129,9 +137,9 @@ function BlockchainActivityLogs() {
             `${USER_API_URL}/employee_name?username=${username}`,
             { headers }
           );
-          
+
           const fullName = response.data.employee_name || username;
-          
+
           console.log(`Fetched name for ${username}:`, fullName);
           return { username, fullName };
         } catch (err) {
@@ -168,7 +176,7 @@ function BlockchainActivityLogs() {
       if (serviceFilter) params.service = serviceFilter;
       if (entityTypeFilter) params.entity_type = entityTypeFilter;
       if (actionFilter) params.action = actionFilter;
-      
+
       // Add date filtering
       if (dateFilter !== "all") {
         const today = new Date();
@@ -213,7 +221,7 @@ function BlockchainActivityLogs() {
           params.end_date = endDate;
         }
       }
-      
+
       params.limit = 100;
 
       const response = await axios.get(`${BLOCKCHAIN_API_URL}/logs`, {
@@ -240,12 +248,12 @@ function BlockchainActivityLogs() {
       const token = localStorage.getItem("authToken");
 
       const params = {
-        // Filter for transaction-related services and actions
+        // Only set the service filter if the user explicitly set one, otherwise, we filter locally
         service: serviceFilter || undefined,
         entity_type: entityTypeFilter || undefined,
         action: actionFilter || undefined,
       };
-      
+
       // Add date filtering
       if (dateFilter !== "all") {
         const today = new Date();
@@ -290,7 +298,7 @@ function BlockchainActivityLogs() {
           params.end_date = endDate;
         }
       }
-      
+
       params.limit = 100;
 
       const response = await axios.get(`${BLOCKCHAIN_API_URL}/logs`, {
@@ -298,23 +306,28 @@ function BlockchainActivityLogs() {
         params,
       });
 
-      // Filter for transaction-related logs (Sales, Refunds, Cancellations)
+      // Start filtering the logs
       let transactionLogs = response.data;
 
-      // Apply service filter
+      // Determine the set of allowed services: user-filter OR required list
+      let allowedServices;
+
       if (serviceFilter) {
-        const allowedServices = serviceFilter.split(',');
-        transactionLogs = transactionLogs.filter(log => allowedServices.includes(log.service_identifier));
+        // If the user has applied a service filter, use it.
+        allowedServices = serviceFilter.split(',');
       } else {
-        // If no service filter, show all transaction-related services
-        transactionLogs = transactionLogs.filter(log =>
-          ['POS_SALES', 'PURCHASE_ORDER_SERVICE', 'POS_SALES_AUTO_CANCEL', 'DISCOUNTS_SERVICE', 'PROMOTIONS', 'CASHIER_SESSION', 'POS_SALES_REFUND'].includes(log.service_identifier)
-        );
+        // If no service filter is applied (default state), use the specified list.
+        allowedServices = REQUIRED_TRANSACTION_SERVICES;
       }
 
-      // Filter by action
+      // Apply the service filter to the logs
+      transactionLogs = transactionLogs.filter(log =>
+        allowedServices.includes(log.service_identifier)
+      );
+
+      // Filter by action (keep existing logic)
       transactionLogs = transactionLogs.filter(log => {
-        const isTransactionAction = ['CREATE', 'UPDATE', 'REFUND', 'CANCEL', 'AUTO_CANCEL'].includes(log.action);
+        const isTransactionAction = ['CREATE', 'UPDATE', 'REFUND', 'CANCEL', 'AUTO_CANCEL', 'CLOSE_SESSION'].includes(log.action);
         return isTransactionAction;
       });
 
@@ -367,49 +380,49 @@ function BlockchainActivityLogs() {
 
   // Group transaction logs - group by entity_id to show all events for same order
   const groupTransactionLogs = (logs) => {
-  const groups = {};
+    const groups = {};
 
-  logs.forEach((log) => {
-    // Normalize the key - treat POS_SALES/Sale and PURCHASE_ORDER_SERVICE/PurchaseOrder as the same
-    let normalizedService = log.service_identifier;
-    let normalizedType = log.entity_type;
-    
-    // Treat PurchaseOrder updates as part of Sale transactions
-    if (log.service_identifier === 'PURCHASE_ORDER_SERVICE' && log.entity_type === 'PurchaseOrder') {
-      normalizedService = 'POS_SALES';
-      normalizedType = 'Sale';
-    }
-    
-    const key = `${normalizedService}_${normalizedType}_${log.entity_id}`;
+    logs.forEach((log) => {
+      // Normalize the key - treat POS_SALES/Sale and PURCHASE_ORDER_SERVICE/PurchaseOrder as the same
+      let normalizedService = log.service_identifier;
+      let normalizedType = log.entity_type;
 
-    if (!groups[key]) {
-      groups[key] = {
-        id: key,
-        service: normalizedService,  // Use normalized service
-        entityType: normalizedType,   // Use normalized type
-        entityId: log.entity_id,
-        firstTimestamp: log.created_at,
-        events: [],
-      };
-    }
+      // Treat PurchaseOrder updates as part of Sale transactions
+      if (log.service_identifier === 'PURCHASE_ORDER_SERVICE' && log.entity_type === 'PurchaseOrder') {
+        normalizedService = 'POS_SALES';
+        normalizedType = 'Sale';
+      }
 
-    groups[key].events.push(log);
-  });
+      const key = `${normalizedService}_${normalizedType}_${log.entity_id}`;
 
-  // Sort events within each group by timestamp
-  Object.values(groups).forEach((group) => {
-    group.events.sort(
-      (a, b) => new Date(a.created_at) - new Date(b.created_at)
+      if (!groups[key]) {
+        groups[key] = {
+          id: key,
+          service: normalizedService,  // Use normalized service
+          entityType: normalizedType,   // Use normalized type
+          entityId: log.entity_id,
+          firstTimestamp: log.created_at,
+          events: [],
+        };
+      }
+
+      groups[key].events.push(log);
+    });
+
+    // Sort events within each group by timestamp
+    Object.values(groups).forEach((group) => {
+      group.events.sort(
+        (a, b) => new Date(a.created_at) - new Date(b.created_at)
+      );
+      // Update first timestamp to earliest event
+      group.firstTimestamp = group.events[0]?.created_at;
+    });
+
+    // Convert to array and sort by first timestamp (newest first)
+    return Object.values(groups).sort(
+      (a, b) => new Date(b.firstTimestamp) - new Date(a.firstTimestamp)
     );
-    // Update first timestamp to earliest event
-    group.firstTimestamp = group.events[0]?.created_at;
-  });
-
-  // Convert to array and sort by first timestamp (newest first)
-  return Object.values(groups).sort(
-    (a, b) => new Date(b.firstTimestamp) - new Date(a.firstTimestamp)
-  );
-};
+  };
 
   const handleClearFilters = () => {
     setSearchTerm("");
@@ -435,41 +448,43 @@ function BlockchainActivityLogs() {
   };
 
   const getServiceIcon = (service) => {
-  switch (service) {
-    case "DISCOUNTS_SERVICE":
-    case "PROMOTIONS":
-      return <FaTag className="activityLogs-icon-white" />;
-    case "POS_SALES":
-    case "PURCHASE_ORDER_SERVICE":
-      return <FaShoppingCart className="activityLogs-icon-white" />;
-    case "POS_SALES_AUTO_CANCEL":
-      return <FaBan className="activityLogs-icon-white" />;
-    case "CASHIER_SESSION":
-      return <FaUser className="activityLogs-icon-white" />; // Add FaUser to imports
-    case "POS_SALES_REFUND":
-      return <FaUndo className="activityLogs-icon-white" />;
-    case "PRODUCTS_SERVICE":
-      return <FaBox className="activityLogs-icon-white" />;
-    case "INVENTORY_SERVICE":
-      return <FaCube className="activityLogs-icon-white" />;
-    default:
-      return <FaBox className="activityLogs-icon-white" />;
-  }
-};
+    switch (service) {
+      case "DISCOUNTS_SERVICE":
+      case "PROMOTIONS":
+        return <FaTag className="activityLogs-icon-white" />;
+      case "POS_SALES":
+      case "PURCHASE_ORDER_SERVICE":
+        return <FaShoppingCart className="activityLogs-icon-white" />;
+      case "POS_SALES_AUTO_CANCEL":
+        return <FaBan className="activityLogs-icon-white" />;
+      case "CASHIER_SESSION":
+      case "CASH_TALLY": // FIX: Added CASH_TALLY for icon
+        return <FaUser className="activityLogs-icon-white" />;
+      case "POS_SALES_REFUND":
+        return <FaUndo className="activityLogs-icon-white" />;
+      case "PRODUCTS_SERVICE":
+        return <FaBox className="activityLogs-icon-white" />;
+      case "INVENTORY_SERVICE":
+        return <FaCube className="activityLogs-icon-white" />;
+      default:
+        return <FaBox className="activityLogs-icon-white" />;
+    }
+  };
 
   const getServiceColor = (service) => {
-  const colors = {
-    DISCOUNTS_SERVICE: "#3b82f6",
-    PROMOTIONS: "#3b82f6",
-    POS_SALES: "#10b981",
-    PURCHASE_ORDER_SERVICE: "#10b981",
-    POS_SALES_AUTO_CANCEL: "#ef4444",
-    POS_SALES_REFUND: "#f59e0b",
-    CASHIER_SESSION: "#8b5cf6",
-    PRODUCTS_SERVICE: "#f59e0b",
+    const colors = {
+      DISCOUNTS_SERVICE: "#3b82f6",
+      PROMOTIONS: "#3b82f6",
+      POS_SALES: "#10b981",
+      PURCHASE_ORDER_SERVICE: "#10b981",
+      POS_SALES_AUTO_CANCEL: "#ef4444",
+      POS_SALES_REFUND: "#f59e0b",
+      CASHIER_SESSION: "#8b5cf6",
+      CASH_TALLY: "#8b5cf6", // FIX: Added CASH_TALLY for color
+      PRODUCTS_SERVICE: "#f59e0b",
+    };
+    return colors[service] || "#6b7280";
   };
-  return colors[service] || "#6b7280";
-};
 
   const getActionIcon = (action) => {
     switch (action) {
@@ -541,73 +556,82 @@ function BlockchainActivityLogs() {
   };
 
   const getEntityTitle = (group) => {
-  // Normalize entity type for comparison
-  const normalizedType = group.entityType?.toUpperCase();
-  
-  // For POS_SALES in activity logs
-  if (group.service === 'POS_SALES') {
-    if (normalizedType === 'SALE') {
-      // Check if it's a refund based on change_description
-      const isRefund = group.events[0]?.change_description?.toLowerCase().includes('refund');
-      return isRefund ? 'Sale Refund' : 'Store Sale';
+    // Normalize entity type for comparison
+    const normalizedType = group.entityType?.toUpperCase();
+
+    // For POS_SALES in activity logs
+    if (group.service === 'POS_SALES') {
+      if (normalizedType === 'SALE') {
+        // Check if it's a refund based on change_description
+        const isRefund = group.events[0]?.change_description?.toLowerCase().includes('refund');
+        return isRefund ? 'Sale Refund' : 'Store Sale';
+      }
     }
-  }
 
-  // For PURCHASE_ORDER_SERVICE - show as "Online Order"
-  if (group.service === 'PURCHASE_ORDER_SERVICE' && normalizedType === 'PURCHASEORDER') {
-    return 'Online Order';
-  }
-  
-  const entityName =
-    group.events[0]?.data?.name ||
-    group.events[0]?.change_description?.split(":")[1]?.trim() ||
-    `${group.entityType} #${group.entityId}`;
-  
-  return `${group.entityType}: ${entityName}`;
-};
+    // For PURCHASE_ORDER_SERVICE - show as "Online Order"
+    if (group.service === 'PURCHASE_ORDER_SERVICE' && normalizedType === 'PURCHASEORDER') {
+      return 'Online Order';
+    }
 
-const getTransactionTitle = (group) => {
-  // Check if any event mentions "Received an Online Order"
-  const hasOnlineOrder = group.events.some(e => 
-    e.change_description?.includes('Received an Online Order:')
-  );
-  
-  if (hasOnlineOrder) {
-    return 'Online Order';
-  }
-  
-  const event = group.events[0];
-  const description = event.change_description || '';
-  
-  if (description.includes('Refund')) {
-    return 'Sale Refund';
-  }
-  
-  if (description.includes('New sale created')) {
-    return 'Store Sale';
-  }
-  
-  if (description.includes('cancelled')) {
-    return description.includes('auto-cancelled') ? 'Auto-Cancelled Order' : 'Cancelled Order';
-  }
-  
-  return 'Transaction';
-};
+    const entityName =
+      group.events[0]?.data?.name ||
+      group.events[0]?.change_description?.split(":")[1]?.trim() ||
+      `${group.entityType} #${group.entityId}`;
+
+    return `${group.entityType}: ${entityName}`;
+  };
+
+  const getTransactionTitle = (group) => {
+    // Check if any event mentions "Received an Online Order"
+    const hasOnlineOrder = group.events.some(e =>
+      e.change_description?.includes('Received an Online Order:')
+    );
+
+    if (hasOnlineOrder) {
+      return 'Online Order';
+    }
+
+    // FIX: Added explicit check for CASH_TALLY title
+    if (group.service === 'CASH_TALLY') {
+      return 'Cash Tally';
+    }
+
+    if (group.service === 'CASHIER_SESSION') {
+      return 'Cashier Session';
+    }
+
+    const event = group.events[0];
+    const description = event.change_description || '';
+
+    if (description.includes('Refund')) {
+      return 'Sale Refund';
+    }
+
+    if (description.includes('New sale created')) {
+      return 'Store Sale';
+    }
+
+    if (description.includes('cancelled')) {
+      return description.includes('auto-cancelled') ? 'Auto-Cancelled Order' : 'Cancelled Order';
+    }
+
+    return 'Transaction';
+  };
 
   // Filter groups by search term
   const filteredGroups = groupedLogs.filter((group) => {
     if (!searchTerm) return true;
 
     const searchLower = searchTerm.toLowerCase();
-    const entityTitle = activeTab === "transaction" 
+    const entityTitle = activeTab === "transaction"
       ? getTransactionTitle(group).toLowerCase()
       : getEntityTitle(group).toLowerCase();
-    
+
     // Search by full name as well
     const actorNames = group.events
       .map(e => (actorNameMap[e.actor_username] || e.actor_username).toLowerCase())
       .join(' ');
-      
+
     const descriptions = group.events
       .map((e) => e.change_description.toLowerCase())
       .join(" ");
@@ -903,11 +927,11 @@ const getTransactionTitle = (group) => {
           </div>
         </div>
       </div>
-      
-      <CustomDateModal 
-        show={isCustomModalOpen} 
-        onClose={() => setIsCustomModalOpen(false)} 
-        onApply={handleCustomApply} 
+
+      <CustomDateModal
+        show={isCustomModalOpen}
+        onClose={() => setIsCustomModalOpen(false)}
+        onApply={handleCustomApply}
       />
     </div>
   );

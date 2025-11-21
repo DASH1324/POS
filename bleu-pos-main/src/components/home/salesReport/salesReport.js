@@ -16,6 +16,7 @@ import Loading from "../shared/loading";
 import '../../confirmAlertCustom.css';
 
 const CASHIERS_API_URL = "http://127.0.0.1:4000/users/cashiers";
+const EMPLOYEE_NAME_API_URL = "http://127.0.0.1:4000/users/employee_name";
 
 // Helper function to format dates for the API (YYYY-MM-DD)
 const formatDateForAPI = (date) => {
@@ -56,15 +57,16 @@ function SalesReport() {
   const [activeTab, setActiveTab] = useState("today");
   const [selectedCashier, setSelectedCashier] = useState("all");
   const [cashiersList, setCashiersList] = useState([]);
+  const [isCashiersLoading, setIsCashiersLoading] = useState(true);
   const [selectedBranch, setSelectedBranch] = useState("main");
   const [isCustomModalOpen, setIsCustomModalOpen] = useState(false);
   const [isFilterOpen, setIsFilterOpen] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
-  const [isCashiersLoading, setIsCashiersLoading] = useState(true);
   const [error, setError] = useState(null);
   const [currentPeriodText, setCurrentPeriodText] = useState(getPeriodText("today"));
   const [customRange, setCustomRange] = useState({ start: null, end: null });
   const [reportData, setReportData] = useState(null);
+  const [processedRefundsList, setProcessedRefundsList] = useState([]);
   const [salesBreakdownTab, setSalesBreakdownTab] = useState('category');
   const [financialTab, setFinancialTab] = useState('cashDrawer');
   const [isBreakdownModalOpen, setIsBreakdownModalOpen] = useState(false);
@@ -76,6 +78,7 @@ function SalesReport() {
   // --- FETCH CASHIERS LIST ---
   useEffect(() => {
     const fetchCashiers = async () => {
+      setIsCashiersLoading(true);
       try {
         const token = localStorage.getItem('authToken');
         if (!token) {
@@ -84,9 +87,7 @@ function SalesReport() {
 
         const response = await fetch(CASHIERS_API_URL, {
           method: 'GET',
-          headers: {
-            'Authorization': `Bearer ${token}`
-          }
+          headers: { 'Authorization': `Bearer ${token}` }
         });
 
         if (!response.ok) {
@@ -94,18 +95,10 @@ function SalesReport() {
         }
 
         const data = await response.json();
-        console.log("Cashiers API Response:", data);
-        
-        // Normalize the data to handle both Username and username
-        const normalizedData = data.map(cashier => ({
-          ...cashier,
-          username: cashier.Username || cashier.username,
-          fullName: cashier.FullName || cashier.fullName
-        }));
-        
-        setCashiersList(normalizedData);
+        setCashiersList(data);
       } catch (err) {
         console.error("Error fetching cashiers:", err);
+        setError("Could not load cashier list.");
       } finally {
         setIsCashiersLoading(false);
       }
@@ -120,10 +113,10 @@ function SalesReport() {
       setIsLoading(true);
       setError(null);
       setReportData(null);
+      setProcessedRefundsList([]); // Clear previous refunds
 
       const requestBody = { reportType: activeTab };
       
-      // Add cashier filter if not "all"
       if (selectedCashier && selectedCashier !== "all") {
         requestBody.cashierName = selectedCashier;
       }
@@ -137,9 +130,6 @@ function SalesReport() {
         requestBody.startDate = customRange.start;
         requestBody.endDate = customRange.end;
       }
-      
-      console.log("=== SALES REPORT REQUEST ===");
-      console.log("Request Body:", requestBody);
       
       try {
         const token = localStorage.getItem('authToken');
@@ -162,14 +152,6 @@ function SalesReport() {
         }
 
         const data = await response.json();
-        
-        console.log("=== SALES REPORT RESPONSE ===");
-        console.log("Full Response:", data);
-        console.log("Summary:", data.summary);
-        console.log("Cash Drawer:", data.cashDrawer);
-        console.log("Payment Summary:", data.paymentSummary);
-        console.log("============================");
-        
         setReportData(data);
       } catch (err) {
         console.error("Error fetching sales report:", err);
@@ -181,6 +163,54 @@ function SalesReport() {
 
     fetchSalesReport();
   }, [activeTab, customRange, selectedCashier]);
+  
+  // --- PROCESS REFUNDS TO GET FULL CASHIER NAMES ---
+  useEffect(() => {
+    const processRefundCashierNames = async () => {
+      if (!reportData?.refundsList?.length) {
+        setProcessedRefundsList([]);
+        return;
+      }
+
+      const token = localStorage.getItem('authToken');
+      if (!token) {
+        setProcessedRefundsList(reportData.refundsList); // Fallback to usernames if no token
+        return;
+      }
+      
+      const uniqueUsernames = [...new Set(reportData.refundsList.map(item => item.cashier))];
+      
+      const namePromises = uniqueUsernames.map(async (username) => {
+        try {
+          const response = await fetch(`${EMPLOYEE_NAME_API_URL}?username=${username}`, {
+            headers: { 'Authorization': `Bearer ${token}` }
+          });
+          if (!response.ok) return { username, fullName: username }; // Fallback to username
+          const data = await response.json();
+          return { username, fullName: data.employee_name || username };
+        } catch (error) {
+          console.error(`Failed to fetch name for ${username}`, error);
+          return { username, fullName: username }; // Fallback on error
+        }
+      });
+      
+      const nameMappings = await Promise.all(namePromises);
+      const usernameToFullNameMap = nameMappings.reduce((acc, { username, fullName }) => {
+        acc[username] = fullName;
+        return acc;
+      }, {});
+      
+      const updatedRefundsList = reportData.refundsList.map(refund => ({
+        ...refund,
+        cashier: usernameToFullNameMap[refund.cashier] || refund.cashier
+      }));
+      
+      setProcessedRefundsList(updatedRefundsList);
+    };
+
+    processRefundCashierNames();
+  }, [reportData]);
+
 
   // Update the period display text when the active tab or custom range changes
   useEffect(() => {
@@ -208,7 +238,6 @@ function SalesReport() {
   const handleExportPDF = () => {
     setIsExportModalOpen(false);
     
-    // Prepare enhanced totals object with all data
     const enhancedTotals = {
       totalSales: reportData.summary?.totalSales || 0,
       cashInDrawer: reportData.summary?.cashInDrawer || 0,
@@ -225,7 +254,7 @@ function SalesReport() {
       cashDrawerDiscrepancy: reportData.cashDrawer?.discrepancy || 0,
       reportedBy: reportData.cashDrawer?.reportedBy || 'N/A',
       verifiedBy: reportData.cashDrawer?.verifiedBy || 'N/A',
-      refundsList: reportData.refundsList || []
+      refundsList: processedRefundsList, // Use processed list with full names
     };
     
     generatePDFReport(
@@ -327,13 +356,10 @@ function SalesReport() {
                 onChange={(e) => setSelectedCashier(e.target.value)}
                 disabled={isCashiersLoading}
               >
-                <option key="all-cashiers" value="all">All Cashiers</option>
-                {cashiersList.map((cashier, index) => (
-                  <option 
-                    key={`cashier-${cashier.username || cashier.name || cashier}-${index}`} 
-                    value={cashier.username || cashier.name || cashier}
-                  >
-                    {cashier.username || cashier.name || cashier}
+                <option value="all">All Cashiers</option>
+                {cashiersList.map((cashier) => (
+                  <option key={cashier.UserID} value={cashier.Username}>
+                    {cashier.FullName}
                   </option>
                 ))}
               </select>
@@ -463,7 +489,7 @@ function SalesReport() {
                     </div>
                   ) : (
                     <div className="aSalesRep-table-container">
-                      <DataTable columns={refundColumns} data={reportData.refundsList ?? []} responsive pagination customStyles={commonTableStyles} />
+                      <DataTable columns={refundColumns} data={processedRefundsList} responsive pagination customStyles={commonTableStyles} />
                     </div>
                   )}
                 </div>

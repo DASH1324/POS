@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import React, { useState, useMemo } from "react";
 import { Clock, Receipt, CreditCard, User } from 'lucide-react';
 import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
 import { faPercent } from '@fortawesome/free-solid-svg-icons';
@@ -18,16 +18,20 @@ const TransHisModal = ({
   onPartialRefund,
   cashiersMap 
 }) => {
+
   const [refundMode, setRefundMode] = useState(false);
   const [selectedItems, setSelectedItems] = useState({});
   
   const isUserAdmin = getIsUserAdmin(); 
 
+  // We now trust the backend to send the correct total and refund amounts.
+  const totalRefundedAmount = transaction?.refundInfo?.totalRefundAmount || 0;
+
   if (!show || !transaction) return null;
 
   const handleRefundOrder = () => {
     if (refundMode) {
-      // Partial refund
+      // Partial refund logic...
       const itemsToRefund = transaction.items
         .map((item, index) => {
           const refundQty = selectedItems[index] || 0;
@@ -54,7 +58,7 @@ const TransHisModal = ({
         onPartialRefund(transaction, itemsToRefund);
       }
     } else {
-      // Full refund
+      // Full refund logic...
       if (onRefundOrder) {
         onRefundOrder(transaction);
       }
@@ -76,57 +80,30 @@ const TransHisModal = ({
     }));
   };
 
+  // This function is now only for displaying an *estimated* refund total in the UI
   const calculateRefundTotal = () => {
     let total = 0;
     transaction.items.forEach((item, index) => {
       const qty = selectedItems[index] || 0;
-      total += item.price * qty;
-      
-      if (item.addons && item.addons.length > 0) {
-        item.addons.forEach(addon => {
-          const addonCostPerUnit = (addon.price * addon.quantity) / item.quantity;
-          total += addonCostPerUnit * qty;
-        });
+      if (qty > 0) {
+        let pricePerUnit = item.price;
+        if (item.addons && item.quantity > 0) {
+            item.addons.forEach(addon => {
+                pricePerUnit += (addon.price * addon.quantity) / item.quantity;
+            });
+        }
+        total += pricePerUnit * qty;
       }
     });
     return total;
   };
 
   const hasSelectedItems = Object.values(selectedItems).some(qty => qty > 0);
-  
-  // Check if any items have been refunded
   const hasRefundedItems = transaction.items?.some(item => 
     item.refundedQuantity && item.refundedQuantity > 0
   );
-
-  // Calculate actual totals
-  const calculateActualTotals = () => {
-    let actualSubtotal = 0;
-    let totalRefunded = 0;
-
-    transaction.items.forEach(item => {
-      const effectiveQty = item.quantity - (item.refundedQuantity || 0);
-      actualSubtotal += item.price * effectiveQty;
-      totalRefunded += (item.refundAmount || 0);
-
-      if (item.addons && item.addons.length > 0) {
-        item.addons.forEach(addon => {
-          const addonTotal = addon.price * addon.quantity;
-          const refundRatio = (item.refundedQuantity || 0) / item.quantity;
-          const refundedAddonAmount = addonTotal * refundRatio;
-          actualSubtotal += addonTotal - refundedAddonAmount;
-          totalRefunded += refundedAddonAmount;
-        });
-      }
-    });
-
-    return { actualSubtotal, totalRefunded };
-  };
-
-  const { actualSubtotal, totalRefunded } = calculateActualTotals();
-  const totalDiscount = (transaction.discount || 0) + (transaction.promotionalDiscount || 0);
-  const actualTotal = actualSubtotal - totalDiscount;
-  const isRefunded = transaction.status.toLowerCase() === 'refunded' || totalRefunded > 0;
+  
+  const isRefunded = transaction.status.toLowerCase() === 'refunded' || totalRefundedAmount > 0;
 
   return (
     <div className="transHis-modal-overlay" onClick={onClose}>
@@ -151,7 +128,7 @@ const TransHisModal = ({
         <div className="transHis-modal-content">
           {/* Transaction Info Grid */}
           <div className="transHis-modal-info-grid">
-            <div className="transHis-modal-info-item">
+             <div className="transHis-modal-info-item">
               <span className="transHis-modal-label">
                 <Clock size={16} className="transHis-modal-icon" />
                 DATE & TIME
@@ -204,8 +181,6 @@ const TransHisModal = ({
           {(transaction.discount > 0 || transaction.promotionalDiscount > 0) && (
             <div className="transHis-modal-applied-discounts">
               <h4>Applied Discounts & Promotions</h4>
-
-              {/* Regular discount */}
               {transaction.discount > 0 && (
                 <div className="transHis-modal-discount-item">
                   <FontAwesomeIcon icon={faPercent} />
@@ -214,13 +189,16 @@ const TransHisModal = ({
                   </span>
                 </div>
               )}
-
-              {/* Promotional discount */}
+              {/* --- THIS IS THE FIX --- */}
               {transaction.promotionalDiscount > 0 && (
                 <div className="transHis-modal-discount-item" style={{ marginTop: '8px' }}>
                   <FontAwesomeIcon icon={faPercent} />
                   <span>
-                    Promotion: {Array.isArray(transaction.promotionNames) ? transaction.promotionNames.join(", ") : transaction.promotionNames || "Unnamed Promotion"} (-₱{transaction.promotionalDiscount.toFixed(2)})
+                    Promotion: {
+                      Array.isArray(transaction.promotionNames) 
+                        ? transaction.promotionNames.join(", ") 
+                        : transaction.promotionNames
+                    } (-₱{transaction.promotionalDiscount.toFixed(2)})
                   </span>
                 </div>
               )}
@@ -257,6 +235,7 @@ const TransHisModal = ({
                           <span className="transHis-modal-quantity">
                             Qty: {item.quantity}
                           </span>
+                          
                           {item.addons && item.addons.length > 0 && (
                             <div className="transHis-modal-item-addons">
                               {item.addons.map((addon, addonIdx) => (
@@ -266,6 +245,49 @@ const TransHisModal = ({
                               ))}
                             </div>
                           )}
+                          
+                          {item.itemDiscounts && item.itemDiscounts.length > 0 && (
+                            <div className="transHis-modal-item-discount-applied">
+                              {(() => {
+                                const combinedDiscounts = {};
+                                item.itemDiscounts.forEach(discount => {
+                                  if (!combinedDiscounts[discount.discountName]) {
+                                    combinedDiscounts[discount.discountName] = { name: discount.discountName, totalQuantity: 0, totalAmount: 0 };
+                                  }
+                                  combinedDiscounts[discount.discountName].totalQuantity += discount.quantityDiscounted;
+                                  combinedDiscounts[discount.discountName].totalAmount += discount.discountAmount;
+                                });
+                                
+                                return Object.values(combinedDiscounts).map((discount, discIdx) => (
+                                  <div key={discIdx} className="transHis-modal-discount-info">
+                                    {discount.totalQuantity} {item.name} • {discount.name}: -₱{discount.totalAmount.toFixed(2)}
+                                  </div>
+                                ));
+                              })()}
+                            </div>
+                          )}
+                          
+                          {item.itemPromotions && item.itemPromotions.length > 0 && (
+                            <div className="transHis-modal-item-promotion-applied">
+                              {(() => {
+                                const combinedPromotions = {};
+                                item.itemPromotions.forEach(promo => {
+                                  if (!combinedPromotions[promo.promotionName]) {
+                                    combinedPromotions[promo.promotionName] = { name: promo.promotionName, totalQuantity: 0, totalAmount: 0 };
+                                  }
+                                  combinedPromotions[promo.promotionName].totalQuantity += promo.quantityPromoted;
+                                  combinedPromotions[promo.promotionName].totalAmount += promo.promotionAmount;
+                                });
+                                
+                                return Object.values(combinedPromotions).map((promo, promoIdx) => (
+                                  <div key={promoIdx} className="transHis-modal-promotion-info">
+                                    {promo.totalQuantity} {item.name} • {promo.name}: -₱{promo.totalAmount.toFixed(2)}
+                                  </div>
+                                ));
+                              })()}
+                            </div>
+                          )}
+                          
                           {item.refundedQuantity > 0 && (
                             <div className="transHis-modal-refunded-indicator">
                               <span className="refunded-qty-badge">Refunded: {item.refundedQuantity}</span>
@@ -273,35 +295,11 @@ const TransHisModal = ({
                           )}
                         </div>
 
-                        {/* Refund quantity controls */}
                         {refundMode && !isFullyRefunded && (
                           <div className="transHis-modal-qty-price">
-                            <button 
-                              onClick={() => updateItemQuantity(index, (selectedItems[index] || 0) - 1)}
-                              disabled={!selectedItems[index] || selectedItems[index] <= 0}
-                            >
-                              -
-                            </button>
+                            <button onClick={() => updateItemQuantity(index, (selectedItems[index] || 0) - 1)} disabled={!selectedItems[index] || selectedItems[index] <= 0}>-</button>
                             <span>{selectedItems[index] || 0}</span>
-                            <button 
-                              onClick={() => updateItemQuantity(index, (selectedItems[index] || 0) + 1)}
-                              disabled={selectedItems[index] >= availableQty}
-                            >
-                              +
-                            </button>
-                            <span className="transHis-modal-item-price">
-                              ₱{(() => {
-                                const basePrice = (item.price || 0) * (selectedItems[index] || 0);
-                                let addonPrice = 0;
-                                if (item.addons && item.addons.length > 0) {
-                                  item.addons.forEach(addon => {
-                                    const addonCostPerUnit = (addon.price * addon.quantity) / item.quantity;
-                                    addonPrice += addonCostPerUnit * (selectedItems[index] || 0);
-                                  });
-                                }
-                                return (basePrice + addonPrice).toFixed(2);
-                              })()}
-                            </span>
+                            <button onClick={() => updateItemQuantity(index, (selectedItems[index] || 0) + 1)} disabled={selectedItems[index] >= availableQty}>+</button>
                           </div>
                         )}
 
@@ -309,13 +307,10 @@ const TransHisModal = ({
                           <span className="transHis-modal-item-total-price">
                             ₱{(() => {
                               const baseTotal = item.price * item.quantity;
-                              let addonTotal = 0;
-                              if (item.addons && item.addons.length > 0) {
-                                item.addons.forEach(addon => {
-                                  addonTotal += addon.price * addon.quantity;
-                                });
-                              }
-                              return (baseTotal + addonTotal).toFixed(2);
+                              let addonTotal = (item.addons || []).reduce((sum, addon) => sum + (addon.price * addon.quantity), 0);
+                              let itemDiscountTotal = (item.itemDiscounts || []).reduce((sum, d) => sum + d.discountAmount, 0);
+                              let itemPromotionTotal = (item.itemPromotions || []).reduce((sum, p) => sum + p.promotionAmount, 0);
+                              return (baseTotal + addonTotal - itemDiscountTotal - itemPromotionTotal).toFixed(2);
                             })()}
                           </span>
                           <span className="transHis-modal-item-unit-price">
@@ -330,23 +325,20 @@ const TransHisModal = ({
             </div>
           </div>
 
-          {/* Price Breakdown */}
+          {/* Price Breakdown - Now uses backend data correctly */}
           <div className="transHis-modal-price-breakdown">
-            {/* Original Subtotal */}
             <div className="transHis-modal-breakdown-row">
               <span>Subtotal:</span>
-              <span>₱{transaction.subtotal.toFixed(2)}</span>
+              <span>₱{(transaction.subtotal || 0).toFixed(2)}</span>
             </div>
             
-            {/* Show refund amount if there are any refunds */}
-            {totalRefunded > 0 && (
+            {totalRefundedAmount > 0 && (
               <div className="transHis-modal-breakdown-row transHis-modal-refund-row">
                 <span>Refund:</span>
-                <span>-₱{totalRefunded.toFixed(2)}</span>
+                <span>-₱{totalRefundedAmount.toFixed(2)}</span>
               </div>
             )}
             
-            {/* Show regular discount if exists */}
             {transaction.discount > 0 && (
               <div className="transHis-modal-breakdown-row transHis-modal-discount">
                 <span>Discount{transaction.discountName ? ` (${transaction.discountName})` : ''}:</span>
@@ -354,47 +346,33 @@ const TransHisModal = ({
               </div>
             )}
             
-            {/* Show promotional discount if exists */}
             {transaction.promotionalDiscount > 0 && (
               <div className="transHis-modal-breakdown-row transHis-modal-discount">
-                <span>Promotion{transaction.promotionNames ? ` (${transaction.promotionNames})` : ''}:</span>
+                <span>Promotion ({
+                  Array.isArray(transaction.promotionNames) 
+                    ? transaction.promotionNames.join(", ") 
+                    : transaction.promotionNames
+                }):</span>
                 <span>-₱{transaction.promotionalDiscount.toFixed(2)}</span>
               </div>
             )}    
             
-            {/* Total Amount */}
             <div className="transHis-modal-breakdown-row transHis-modal-total">
               <span>Total:</span>
-              <span>₱{actualTotal.toFixed(2)}</span>
+              <span>₱{(transaction.total || 0).toFixed(2)}</span>
             </div>
             
-            {/* Show refund total when in refund mode */}
             {refundMode && hasSelectedItems && (
               <div className="transHis-modal-breakdown-row transHis-modal-refund-total">
-                <span>Refund Amount:</span>
+                <span>Est. Refund Amount:</span>
                 <span>₱{calculateRefundTotal().toFixed(2)}</span>
               </div>
             )}
           </div>
 
-          {/* Refund Info Display */}
           {isRefunded && transaction.refundInfo && (
             <div className="transHis-modal-refund-info">
-              <h4>Refund Information</h4>
-              <div className="transHis-modal-refund-details">
-                <div className="refund-detail-row">
-                  <span>Refund Type:</span>
-                  <span className="refund-type-badge">
-                    {transaction.refundInfo.refundType || 'partial'}
-                  </span>
-                </div>
-                {transaction.refundInfo.refundReason && (
-                  <div className="refund-detail-row">
-                    <span>Reason:</span>
-                    <span>{transaction.refundInfo.refundReason}</span>
-                  </div>
-                )}
-              </div>
+              {/* Refund info display */}
             </div>
           )}
 

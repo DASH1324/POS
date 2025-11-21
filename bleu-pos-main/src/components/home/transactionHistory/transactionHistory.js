@@ -586,7 +586,9 @@ function TransactionHistory() {
               addons: orderItem.addons || [],
               refundedQuantity: row.items.find(i => i.name === orderItem.name)?.refundedQuantity || 0,
               refundAmount: row.items.find(i => i.name === orderItem.name)?.refundAmount || 0,
-              isFullyRefunded: row.items.find(i => i.name === orderItem.name)?.isFullyRefunded || false
+              isFullyRefunded: row.items.find(i => i.name === orderItem.name)?.isFullyRefunded || false,
+              itemDiscounts: row.items.find(i => i.name === orderItem.name)?.itemDiscounts || [],
+              itemPromotions: row.items.find(i => i.name === orderItem.name)?.itemPromotions || []
             }))
           };
           

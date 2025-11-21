@@ -163,7 +163,8 @@ function Orders() {
                 category: item.category,
                 size: item.size || 'Standard', 
                 addons: item.addons || [],
-                itemDiscounts: item.itemDiscounts || []
+                itemDiscounts: item.itemDiscounts || [],
+                itemPromotions: item.itemPromotions || []
 
               })) : [],
               source: 'store',

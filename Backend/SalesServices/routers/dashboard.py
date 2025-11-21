@@ -120,7 +120,7 @@ async def get_total_sales(
     filter: Literal["Today", "Yesterday", "This Week", "This Month"] = "Today",
     current_user: dict = Depends(get_current_active_user)
 ):
-    """Get total sales data for admin dashboard - Net sales after discounts/promotions"""
+    """Get total sales data for admin dashboard - Net sales after item-level discounts/promotions and refunds"""
     # Check authorization
     allowed_roles = ["admin", "manager"]
     if current_user.get("userRole") not in allowed_roles:
@@ -156,29 +156,145 @@ async def get_total_sales(
         
         end_date = now
         
-        # Current period sales - Net sales after discounts and promotions
+        # Current period sales - Using the SAME logic as cashier sales.py
         await cursor.execute("""
-            SELECT 
-                ISNULL(SUM(si.Quantity * si.UnitPrice), 0) 
-                - ISNULL(SUM(s.TotalDiscountAmount), 0) 
-                - ISNULL(SUM(s.PromotionalDiscountAmount), 0) as NetSales
-            FROM Sales s
-            INNER JOIN SaleItems si ON s.SaleID = si.SaleID
-            WHERE s.Status = 'completed' 
-            AND s.CreatedAt >= ? AND s.CreatedAt < ?
+            WITH SaleItemDetails AS (
+                SELECT 
+                    s.SaleID,
+                    si.SaleItemID,
+                    (si.UnitPrice * si.Quantity) AS ItemSubtotal,
+                    ISNULL((
+                        SELECT SUM(a.Price * sia.Quantity)
+                        FROM SaleItemAddons sia
+                        JOIN Addons a ON sia.AddonID = a.AddonID
+                        WHERE sia.SaleItemID = si.SaleItemID
+                    ), 0) AS AddonsTotal
+                FROM Sales s
+                INNER JOIN SaleItems si ON s.SaleID = si.SaleID
+                WHERE s.Status = 'completed'
+                AND s.CreatedAt >= ? AND s.CreatedAt < ?
+            ),
+            ItemLevelDiscounts AS (
+                SELECT 
+                    sid.SaleItemID,
+                    SUM(sid.DiscountAmount) AS TotalItemDiscount
+                FROM SaleItemDiscounts sid
+                WHERE EXISTS (
+                    SELECT 1 FROM SaleItemDetails s2 
+                    WHERE s2.SaleItemID = sid.SaleItemID
+                )
+                GROUP BY sid.SaleItemID
+            ),
+            ItemLevelPromotions AS (
+                SELECT 
+                    sip.SaleItemID,
+                    SUM(sip.PromotionAmount) AS TotalItemPromotion
+                FROM SaleItemPromotions sip
+                WHERE EXISTS (
+                    SELECT 1 FROM SaleItemDetails s2 
+                    WHERE s2.SaleItemID = sip.SaleItemID
+                )
+                GROUP BY sip.SaleItemID
+            ),
+            RefundedItemsDetail AS (
+                SELECT 
+                    ri.SaleItemID,
+                    SUM(ri.RefundAmount) AS TotalRefundAmount
+                FROM RefundedItems ri
+                WHERE EXISTS (
+                    SELECT 1 FROM SaleItemDetails s2 
+                    WHERE s2.SaleItemID = ri.SaleItemID
+                )
+                GROUP BY ri.SaleItemID
+            ),
+            NetSaleItems AS (
+                SELECT 
+                    (sid.ItemSubtotal + sid.AddonsTotal 
+                     - ISNULL(ild.TotalItemDiscount, 0) 
+                     - ISNULL(ilp.TotalItemPromotion, 0)) 
+                    - ISNULL(ri.TotalRefundAmount, 0) AS NetAmount
+                FROM SaleItemDetails sid
+                LEFT JOIN ItemLevelDiscounts ild ON sid.SaleItemID = ild.SaleItemID
+                LEFT JOIN ItemLevelPromotions ilp ON sid.SaleItemID = ilp.SaleItemID
+                LEFT JOIN RefundedItemsDetail ri ON sid.SaleItemID = ri.SaleItemID
+                WHERE (sid.ItemSubtotal + sid.AddonsTotal 
+                       - ISNULL(ild.TotalItemDiscount, 0) 
+                       - ISNULL(ilp.TotalItemPromotion, 0) 
+                       - ISNULL(ri.TotalRefundAmount, 0)) > 0.01
+            )
+            SELECT ISNULL(SUM(NetAmount), 0) AS NetSales
+            FROM NetSaleItems
         """, start_date, end_date)
         current = float((await cursor.fetchone())[0] or 0)
         
-        # Previous period sales - Net sales after discounts and promotions
+        # Previous period sales - Same logic
         await cursor.execute("""
-            SELECT 
-                ISNULL(SUM(si.Quantity * si.UnitPrice), 0) 
-                - ISNULL(SUM(s.TotalDiscountAmount), 0) 
-                - ISNULL(SUM(s.PromotionalDiscountAmount), 0) as NetSales
-            FROM Sales s
-            INNER JOIN SaleItems si ON s.SaleID = si.SaleID
-            WHERE s.Status = 'completed' 
-            AND s.CreatedAt >= ? AND s.CreatedAt < ?
+            WITH SaleItemDetails AS (
+                SELECT 
+                    s.SaleID,
+                    si.SaleItemID,
+                    (si.UnitPrice * si.Quantity) AS ItemSubtotal,
+                    ISNULL((
+                        SELECT SUM(a.Price * sia.Quantity)
+                        FROM SaleItemAddons sia
+                        JOIN Addons a ON sia.AddonID = a.AddonID
+                        WHERE sia.SaleItemID = si.SaleItemID
+                    ), 0) AS AddonsTotal
+                FROM Sales s
+                INNER JOIN SaleItems si ON s.SaleID = si.SaleID
+                WHERE s.Status = 'completed'
+                AND s.CreatedAt >= ? AND s.CreatedAt < ?
+            ),
+            ItemLevelDiscounts AS (
+                SELECT 
+                    sid.SaleItemID,
+                    SUM(sid.DiscountAmount) AS TotalItemDiscount
+                FROM SaleItemDiscounts sid
+                WHERE EXISTS (
+                    SELECT 1 FROM SaleItemDetails s2 
+                    WHERE s2.SaleItemID = sid.SaleItemID
+                )
+                GROUP BY sid.SaleItemID
+            ),
+            ItemLevelPromotions AS (
+                SELECT 
+                    sip.SaleItemID,
+                    SUM(sip.PromotionAmount) AS TotalItemPromotion
+                FROM SaleItemPromotions sip
+                WHERE EXISTS (
+                    SELECT 1 FROM SaleItemDetails s2 
+                    WHERE s2.SaleItemID = sip.SaleItemID
+                )
+                GROUP BY sip.SaleItemID
+            ),
+            RefundedItemsDetail AS (
+                SELECT 
+                    ri.SaleItemID,
+                    SUM(ri.RefundAmount) AS TotalRefundAmount
+                FROM RefundedItems ri
+                WHERE EXISTS (
+                    SELECT 1 FROM SaleItemDetails s2 
+                    WHERE s2.SaleItemID = ri.SaleItemID
+                )
+                GROUP BY ri.SaleItemID
+            ),
+            NetSaleItems AS (
+                SELECT 
+                    (sid.ItemSubtotal + sid.AddonsTotal 
+                     - ISNULL(ild.TotalItemDiscount, 0) 
+                     - ISNULL(ilp.TotalItemPromotion, 0)) 
+                    - ISNULL(ri.TotalRefundAmount, 0) AS NetAmount
+                FROM SaleItemDetails sid
+                LEFT JOIN ItemLevelDiscounts ild ON sid.SaleItemID = ild.SaleItemID
+                LEFT JOIN ItemLevelPromotions ilp ON sid.SaleItemID = ilp.SaleItemID
+                LEFT JOIN RefundedItemsDetail ri ON sid.SaleItemID = ri.SaleItemID
+                WHERE (sid.ItemSubtotal + sid.AddonsTotal 
+                       - ISNULL(ild.TotalItemDiscount, 0) 
+                       - ISNULL(ilp.TotalItemPromotion, 0) 
+                       - ISNULL(ri.TotalRefundAmount, 0)) > 0.01
+            )
+            SELECT ISNULL(SUM(NetAmount), 0) AS NetSales
+            FROM NetSaleItems
         """, prev_start, prev_end)
         previous = float((await cursor.fetchone())[0] or 0)
         
@@ -370,7 +486,7 @@ async def get_sales_overview(
     filter: Literal["Daily", "Weekly", "Monthly", "Yearly"] = "Monthly",
     current_user: dict = Depends(get_current_active_user)
 ):
-    """Get sales overview data - Net sales after discounts and promotions"""
+    """Get sales overview data - Net sales after item-level discounts/promotions and refunds"""
     allowed_roles = ["admin", "manager"]
     if current_user.get("userRole") not in allowed_roles:
         raise HTTPException(
@@ -386,76 +502,247 @@ async def get_sales_overview(
         
         if filter == "Daily":
             await cursor.execute("""
-                SELECT 
-                    DATENAME(weekday, s.CreatedAt) as Period,
-                    CAST(s.CreatedAt AS DATE) as SortDate,
-                    ISNULL(SUM(si.Quantity * si.UnitPrice), 0) 
-                    - ISNULL(SUM(s.TotalDiscountAmount), 0) 
-                    - ISNULL(SUM(s.PromotionalDiscountAmount), 0) as Income
-                FROM Sales s
-                INNER JOIN SaleItems si ON s.SaleID = si.SaleID
-                WHERE s.Status = 'completed'
-                AND s.CreatedAt >= DATEADD(day, -7, GETDATE())
-                GROUP BY CAST(s.CreatedAt AS DATE), DATENAME(weekday, s.CreatedAt)
+                WITH SaleItemDetails AS (
+                    SELECT 
+                        DATENAME(weekday, s.CreatedAt) as Period,
+                        CAST(s.CreatedAt AS DATE) as SortDate,
+                        si.SaleItemID,
+                        (si.UnitPrice * si.Quantity) AS ItemSubtotal,
+                        ISNULL((
+                            SELECT SUM(a.Price * sia.Quantity)
+                            FROM SaleItemAddons sia
+                            JOIN Addons a ON sia.AddonID = a.AddonID
+                            WHERE sia.SaleItemID = si.SaleItemID
+                        ), 0) AS AddonsTotal
+                    FROM Sales s
+                    INNER JOIN SaleItems si ON s.SaleID = si.SaleID
+                    WHERE s.Status = 'completed'
+                    AND s.CreatedAt >= DATEADD(day, -7, GETDATE())
+                ),
+                ItemLevelDiscounts AS (
+                    SELECT sid.SaleItemID, SUM(sid.DiscountAmount) AS TotalItemDiscount
+                    FROM SaleItemDiscounts sid
+                    WHERE EXISTS (SELECT 1 FROM SaleItemDetails s2 WHERE s2.SaleItemID = sid.SaleItemID)
+                    GROUP BY sid.SaleItemID
+                ),
+                ItemLevelPromotions AS (
+                    SELECT sip.SaleItemID, SUM(sip.PromotionAmount) AS TotalItemPromotion
+                    FROM SaleItemPromotions sip
+                    WHERE EXISTS (SELECT 1 FROM SaleItemDetails s2 WHERE s2.SaleItemID = sip.SaleItemID)
+                    GROUP BY sip.SaleItemID
+                ),
+                RefundedItemsDetail AS (
+                    SELECT ri.SaleItemID, SUM(ri.RefundAmount) AS TotalRefundAmount
+                    FROM RefundedItems ri
+                    WHERE EXISTS (SELECT 1 FROM SaleItemDetails s2 WHERE s2.SaleItemID = ri.SaleItemID)
+                    GROUP BY ri.SaleItemID
+                ),
+                NetSaleItems AS (
+                    SELECT 
+                        sid.Period, sid.SortDate,
+                        (sid.ItemSubtotal + sid.AddonsTotal 
+                         - ISNULL(ild.TotalItemDiscount, 0) 
+                         - ISNULL(ilp.TotalItemPromotion, 0)) 
+                        - ISNULL(ri.TotalRefundAmount, 0) AS NetAmount
+                    FROM SaleItemDetails sid
+                    LEFT JOIN ItemLevelDiscounts ild ON sid.SaleItemID = ild.SaleItemID
+                    LEFT JOIN ItemLevelPromotions ilp ON sid.SaleItemID = ilp.SaleItemID
+                    LEFT JOIN RefundedItemsDetail ri ON sid.SaleItemID = ri.SaleItemID
+                    WHERE (sid.ItemSubtotal + sid.AddonsTotal 
+                           - ISNULL(ild.TotalItemDiscount, 0) 
+                           - ISNULL(ilp.TotalItemPromotion, 0) 
+                           - ISNULL(ri.TotalRefundAmount, 0)) > 0.01
+                )
+                SELECT Period, SortDate, ISNULL(SUM(NetAmount), 0) AS Income
+                FROM NetSaleItems
+                GROUP BY Period, SortDate
                 ORDER BY SortDate
             """)
         elif filter == "Weekly":
             await cursor.execute("""
-                SELECT 
-                    'Week ' + CAST(DATEPART(week, s.CreatedAt) - DATEPART(week, DATEADD(month, -1, GETDATE())) + 1 AS VARCHAR) as Period,
-                    DATEPART(week, s.CreatedAt) as WeekNum,
-                    ISNULL(SUM(si.Quantity * si.UnitPrice), 0) 
-                    - ISNULL(SUM(s.TotalDiscountAmount), 0) 
-                    - ISNULL(SUM(s.PromotionalDiscountAmount), 0) as Income
-                FROM Sales s
-                INNER JOIN SaleItems si ON s.SaleID = si.SaleID
-                WHERE s.Status = 'completed'
-                AND s.CreatedAt >= DATEADD(week, -4, GETDATE())
-                GROUP BY DATEPART(week, s.CreatedAt)
+                WITH SaleItemDetails AS (
+                    SELECT 
+                        'Week ' + CAST(DATEPART(week, s.CreatedAt) - DATEPART(week, DATEADD(month, -1, GETDATE())) + 1 AS VARCHAR) as Period,
+                        DATEPART(week, s.CreatedAt) as WeekNum,
+                        si.SaleItemID,
+                        (si.UnitPrice * si.Quantity) AS ItemSubtotal,
+                        ISNULL((
+                            SELECT SUM(a.Price * sia.Quantity)
+                            FROM SaleItemAddons sia
+                            JOIN Addons a ON sia.AddonID = a.AddonID
+                            WHERE sia.SaleItemID = si.SaleItemID
+                        ), 0) AS AddonsTotal
+                    FROM Sales s
+                    INNER JOIN SaleItems si ON s.SaleID = si.SaleID
+                    WHERE s.Status = 'completed'
+                    AND s.CreatedAt >= DATEADD(week, -4, GETDATE())
+                ),
+                ItemLevelDiscounts AS (
+                    SELECT sid.SaleItemID, SUM(sid.DiscountAmount) AS TotalItemDiscount
+                    FROM SaleItemDiscounts sid
+                    WHERE EXISTS (SELECT 1 FROM SaleItemDetails s2 WHERE s2.SaleItemID = sid.SaleItemID)
+                    GROUP BY sid.SaleItemID
+                ),
+                ItemLevelPromotions AS (
+                    SELECT sip.SaleItemID, SUM(sip.PromotionAmount) AS TotalItemPromotion
+                    FROM SaleItemPromotions sip
+                    WHERE EXISTS (SELECT 1 FROM SaleItemDetails s2 WHERE s2.SaleItemID = sip.SaleItemID)
+                    GROUP BY sip.SaleItemID
+                ),
+                RefundedItemsDetail AS (
+                    SELECT ri.SaleItemID, SUM(ri.RefundAmount) AS TotalRefundAmount
+                    FROM RefundedItems ri
+                    WHERE EXISTS (SELECT 1 FROM SaleItemDetails s2 WHERE s2.SaleItemID = ri.SaleItemID)
+                    GROUP BY ri.SaleItemID
+                ),
+                NetSaleItems AS (
+                    SELECT 
+                        sid.Period, sid.WeekNum,
+                        (sid.ItemSubtotal + sid.AddonsTotal 
+                         - ISNULL(ild.TotalItemDiscount, 0) 
+                         - ISNULL(ilp.TotalItemPromotion, 0)) 
+                        - ISNULL(ri.TotalRefundAmount, 0) AS NetAmount
+                    FROM SaleItemDetails sid
+                    LEFT JOIN ItemLevelDiscounts ild ON sid.SaleItemID = ild.SaleItemID
+                    LEFT JOIN ItemLevelPromotions ilp ON sid.SaleItemID = ilp.SaleItemID
+                    LEFT JOIN RefundedItemsDetail ri ON sid.SaleItemID = ri.SaleItemID
+                    WHERE (sid.ItemSubtotal + sid.AddonsTotal 
+                           - ISNULL(ild.TotalItemDiscount, 0) 
+                           - ISNULL(ilp.TotalItemPromotion, 0) 
+                           - ISNULL(ri.TotalRefundAmount, 0)) > 0.01
+                )
+                SELECT Period, WeekNum, ISNULL(SUM(NetAmount), 0) AS Income
+                FROM NetSaleItems
+                GROUP BY Period, WeekNum
                 ORDER BY WeekNum
             """)
         elif filter == "Monthly":
             await cursor.execute("""
-                SELECT 
-                    DATENAME(month, s.CreatedAt) as Period,
-                    YEAR(s.CreatedAt) as YearNum,
-                    MONTH(s.CreatedAt) as MonthNum,
-                    ISNULL(SUM(si.Quantity * si.UnitPrice), 0) 
-                    - ISNULL(SUM(s.TotalDiscountAmount), 0) 
-                    - ISNULL(SUM(s.PromotionalDiscountAmount), 0) as Income
-                FROM Sales s
-                INNER JOIN SaleItems si ON s.SaleID = si.SaleID
-                WHERE s.Status = 'completed'
-                AND s.CreatedAt >= DATEADD(month, -7, GETDATE())
-                GROUP BY YEAR(s.CreatedAt), MONTH(s.CreatedAt), DATENAME(month, s.CreatedAt)
+                WITH SaleItemDetails AS (
+                    SELECT 
+                        DATENAME(month, s.CreatedAt) as Period,
+                        YEAR(s.CreatedAt) as YearNum,
+                        MONTH(s.CreatedAt) as MonthNum,
+                        si.SaleItemID,
+                        (si.UnitPrice * si.Quantity) AS ItemSubtotal,
+                        ISNULL((
+                            SELECT SUM(a.Price * sia.Quantity)
+                            FROM SaleItemAddons sia
+                            JOIN Addons a ON sia.AddonID = a.AddonID
+                            WHERE sia.SaleItemID = si.SaleItemID
+                        ), 0) AS AddonsTotal
+                    FROM Sales s
+                    INNER JOIN SaleItems si ON s.SaleID = si.SaleID
+                    WHERE s.Status = 'completed'
+                    AND s.CreatedAt >= DATEADD(month, -7, GETDATE())
+                ),
+                ItemLevelDiscounts AS (
+                    SELECT sid.SaleItemID, SUM(sid.DiscountAmount) AS TotalItemDiscount
+                    FROM SaleItemDiscounts sid
+                    WHERE EXISTS (SELECT 1 FROM SaleItemDetails s2 WHERE s2.SaleItemID = sid.SaleItemID)
+                    GROUP BY sid.SaleItemID
+                ),
+                ItemLevelPromotions AS (
+                    SELECT sip.SaleItemID, SUM(sip.PromotionAmount) AS TotalItemPromotion
+                    FROM SaleItemPromotions sip
+                    WHERE EXISTS (SELECT 1 FROM SaleItemDetails s2 WHERE s2.SaleItemID = sip.SaleItemID)
+                    GROUP BY sip.SaleItemID
+                ),
+                RefundedItemsDetail AS (
+                    SELECT ri.SaleItemID, SUM(ri.RefundAmount) AS TotalRefundAmount
+                    FROM RefundedItems ri
+                    WHERE EXISTS (SELECT 1 FROM SaleItemDetails s2 WHERE s2.SaleItemID = ri.SaleItemID)
+                    GROUP BY ri.SaleItemID
+                ),
+                NetSaleItems AS (
+                    SELECT 
+                        sid.Period, sid.YearNum, sid.MonthNum,
+                        (sid.ItemSubtotal + sid.AddonsTotal 
+                         - ISNULL(ild.TotalItemDiscount, 0) 
+                         - ISNULL(ilp.TotalItemPromotion, 0)) 
+                        - ISNULL(ri.TotalRefundAmount, 0) AS NetAmount
+                    FROM SaleItemDetails sid
+                    LEFT JOIN ItemLevelDiscounts ild ON sid.SaleItemID = ild.SaleItemID
+                    LEFT JOIN ItemLevelPromotions ilp ON sid.SaleItemID = ilp.SaleItemID
+                    LEFT JOIN RefundedItemsDetail ri ON sid.SaleItemID = ri.SaleItemID
+                    WHERE (sid.ItemSubtotal + sid.AddonsTotal 
+                           - ISNULL(ild.TotalItemDiscount, 0) 
+                           - ISNULL(ilp.TotalItemPromotion, 0) 
+                           - ISNULL(ri.TotalRefundAmount, 0)) > 0.01
+                )
+                SELECT Period, YearNum, MonthNum, ISNULL(SUM(NetAmount), 0) AS Income
+                FROM NetSaleItems
+                GROUP BY Period, YearNum, MonthNum
                 ORDER BY YearNum, MonthNum
             """)
         else:  # Yearly
             await cursor.execute("""
-                SELECT 
-                    CAST(YEAR(s.CreatedAt) AS VARCHAR) as Period,
-                    YEAR(s.CreatedAt) as YearNum,
-                    ISNULL(SUM(si.Quantity * si.UnitPrice), 0) 
-                    - ISNULL(SUM(s.TotalDiscountAmount), 0) 
-                    - ISNULL(SUM(s.PromotionalDiscountAmount), 0) as Income
-                FROM Sales s
-                INNER JOIN SaleItems si ON s.SaleID = si.SaleID
-                WHERE s.Status = 'completed'
-                AND s.CreatedAt >= DATEADD(year, -4, GETDATE())
-                GROUP BY YEAR(s.CreatedAt)
+                WITH SaleItemDetails AS (
+                    SELECT 
+                        CAST(YEAR(s.CreatedAt) AS VARCHAR) as Period,
+                        YEAR(s.CreatedAt) as YearNum,
+                        si.SaleItemID,
+                        (si.UnitPrice * si.Quantity) AS ItemSubtotal,
+                        ISNULL((
+                            SELECT SUM(a.Price * sia.Quantity)
+                            FROM SaleItemAddons sia
+                            JOIN Addons a ON sia.AddonID = a.AddonID
+                            WHERE sia.SaleItemID = si.SaleItemID
+                        ), 0) AS AddonsTotal
+                    FROM Sales s
+                    INNER JOIN SaleItems si ON s.SaleID = si.SaleID
+                    WHERE s.Status = 'completed'
+                    AND s.CreatedAt >= DATEADD(year, -4, GETDATE())
+                ),
+                ItemLevelDiscounts AS (
+                    SELECT sid.SaleItemID, SUM(sid.DiscountAmount) AS TotalItemDiscount
+                    FROM SaleItemDiscounts sid
+                    WHERE EXISTS (SELECT 1 FROM SaleItemDetails s2 WHERE s2.SaleItemID = sid.SaleItemID)
+                    GROUP BY sid.SaleItemID
+                ),
+                ItemLevelPromotions AS (
+                    SELECT sip.SaleItemID, SUM(sip.PromotionAmount) AS TotalItemPromotion
+                    FROM SaleItemPromotions sip
+                    WHERE EXISTS (SELECT 1 FROM SaleItemDetails s2 WHERE s2.SaleItemID = sip.SaleItemID)
+                    GROUP BY sip.SaleItemID
+                ),
+                RefundedItemsDetail AS (
+                    SELECT ri.SaleItemID, SUM(ri.RefundAmount) AS TotalRefundAmount
+                    FROM RefundedItems ri
+                    WHERE EXISTS (SELECT 1 FROM SaleItemDetails s2 WHERE s2.SaleItemID = ri.SaleItemID)
+                    GROUP BY ri.SaleItemID
+                ),
+                NetSaleItems AS (
+                    SELECT 
+                        sid.Period, sid.YearNum,
+                        (sid.ItemSubtotal + sid.AddonsTotal 
+                         - ISNULL(ild.TotalItemDiscount, 0) 
+                         - ISNULL(ilp.TotalItemPromotion, 0)) 
+                        - ISNULL(ri.TotalRefundAmount, 0) AS NetAmount
+                    FROM SaleItemDetails sid
+                    LEFT JOIN ItemLevelDiscounts ild ON sid.SaleItemID = ild.SaleItemID
+                    LEFT JOIN ItemLevelPromotions ilp ON sid.SaleItemID = ilp.SaleItemID
+                    LEFT JOIN RefundedItemsDetail ri ON sid.SaleItemID = ri.SaleItemID
+                    WHERE (sid.ItemSubtotal + sid.AddonsTotal 
+                           - ISNULL(ild.TotalItemDiscount, 0) 
+                           - ISNULL(ilp.TotalItemPromotion, 0) 
+                           - ISNULL(ri.TotalRefundAmount, 0)) > 0.01
+                )
+                SELECT Period, YearNum, ISNULL(SUM(NetAmount), 0) AS Income
+                FROM NetSaleItems
+                GROUP BY Period, YearNum
                 ORDER BY YearNum
             """)
         
         rows = await cursor.fetchall()
         
-        # Return empty array if no data
         if not rows:
             return []
         
         for row in rows:
             data.append({
                 "name": row[0],
-                "income": float(row[-1])  # Last column is income
+                "income": float(row[-1])
             })
         
         return data
@@ -463,13 +750,12 @@ async def get_sales_overview(
         await cursor.close()
         await conn.close()
 
-
 @router_dashboard.get("/admin/best-selling-items")
 async def get_best_selling_items(
     filter: Literal["Today", "Last 7 Days", "Last 30 Days", "Last 90 Days", "All-Time"] = "Last 30 Days",
     current_user: dict = Depends(get_current_active_user)
 ):
-    """Get best-selling items - returns empty array if no data"""
+    """Get best-selling items, excluding any refunded quantities."""
     allowed_roles = ["admin", "manager"]
     if current_user.get("userRole") not in allowed_roles:
         raise HTTPException(
@@ -493,31 +779,28 @@ async def get_best_selling_items(
         else:  # All-Time
             date_condition = "1=1"  # No date filter
         
-        # Check if there are any sales in the period
+        # Get best-selling items based on net quantity (sold - refunded)
         query = f"""
-            SELECT COUNT(DISTINCT s.SaleID)
-            FROM Sales s
-            WHERE s.Status = 'completed'
-            AND {date_condition}
-        """
-        await cursor.execute(query)
-        
-        sale_count = (await cursor.fetchone())[0]
-        
-        # If no sales, return empty array
-        if sale_count == 0:
-            return []
-        
-        # Get best-selling items
-        query = f"""
+            WITH ItemNetQuantities AS (
+                -- Calculate the net quantity for each individual sale item,
+                -- accounting for any partial or full refunds.
+                SELECT
+                    si.ItemName,
+                    si.Quantity - ISNULL(SUM(ri.RefundedQuantity), 0) AS NetQuantity
+                FROM Sales s
+                JOIN SaleItems si ON s.SaleID = si.SaleID
+                LEFT JOIN RefundedItems ri ON si.SaleItemID = ri.SaleItemID
+                WHERE 
+                    s.Status = 'completed' AND {date_condition}
+                GROUP BY si.SaleItemID, si.ItemName, si.Quantity
+            )
+            -- Aggregate the net quantities for each product name.
             SELECT TOP 5
-                si.ItemName,
-                SUM(si.Quantity) as TotalSales
-            FROM SaleItems si
-            INNER JOIN Sales s ON si.SaleID = s.SaleID
-            WHERE s.Status = 'completed'
-            AND {date_condition}
-            GROUP BY si.ItemName
+                ItemName,
+                SUM(NetQuantity) as TotalSales
+            FROM ItemNetQuantities
+            GROUP BY ItemName
+            HAVING SUM(NetQuantity) > 0 -- Exclude products that have been fully refunded.
             ORDER BY TotalSales DESC
         """
         await cursor.execute(query)
@@ -541,7 +824,7 @@ async def get_shift_performance(
     filter: Literal["Today", "Yesterday", "This Week", "Last Week", "This Month"] = "Today",
     current_user: dict = Depends(get_current_active_user)
 ):
-    """Get shift performance by cashier - returns empty array if no data"""
+    """Get shift performance by cashier - Net sales after item-level discounts/promotions and refunds"""
     allowed_roles = ["admin", "manager"]
     if current_user.get("userRole") not in allowed_roles:
         raise HTTPException(
@@ -565,21 +848,67 @@ async def get_shift_performance(
         else:  # This Month
             date_filter = "s.CreatedAt >= DATEADD(month, DATEDIFF(month, 0, GETDATE()), 0)"
         
-        # JOIN with CashierSessions to get CashierName
         query = f"""
+            WITH SaleItemDetails AS (
+                SELECT 
+                    ISNULL(cs.CashierName, 'Unknown') as CashierUsername,
+                    s.SaleID,
+                    si.SaleItemID,
+                    (si.UnitPrice * si.Quantity) AS ItemSubtotal,
+                    ISNULL((
+                        SELECT SUM(a.Price * sia.Quantity)
+                        FROM SaleItemAddons sia
+                        JOIN Addons a ON sia.AddonID = a.AddonID
+                        WHERE sia.SaleItemID = si.SaleItemID
+                    ), 0) AS AddonsTotal
+                FROM Sales s
+                INNER JOIN SaleItems si ON s.SaleID = si.SaleID
+                LEFT JOIN CashierSessions cs ON s.SessionID = cs.SessionID
+                WHERE s.Status = 'completed'
+                AND {date_filter}
+            ),
+            ItemLevelDiscounts AS (
+                SELECT sid.SaleItemID, SUM(sid.DiscountAmount) AS TotalItemDiscount
+                FROM SaleItemDiscounts sid
+                WHERE EXISTS (SELECT 1 FROM SaleItemDetails s2 WHERE s2.SaleItemID = sid.SaleItemID)
+                GROUP BY sid.SaleItemID
+            ),
+            ItemLevelPromotions AS (
+                SELECT sip.SaleItemID, SUM(sip.PromotionAmount) AS TotalItemPromotion
+                FROM SaleItemPromotions sip
+                WHERE EXISTS (SELECT 1 FROM SaleItemDetails s2 WHERE s2.SaleItemID = sip.SaleItemID)
+                GROUP BY sip.SaleItemID
+            ),
+            RefundedItemsDetail AS (
+                SELECT ri.SaleItemID, SUM(ri.RefundAmount) AS TotalRefundAmount
+                FROM RefundedItems ri
+                WHERE EXISTS (SELECT 1 FROM SaleItemDetails s2 WHERE s2.SaleItemID = ri.SaleItemID)
+                GROUP BY ri.SaleItemID
+            ),
+            NetSaleItems AS (
+                SELECT 
+                    sid.CashierUsername,
+                    sid.SaleID,
+                    (sid.ItemSubtotal + sid.AddonsTotal 
+                     - ISNULL(ild.TotalItemDiscount, 0) 
+                     - ISNULL(ilp.TotalItemPromotion, 0)) 
+                    - ISNULL(ri.TotalRefundAmount, 0) AS NetAmount
+                FROM SaleItemDetails sid
+                LEFT JOIN ItemLevelDiscounts ild ON sid.SaleItemID = ild.SaleItemID
+                LEFT JOIN ItemLevelPromotions ilp ON sid.SaleItemID = ilp.SaleItemID
+                LEFT JOIN RefundedItemsDetail ri ON sid.SaleItemID = ri.SaleItemID
+                WHERE (sid.ItemSubtotal + sid.AddonsTotal 
+                       - ISNULL(ild.TotalItemDiscount, 0) 
+                       - ISNULL(ilp.TotalItemPromotion, 0) 
+                       - ISNULL(ri.TotalRefundAmount, 0)) > 0.01
+            )
             SELECT 
-                ISNULL(cs.CashierName, 'Unknown') as CashierUsername,
-                ISNULL(SUM(si.Quantity * si.UnitPrice), 0) 
-                - ISNULL(SUM(s.TotalDiscountAmount), 0) 
-                - ISNULL(SUM(s.PromotionalDiscountAmount), 0) as TotalSales,
-                COUNT(DISTINCT s.SaleID) as OrderCount
-            FROM Sales s
-            INNER JOIN SaleItems si ON s.SaleID = si.SaleID
-            LEFT JOIN CashierSessions cs ON s.SessionID = cs.SessionID
-            WHERE s.Status = 'completed'
-            AND {date_filter}
-            GROUP BY cs.CashierName
-            HAVING COUNT(DISTINCT s.SaleID) > 0
+                CashierUsername,
+                ISNULL(SUM(NetAmount), 0) as TotalSales,
+                COUNT(DISTINCT SaleID) as OrderCount
+            FROM NetSaleItems
+            GROUP BY CashierUsername
+            HAVING COUNT(DISTINCT SaleID) > 0
             ORDER BY TotalSales DESC
         """
         
@@ -588,14 +917,11 @@ async def get_shift_performance(
         data = []
         rows = await cursor.fetchall()
         
-        # Return empty array if no data
         if not rows:
             return []
         
-        # Get the authorization token from current_user
         auth_token = current_user.get('access_token')
         
-        # Fetch full names for each cashier
         for row in rows:
             username = row[0]
             full_name = await get_full_name(username, auth_token)

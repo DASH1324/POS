@@ -17,7 +17,7 @@ print("="*70 + "\n")
 
 # Configuration - Load from .env
 BUILDBEAR_RPC_URL = os.getenv("BUILDBEAR_RPC_URL", "https://rpc.buildbear.io/disciplinary-clea-8e7277ae")
-PRIVATE_KEY = os.getenv("PRIVATE_KEY", "aaa9d856bac05e3f90105eab3d7ecd4578006d618a9b22c76c30d5785a48d0a4")
+PRIVATE_KEY = os.getenv("PRIVATE_KEY", "855db9a9d5d0183fe837b02b05e9440375b89de9ad5122c643247e4d89cfec74")
 
 # Your contract source
 CONTRACT_SOURCE = '''

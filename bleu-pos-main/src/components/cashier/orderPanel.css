@@ -1055,199 +1055,30 @@
 .orderpanel-refunded-items-section {
   margin-bottom: 16px;
   padding: 12px;
-  background: linear-gradient(135deg, #fff3cd 0%, #ffeeba 100%);
-  border-left: 5px solid #ffc107;
+  background: #f8f9fa; /* Light gray background */
+  border-left: 5px solid #6c757d; /* Darker gray accent border */
   border-radius: 8px;
-  box-shadow: 0 2px 8px rgba(255, 193, 7, 0.15);
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.05); /* Softer shadow */
 }
 
-.orderpanel-refunded-items-header {
-  margin-bottom: 10px;
+
+
+
+.orderpanel-item-refunded-info {
+  color: #d9534f;
+  font-size: 0.9em;
+  margin-top: 5px;
 }
 
-.orderpanel-refunded-title {
-  color: #856404;
-  font-size: 14px;
-  font-weight: 700;
-  text-transform: uppercase;
-  letter-spacing: 0.5px;
-}
-
-.orderpanel-refund-group {
+.orderpanel-item-subtotal {
   display: flex;
   flex-direction: column;
-  gap: 8px;
+  align-items: flex-end;
+  line-height: 1.3;
 }
 
-.orderpanel-refunded-item {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  font-size: 13px;
-  padding: 4px 0;
-}
-
-.orderpanel-refunded-item-name {
-  color: #856404;
-  font-weight: 600;
-}
-
-.orderpanel-refunded-item-amount {
-  color: #533f03;
-  font-weight: 700;
-}
-
-.orderpanel-refunded-message {
-  font-size: 14px;
-  color: #e74c3c;
-  font-weight: 600;
-  background-color: #ffe8e6;
-  padding: 10px 0; /* more height, no horizontal padding needed */
-  border-radius: 6px;
-  display: block;
-  text-align: center; /* centers the text */
-  margin-top: 8px;
-  width: 100%; /* full width */
-}
-
-/* Add these styles to your existing orderPanel.css file */
-
-/* BIR Receipt Format Additions */
-.orderpanel-store-tin {
-  font-size: 11px;
-  color: #000;
-  margin: 2px 0;
-  text-align: center;
-}
-
-.orderpanel-receipt-info-single {
-  text-align: left;
-  font-size: 11px;
-  line-height: 1.6;
-  margin: 2px 0;
-}
-
-.orderpanel-receipt-info-single > div {
-  margin: 2px 0;
-}
-
-/* Column Headers for Items */
-.orderpanel-receipt-columns {
-  display: grid;
-  grid-template-columns: 30px 1fr 50px 60px;
-  gap: 4px;
-  font-size: 11px;
-  font-weight: bold;
-  text-align: left;
-  margin: 4px 0;
-}
-
-.orderpanel-receipt-col-qty {
-  text-align: left;
-}
-
-.orderpanel-receipt-col-item {
-  text-align: left;
-}
-
-.orderpanel-receipt-col-price {
-  text-align: right;
-}
-
-.orderpanel-receipt-col-amount {
-  text-align: right;
-}
-
-/* Item Rows */
-.orderpanel-receipt-item-row {
-  display: grid;
-  grid-template-columns: 30px 1fr 50px 60px;
-  gap: 4px;
-  font-size: 11px;
-  line-height: 1.4;
-  margin: 2px 0;
-  align-items: start;
-}
-
-.orderpanel-receipt-item-row .orderpanel-receipt-col-qty {
-  text-align: left;
-}
-
-.orderpanel-receipt-item-row .orderpanel-receipt-col-item {
-  text-align: left;
-  word-break: break-word;
-}
-
-.orderpanel-receipt-item-row .orderpanel-receipt-col-price {
-  text-align: right;
-}
-
-.orderpanel-receipt-item-row .orderpanel-receipt-col-amount {
-  text-align: right;
-}
-
-/* Addon Rows */
-.orderpanel-receipt-addon-row {
-  font-size: 10px;
-  color: #333;
-  font-style: italic;
-  padding-left: 34px;
-  margin: 1px 0;
-}
-
-.orderpanel-receipt-addon-text {
-  display: block;
-}
-
-/* VAT Section */
-.orderpanel-receipt-vat-section {
-  margin: 8px 0;
-}
-
-.orderpanel-receipt-vat-section .orderpanel-receipt-line {
-  font-size: 11px;
-  margin: 3px 0;
-}
-
-/* Update existing receipt total line */
-.orderpanel-receipt-total {
-  font-weight: bold;
-  font-size: 12px !important;
-  margin: 6px 0 !important;
-  padding: 4px 0;
-}
-
-.orderpanel-receipt-total strong {
-  font-size: 12px;
-}
-
-/* Discount badge styles - matching cart panel */
-.orderpanel-item-discount-badges {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 6px;
-  margin-top: 6px;
-  padding-left: 2px;
-}
-
-.orderpanel-discount-badge {
-  display: inline-block;
-  background-color: #28a745;
-  color: white;
-  font-size: 11px;
-  font-weight: 600;
-  padding: 3px 8px;
-  border-radius: 12px;
-  white-space: nowrap;
-}
-
-.orderpanel-item-addons {
-  margin-top: 4px;
-  padding-left: 2px;
-}
-
-.orderpanel-addon {
-  font-size: 12px;
-  color: #666;
+.orderpanel-item-each-price {
+  font-size: 0.85em;
+  color: #888;
   margin-top: 2px;
 }

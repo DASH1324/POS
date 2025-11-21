@@ -80,21 +80,22 @@ async def get_top_products_today(
     try:
         conn = await get_db_connection()
         async with conn.cursor() as cursor:
+            # Calculate net quantity sold by subtracting refunded quantities
             base_sql = """
-                WITH SaleItemsWithRefunds AS (
-                    SELECT 
-                        si.SaleItemID,
-                        si.ItemName,
-                        si.Quantity AS OriginalQuantity,
-                        ISNULL(SUM(ri.RefundedQuantity), 0) AS RefundedQuantity,
-                        si.Quantity - ISNULL(SUM(ri.RefundedQuantity), 0) AS NetQuantity
-                    FROM Sales AS s 
-                    JOIN SaleItems AS si ON s.SaleID = si.SaleID
-                    JOIN CashierSessions AS cs ON s.SessionID = cs.SessionID
-                    LEFT JOIN RefundedItems ri ON si.SaleItemID = ri.SaleItemID
-                    WHERE s.Status = 'completed' 
-                        AND cs.CashierName = ? 
-                        AND CAST(s.CreatedAt AS DATE) = CAST(GETDATE() AS DATE)
+                SELECT TOP 10
+                    si.ItemName,
+                    SUM(si.Quantity - ISNULL(refunds.TotalRefunded, 0)) AS NetQuantitySold
+                FROM Sales AS s
+                JOIN SaleItems AS si ON s.SaleID = si.SaleID
+                JOIN CashierSessions AS cs ON s.SessionID = cs.SessionID
+                LEFT JOIN (
+                    SELECT SaleItemID, SUM(RefundedQuantity) AS TotalRefunded
+                    FROM RefundedItems
+                    GROUP BY SaleItemID
+                ) AS refunds ON si.SaleItemID = refunds.SaleItemID
+                WHERE s.Status = 'completed'
+                    AND cs.CashierName = ?
+                    AND CAST(s.CreatedAt AS DATE) = CAST(GETDATE() AS DATE)
             """
             
             params = [request.cashierName]
@@ -107,23 +108,17 @@ async def get_top_products_today(
             product_type_condition = get_product_type_condition(request.productType)
             base_sql += product_type_condition
             
-            final_sql = base_sql + """
-                    GROUP BY si.SaleItemID, si.ItemName, si.Quantity
-                )
-                SELECT TOP 10 
-                    ItemName,
-                    SUM(NetQuantity) AS TotalQuantitySold
-                FROM SaleItemsWithRefunds
-                WHERE NetQuantity > 0
-                GROUP BY ItemName
-                ORDER BY TotalQuantitySold DESC;
+            base_sql += """
+                GROUP BY si.ItemName
+                HAVING SUM(si.Quantity - ISNULL(refunds.TotalRefunded, 0)) > 0
+                ORDER BY NetQuantitySold DESC;
             """
             
-            await cursor.execute(final_sql, *params)
+            await cursor.execute(base_sql, *params)
             rows = await cursor.fetchall()
             
             return [
-                TopProductItem(name=row.ItemName, sales=row.TotalQuantitySold) 
+                TopProductItem(name=row.ItemName, sales=row.NetQuantitySold) 
                 for row in rows
             ]
             
@@ -133,7 +128,6 @@ async def get_top_products_today(
     finally:
         if conn:
             await conn.close()
-
 
 @router_top_products.post(
     "/by_date",
@@ -152,22 +146,22 @@ async def get_top_products_by_date(
     try:
         conn = await get_db_connection()
         async with conn.cursor() as cursor:
-            
+            # Calculate net quantity sold by subtracting refunded quantities
             base_sql = """
-                WITH SaleItemsWithRefunds AS (
-                    SELECT 
-                        si.SaleItemID,
-                        si.ItemName,
-                        si.Quantity AS OriginalQuantity,
-                        ISNULL(SUM(ri.RefundedQuantity), 0) AS RefundedQuantity,
-                        si.Quantity - ISNULL(SUM(ri.RefundedQuantity), 0) AS NetQuantity
-                    FROM Sales AS s 
-                    JOIN SaleItems AS si ON s.SaleID = si.SaleID
-                    JOIN CashierSessions AS cs ON s.SessionID = cs.SessionID
-                    LEFT JOIN RefundedItems ri ON si.SaleItemID = ri.SaleItemID
-                    WHERE s.Status = 'completed'
-                        AND cs.CashierName = ?
-                        AND CAST(s.CreatedAt AS DATE) = ?
+                SELECT TOP 10
+                    si.ItemName,
+                    SUM(si.Quantity - ISNULL(refunds.TotalRefunded, 0)) AS NetQuantitySold
+                FROM Sales AS s
+                JOIN SaleItems AS si ON s.SaleID = si.SaleID
+                JOIN CashierSessions AS cs ON s.SessionID = cs.SessionID
+                LEFT JOIN (
+                    SELECT SaleItemID, SUM(RefundedQuantity) AS TotalRefunded
+                    FROM RefundedItems
+                    GROUP BY SaleItemID
+                ) AS refunds ON si.SaleItemID = refunds.SaleItemID
+                WHERE s.Status = 'completed'
+                    AND cs.CashierName = ?
+                    AND CAST(s.CreatedAt AS DATE) = ?
             """
             
             params = [request.cashierName, request.date]
@@ -180,23 +174,17 @@ async def get_top_products_by_date(
             product_type_condition = get_product_type_condition(request.productType)
             base_sql += product_type_condition
             
-            final_sql = base_sql + """
-                    GROUP BY si.SaleItemID, si.ItemName, si.Quantity
-                )
-                SELECT TOP 10 
-                    ItemName,
-                    SUM(NetQuantity) AS TotalQuantitySold
-                FROM SaleItemsWithRefunds
-                WHERE NetQuantity > 0
-                GROUP BY ItemName
-                ORDER BY TotalQuantitySold DESC;
+            base_sql += """
+                GROUP BY si.ItemName
+                HAVING SUM(si.Quantity - ISNULL(refunds.TotalRefunded, 0)) > 0
+                ORDER BY NetQuantitySold DESC;
             """
             
-            await cursor.execute(final_sql, *params)
+            await cursor.execute(base_sql, *params)
             rows = await cursor.fetchall()
             
             top_products = [
-                TopProductItem(name=row.ItemName, sales=row.TotalQuantitySold)
+                TopProductItem(name=row.ItemName, sales=row.NetQuantitySold)
                 for row in rows
             ]
             

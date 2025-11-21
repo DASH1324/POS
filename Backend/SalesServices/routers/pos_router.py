@@ -56,11 +56,23 @@ class AppliedDiscountDetail(BaseModel):
     discountId: int
     itemDiscounts: List[ItemDiscountDetail] = []
 
+# NEW: Promotion models
+class ItemPromotionDetail(BaseModel):
+    itemIndex: int
+    quantity: int
+    promotionAmount: float
+
+class AppliedPromotionDetail(BaseModel):
+    promotionName: str
+    promotionId: int
+    itemPromotions: List[ItemPromotionDetail] = []
+
 class Sale(BaseModel):
     cartItems: List[SaleItem]
     orderType: str
     paymentMethod: str
     appliedDiscounts: List[AppliedDiscountDetail] = []
+    appliedPromotions: List[AppliedPromotionDetail] = []  # NEW
     promotionalDiscountAmount: Optional[float] = 0.0
     promotionalDiscountName: Optional[str] = None
     manualDiscountAmount: Optional[float] = 0.0
@@ -225,6 +237,47 @@ async def process_applied_discounts(sale_data: Sale, cursor):
     return discount_details, discount_names_with_amounts
 
 
+# NEW: Helper function to process applied promotions
+async def process_applied_promotions(sale_data: Sale, cursor):
+    promotion_details = []
+    promotion_names_with_amounts = []
+    
+    for promo_data in sale_data.appliedPromotions:
+        await cursor.execute(
+            "SELECT id, name, promotion_type, promotion_value FROM promotions WHERE id = ? AND status = 'active'",
+            promo_data.promotionId
+        )
+        db_promo = await cursor.fetchone()
+        
+        if not db_promo:
+            logger.warning(f"Promotion ID {promo_data.promotionId} not found or inactive")
+            continue
+        
+        item_promotions_list = []
+        for item_promo in promo_data.itemPromotions:
+            item_promotions_list.append({
+                'item_index': item_promo.itemIndex,
+                'quantity': item_promo.quantity,
+                'promotion_amount': item_promo.promotionAmount
+            })
+        
+        promo_info = {
+            'id': db_promo.id,
+            'name': db_promo.name,
+            'item_promotions': item_promotions_list
+        }
+        promotion_details.append(promo_info)
+        
+        total_promo_amount = sum(item['promotion_amount'] for item in item_promotions_list)
+        promotion_names_with_amounts.append({
+            "name": db_promo.name,
+            "type": db_promo.promotion_type,
+            "amount": float(total_promo_amount)
+        })
+    
+    return promotion_details, promotion_names_with_amounts
+
+
 # --- Save item-level discounts ---
 async def apply_item_level_discounts(sale_id: int, applied_discounts_details: list, items_data: list, cursor):
     for discount_data in applied_discounts_details:
@@ -263,12 +316,52 @@ async def apply_item_level_discounts(sale_id: int, applied_discounts_details: li
                 )
 
 
+# NEW: Save item-level promotions
+async def apply_item_level_promotions(sale_id: int, applied_promotions_details: list, items_data: list, cursor):
+    """Save item-level promotion tracking"""
+    for promo_data in applied_promotions_details:
+        promotion_id = promo_data['id']
+        
+        if 'item_promotions' not in promo_data:
+            continue
+            
+        for item_promo in promo_data['item_promotions']:
+            item_index = item_promo['item_index']
+            quantity_promoted = item_promo['quantity']
+            promo_amount = item_promo['promotion_amount']
+            
+            if item_index >= len(items_data):
+                logger.error(f"Invalid item_index {item_index} for sale {sale_id}")
+                continue
+                
+            sale_item_id = items_data[item_index]['sale_item_id']
+            
+            if quantity_promoted > 0 and promo_amount > 0:
+                sql_item_promo = """
+                    INSERT INTO SaleItemPromotions 
+                    (SaleItemID, PromotionID, QuantityPromoted, PromotionAmount)
+                    VALUES (?, ?, ?, ?)
+                """
+                await cursor.execute(
+                    sql_item_promo,
+                    sale_item_id,
+                    promotion_id,
+                    quantity_promoted,
+                    Decimal(str(promo_amount))
+                )
+                logger.info(
+                    f"✅ Applied promotion (ID: {promotion_id}) to {quantity_promoted} "
+                    f"units of SaleItem {sale_item_id}, amount: ₱{promo_amount:.2f}"
+                )
+
+
 # --- Helper function to build detailed change description ---
 def build_detailed_change_description(
     items_data: list,
     final_total: float,
     payment_method: str,
     discount_names: list,
+    promo_names: list,  # NEW
     promo_discount: float
 ) -> str:
     items_summary = []
@@ -295,7 +388,13 @@ def build_detailed_change_description(
             discount_parts.append(f"{disc['name']} (-₱{disc['amount']:.2f})")
         description += f" | Discounts: {', '.join(discount_parts)}"
     
-    if promo_discount > 0:
+    # NEW: Add promotion info
+    if promo_names:
+        promo_parts = []
+        for promo in promo_names:
+            promo_parts.append(f"{promo['name']} (-₱{promo['amount']:.2f})")
+        description += f" | Promotions: {', '.join(promo_parts)}"
+    elif promo_discount > 0:
         description += f" | Promotional Discount (-₱{promo_discount:.2f})"
     
     description += f" | Total: ₱{final_total:.2f} | Payment: {payment_method}"
@@ -330,6 +429,9 @@ async def create_sale(
             
             # Process applied discounts
             discount_details, discount_names = await process_applied_discounts(sale, cursor)
+            
+            # NEW: Process applied promotions
+            promotion_details, promotion_names = await process_applied_promotions(sale, cursor)
             
             manual_discount = Decimal(str(sale.manualDiscountAmount or 0.0))
             promo_discount = Decimal(str(sale.promotionalDiscountAmount or 0.0))
@@ -421,7 +523,7 @@ async def create_sale(
                 
                 items_data.append(item_data)
 
-            # ✅ FIXED: Aggregate discounts by ID to avoid PRIMARY KEY violation
+            # Aggregate discounts by ID to avoid PRIMARY KEY violation
             aggregated_discounts = {}
             for discount in discount_details:
                 discount_id = discount['id']
@@ -430,9 +532,7 @@ async def create_sale(
                 )
                 
                 if discount_id in aggregated_discounts:
-                    # Add to existing discount amount
                     aggregated_discounts[discount_id]['amount'] += total_discount_for_this
-                    # Merge item_discounts for item-level tracking
                     aggregated_discounts[discount_id]['item_discounts'].extend(
                         discount.get('item_discounts', [])
                     )
@@ -444,7 +544,7 @@ async def create_sale(
                         'item_discounts': discount.get('item_discounts', []).copy()
                     }
 
-            # Insert aggregated sale-level discounts (one row per discount ID)
+            # Insert aggregated sale-level discounts
             for discount_id, discount_data in aggregated_discounts.items():
                 sql_sale_discount = """
                     INSERT INTO SaleDiscounts (SaleID, DiscountID, DiscountAppliedAmount) 
@@ -461,9 +561,51 @@ async def create_sale(
                     f"DiscountID={discount_id}, Amount=₱{discount_data['amount']:.2f}"
                 )
 
-            # Insert item-level discount tracking using aggregated data
+            # Insert item-level discount tracking
             aggregated_discount_details = list(aggregated_discounts.values())
             await apply_item_level_discounts(sale_id, aggregated_discount_details, items_data, cursor)
+
+            # NEW: Aggregate and insert promotions
+            aggregated_promotions = {}
+            for promo in promotion_details:
+                promo_id = promo['id']
+                total_promo_for_this = sum(
+                    item['promotion_amount'] for item in promo.get('item_promotions', [])
+                )
+                
+                if promo_id in aggregated_promotions:
+                    aggregated_promotions[promo_id]['amount'] += total_promo_for_this
+                    aggregated_promotions[promo_id]['item_promotions'].extend(
+                        promo.get('item_promotions', [])
+                    )
+                else:
+                    aggregated_promotions[promo_id] = {
+                        'id': promo_id,
+                        'name': promo['name'],
+                        'amount': total_promo_for_this,
+                        'item_promotions': promo.get('item_promotions', []).copy()
+                    }
+
+            # Insert aggregated sale-level promotions
+            for promo_id, promo_data in aggregated_promotions.items():
+                sql_sale_promo = """
+                    INSERT INTO SalePromotions (SaleID, PromotionID, DiscountApplied) 
+                    VALUES (?, ?, ?)
+                """
+                await cursor.execute(
+                    sql_sale_promo, 
+                    sale_id, 
+                    promo_id, 
+                    Decimal(str(promo_data['amount']))
+                )
+                logger.info(
+                    f"✅ Inserted SalePromotion: SaleID={sale_id}, "
+                    f"PromotionID={promo_id}, Amount=₱{promo_data['amount']:.2f}"
+                )
+
+            # NEW: Insert item-level promotion tracking
+            aggregated_promotion_details = list(aggregated_promotions.values())
+            await apply_item_level_promotions(sale_id, aggregated_promotion_details, items_data, cursor)
 
             await conn.commit()
             
@@ -477,6 +619,7 @@ async def create_sale(
             final_total=float(final_total),
             payment_method=sale.paymentMethod,
             discount_names=discount_names,
+            promo_names=promotion_names,  # NEW
             promo_discount=float(promo_discount)
         )
         
@@ -495,6 +638,7 @@ async def create_sale(
             "gcash_reference": sale.gcashReference,
             "status": "processing",
             "applied_discounts": discount_names,
+            "applied_promotions": promotion_names,  # NEW
             "promotional_discount_applied": float(promo_discount) > 0,
             "total_items": len(sale.cartItems),
             "total_quantity": sum(item.quantity for item in sale.cartItems)
@@ -620,6 +764,27 @@ async def get_orders_by_status(
                             'discountAmount': float(disc_row.DiscountAmount)
                         })
                     
+                    # NEW: Fetch item-level promotions
+                    sql_item_promotions = """
+                        SELECT 
+                            p.name AS PromotionName,
+                            sip.QuantityPromoted,
+                            sip.PromotionAmount
+                        FROM SaleItemPromotions sip
+                        JOIN promotions p ON sip.PromotionID = p.id
+                        WHERE sip.SaleItemID = ?
+                    """
+                    await cursor.execute(sql_item_promotions, item.SaleItemID)
+                    item_promotion_rows = await cursor.fetchall()
+                    
+                    item_promotions_list = []
+                    for promo_row in item_promotion_rows:
+                        item_promotions_list.append({
+                            'promotionName': promo_row.PromotionName,
+                            'quantityPromoted': promo_row.QuantityPromoted,
+                            'promotionAmount': float(promo_row.PromotionAmount)
+                        })
+                    
                     order_items.append({
                         'saleItemId': item.SaleItemID,
                         'name': item.ItemName, 
@@ -627,7 +792,8 @@ async def get_orders_by_status(
                         'price': float(item.UnitPrice), 
                         'category': item.Category, 
                         'addons': addons_list,
-                        'itemDiscounts': item_discounts_list
+                        'itemDiscounts': item_discounts_list,
+                        'itemPromotions': item_promotions_list  # NEW
                     })
                 
                 manual_discount = Decimal(str(sale.TotalDiscountAmount or 0))

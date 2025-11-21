@@ -157,14 +157,17 @@ const CartPanel = ({
     setFilteredAvailableDiscounts(filtered);
   }, [availableDiscounts, cartItems, autoPromotion]);
 
+  // ✅ UPDATED: Apply promotions to ALL eligible items, excluding discounted quantities
   useEffect(() => {
     const calculateBestPromotion = () => {
       let bestPromo = null;
       let maxDiscount = 0;
+      
       if (!cartItems.length || !promotions.length) {
         setAutoPromotion(null);
         return;
       }
+
       const parsedPromotions = promotions
         .filter(p => {
           if (!p || typeof p !== 'object') return false;
@@ -175,6 +178,7 @@ const CartPanel = ({
         .map(p => {
           const promo = { ...p, original: p };
           const promotionType = p.type || p.promotion_type;
+          
           if (promotionType === 'bogo') {
             promo.promotionType = 'bogo';
             promo.buyQuantity = p.buyQuantity || p.buy_quantity || 1;
@@ -200,13 +204,17 @@ const CartPanel = ({
               ? p.products.split(',').map(name => name.trim()).filter(Boolean)
               : (Array.isArray(p.products) ? p.products : []);
           }
+          
           promo.applicationType = p.application_type || 'specific_products';
           return promo;
         });
 
       for (const promo of parsedPromotions) {
         let currentDiscount = 0;
+        let currentItemPromotions = [];
+        
         if (!Array.isArray(promo.selectedProducts)) continue;
+        
         const eligibleItems = cartItems.filter(item => {
           if (item.type !== 'product') return false;
           if (promo.applicationType === 'all_products') return true;
@@ -214,58 +222,132 @@ const CartPanel = ({
           if (promo.applicationType === 'specific_products' && promo.selectedProducts.includes(item.name)) return true;
           return false;
         });
+        
         if (!eligibleItems.length) continue;
 
         if (promo.promotionType === 'percentage' || promo.promotionType === 'fixed') {
-          const itemToDiscount = eligibleItems.sort((a, b) => b.price - a.price)[0];
-          if (promo.promotionType === 'percentage') {
-            currentDiscount = parseFloat(itemToDiscount.price) * (parseFloat(promo.promotionValue) / 100);
-          } else {
-            currentDiscount = Math.min(parseFloat(itemToDiscount.price), parseFloat(promo.promotionValue));
-          }
+          // ✅ Apply to ALL eligible items, excluding discounted quantities
+          eligibleItems.forEach(item => {
+            const itemIndex = cartItems.findIndex(ci => ci === item);
+            
+            // Get how many of this item already have discounts
+            const discountedQty = appliedDiscounts.reduce((total, discountData) => {
+              const itemDiscountInfo = discountData.itemDiscounts?.find(d => d.itemIndex === itemIndex);
+              return total + (itemDiscountInfo ? itemDiscountInfo.quantity : 0);
+            }, 0);
+            
+            // Apply promotion only to non-discounted quantities
+            const eligibleQty = item.quantity - discountedQty;
+            
+            if (eligibleQty > 0) {
+              let itemPromotionAmount = 0;
+              
+              if (promo.promotionType === 'percentage') {
+                itemPromotionAmount = eligibleQty * (parseFloat(item.price) * (parseFloat(promo.promotionValue) / 100));
+              } else {
+                itemPromotionAmount = eligibleQty * Math.min(parseFloat(item.price), parseFloat(promo.promotionValue));
+              }
+              
+              currentDiscount += itemPromotionAmount;
+              currentItemPromotions.push({
+                itemIndex: itemIndex,
+                quantity: eligibleQty,
+                promotionAmount: itemPromotionAmount
+              });
+            }
+          });
+          
         } else if (promo.promotionType === 'bogo') {
           const buyItemName = promo.selectedProducts[0];
           const getItemName = promo.selectedProducts.length > 1 ? promo.selectedProducts[1] : buyItemName;
+          
           if (buyItemName === getItemName) {
             const itemInCart = cartItems.find(item => item.name === buyItemName);
+            const itemIndex = cartItems.findIndex(item => item.name === buyItemName);
+            
             if (!itemInCart || !promo.buyQuantity || !promo.getQuantity) continue;
+            
+            // Get how many of this item already have discounts
+            const discountedQty = appliedDiscounts.reduce((total, discountData) => {
+              const itemDiscountInfo = discountData.itemDiscounts?.find(d => d.itemIndex === itemIndex);
+              return total + (itemDiscountInfo ? itemDiscountInfo.quantity : 0);
+            }, 0);
+            
+            // Calculate BOGO based on non-discounted quantities
+            const eligibleQty = itemInCart.quantity - discountedQty;
             const bundleSize = promo.buyQuantity + promo.getQuantity;
-            const numBundles = Math.floor(itemInCart.quantity / bundleSize);
+            const numBundles = Math.floor(eligibleQty / bundleSize);
             const itemsToDiscountCount = numBundles * promo.getQuantity;
+            
             if (itemsToDiscountCount > 0) {
               const itemPrice = itemInCart.price;
+              
               if (promo.bogoDiscountType === 'percentage') {
                 currentDiscount = itemsToDiscountCount * (itemPrice * (promo.discountValue / 100));
               } else {
                 currentDiscount = itemsToDiscountCount * Math.min(itemPrice, promo.discountValue);
               }
+              
+              currentItemPromotions.push({
+                itemIndex: itemIndex,
+                quantity: itemsToDiscountCount,
+                promotionAmount: currentDiscount
+              });
             }
           } else {
             const buyItemsInCart = cartItems.find(item => item.name === buyItemName);
             const getItemsInCart = cartItems.find(item => item.name === getItemName);
+            const getItemIndex = cartItems.findIndex(item => item.name === getItemName);
+            
             if (!buyItemsInCart || !getItemsInCart || !promo.buyQuantity) continue;
+            
+            // Get discounted quantities for "get" item
+            const getItemDiscountedQty = appliedDiscounts.reduce((total, discountData) => {
+              const itemDiscountInfo = discountData.itemDiscounts?.find(d => d.itemIndex === getItemIndex);
+              return total + (itemDiscountInfo ? itemDiscountInfo.quantity : 0);
+            }, 0);
+            
             const bogoSets = Math.floor(buyItemsInCart.quantity / promo.buyQuantity);
             const eligibleGetItems = bogoSets * promo.getQuantity;
-            const itemsToDiscountCount = Math.min(getItemsInCart.quantity, eligibleGetItems);
+            
+            // Apply BOGO only to non-discounted quantities of "get" item
+            const availableGetQty = getItemsInCart.quantity - getItemDiscountedQty;
+            const itemsToDiscountCount = Math.min(availableGetQty, eligibleGetItems);
+            
             if (itemsToDiscountCount > 0) {
               const getItemPrice = getItemsInCart.price;
+              
               if (promo.bogoDiscountType === 'percentage') {
                 currentDiscount = itemsToDiscountCount * (getItemPrice * (promo.discountValue / 100));
               } else {
                 currentDiscount = itemsToDiscountCount * Math.min(getItemPrice, promo.discountValue);
               }
+              
+              currentItemPromotions.push({
+                itemIndex: getItemIndex,
+                quantity: itemsToDiscountCount,
+                promotionAmount: currentDiscount
+              });
             }
           }
         }
+        
         if (currentDiscount > maxDiscount) {
           maxDiscount = currentDiscount;
-          bestPromo = { ...promo.original, discountAmount: maxDiscount };
+          bestPromo = { 
+            ...promo.original, 
+            discountAmount: maxDiscount,
+            itemPromotions: currentItemPromotions,
+            id: promo.original.id
+          };
         }
       }
+      
       setAutoPromotion(bestPromo);
     };
+    
     calculateBestPromotion();
-  }, [cartItems, promotions, isCartOpen]);
+  }, [cartItems, promotions, isCartOpen, appliedDiscounts]); // ✅ Added appliedDiscounts dependency
 
   useEffect(() => {
     if (!isCartOpen) {
@@ -293,7 +375,18 @@ const CartPanel = ({
     }, 0);
   };
 
-  // ✅ NEW: Helper function to combine discounts by name for display
+  const getItemPromotion = (itemIndex) => {
+    if (!autoPromotion || !autoPromotion.itemPromotions) return 0;
+    const itemPromo = autoPromotion.itemPromotions.find(p => p.itemIndex === itemIndex);
+    return itemPromo ? itemPromo.promotionAmount : 0;
+  };
+
+  const getItemPromotionQty = (itemIndex) => {
+    if (!autoPromotion || !autoPromotion.itemPromotions) return 0;
+    const itemPromo = autoPromotion.itemPromotions.find(p => p.itemIndex === itemIndex);
+    return itemPromo ? itemPromo.quantity : 0;
+  };
+
   const getCombinedItemDiscounts = (itemIndex) => {
     const discountGroups = {};
     appliedDiscounts.forEach((discountData) => {
@@ -406,50 +499,72 @@ const CartPanel = ({
   };
 
   const updateQuantity = async (index, amount) => {
-    const currentItem = cartItems[index];
-    const newQuantity = currentItem.quantity + amount;
-    if (amount > 0 && currentItem.type === 'product') {
-      const simulatedCart = cartItems.map((item, i) => i === index ? { ...item, quantity: newQuantity } : item);
-      const conflictCheck = await checkQuantityConflicts(currentItem, simulatedCart);
-      if (!conflictCheck.canAdd) {
-        const conflictMessages = conflictCheck.conflicts.map(c => 
-          `• ${c.type.toUpperCase()}: ${c.name}\n  Needs ${c.needed}, only ${c.available} available`
-        ).join('\n\n');
-        alert(`❌ Cannot increase quantity for "${currentItem.name}".\n\n${conflictMessages}`);
-        return;
-      }
+  const currentItem = cartItems[index];
+  const newQuantity = currentItem.quantity + amount;
+  
+  if (amount > 0 && currentItem.type === 'product') {
+    const simulatedCart = cartItems.map((item, i) => i === index ? { ...item, quantity: newQuantity } : item);
+    const conflictCheck = await checkQuantityConflicts(currentItem, simulatedCart);
+    if (!conflictCheck.canAdd) {
+      const conflictMessages = conflictCheck.conflicts.map(c => 
+        `• ${c.type.toUpperCase()}: ${c.name}\n  Needs ${c.needed}, only ${c.available} available`
+      ).join('\n\n');
+      alert(`❌ Cannot increase quantity for "${currentItem.name}".\n\n${conflictMessages}`);
+      return;
     }
-    setCartItems(prev => {
-      const updated = [...prev];
-      if (amount > 0 && currentItem.maxQuantity && newQuantity > currentItem.maxQuantity) {
-        alert(`Maximum quantity of ${currentItem.maxQuantity} reached for ${currentItem.name}.`);
+  }
+  
+  setCartItems(prev => {
+    const updated = [...prev];
+    if (amount > 0 && currentItem.maxQuantity && newQuantity > currentItem.maxQuantity) {
+      alert(`Maximum quantity of ${currentItem.maxQuantity} reached for ${currentItem.name}.`);
+      return prev;
+    }
+    if (newQuantity <= 0) {
+      const hasDiscount = appliedDiscounts.some(d => d.selectedItemsQty?.[index]);
+      if (hasDiscount) {
+        setAppliedDiscounts(prevDiscounts => prevDiscounts.filter(d => !d.selectedItemsQty?.[index]));
+      }
+      
+      // Check if item being removed is part of active promotion
+      if (autoPromotion && autoPromotion.itemPromotions) {
+        const itemHasPromotion = autoPromotion.itemPromotions.some(p => p.itemIndex === index);
+        if (itemHasPromotion) {
+          setAutoPromotion(null);
+        }
+      }
+      
+      return updated.filter((_, i) => i !== index);
+    } else {
+      const totalDiscountedQty = appliedDiscounts.reduce((sum, d) => sum + (d.selectedItemsQty?.[index] || 0), 0);
+      if (newQuantity < totalDiscountedQty) {
+        alert(`Cannot reduce quantity below ${totalDiscountedQty}. Remove discounts first.`);
         return prev;
       }
-      if (newQuantity <= 0) {
-        const hasDiscount = appliedDiscounts.some(d => d.selectedItemsQty?.[index]);
-        if (hasDiscount) {
-          setAppliedDiscounts(prevDiscounts => prevDiscounts.filter(d => !d.selectedItemsQty?.[index]));
-        }
-        return updated.filter((_, i) => i !== index);
-      } else {
-        const totalDiscountedQty = appliedDiscounts.reduce((sum, d) => sum + (d.selectedItemsQty?.[index] || 0), 0);
-        if (newQuantity < totalDiscountedQty) {
-          alert(`Cannot reduce quantity below ${totalDiscountedQty}. Remove discounts first.`);
-          return prev;
-        }
-        updated[index] = { ...currentItem, quantity: newQuantity };
-        return updated;
-      }
-    });
-  };
+      updated[index] = { ...currentItem, quantity: newQuantity };
+      return updated;
+    }
+  });
+};
 
   const removeFromCart = (index) => {
-    const hasDiscount = appliedDiscounts.some(d => d.selectedItemsQty?.[index]);
-    if (hasDiscount) {
-      setAppliedDiscounts(prevDiscounts => prevDiscounts.filter(d => !d.selectedItemsQty?.[index]));
+  // Check if item has manual discount
+  const hasDiscount = appliedDiscounts.some(d => d.selectedItemsQty?.[index]);
+  if (hasDiscount) {
+    setAppliedDiscounts(prevDiscounts => prevDiscounts.filter(d => !d.selectedItemsQty?.[index]));
+  }
+  
+  // Check if item is part of active promotion
+  if (autoPromotion && autoPromotion.itemPromotions) {
+    const itemHasPromotion = autoPromotion.itemPromotions.some(p => p.itemIndex === index);
+    if (itemHasPromotion) {
+      // Remove the promotion if this item is part of it
+      setAutoPromotion(null);
     }
-    setCartItems(prev => prev.filter((_, i) => i !== index));
-  };
+  }
+  
+  setCartItems(prev => prev.filter((_, i) => i !== index));
+};
 
   const handleProcessTransaction = () => {
     if (cartItems.length === 0) {
@@ -482,6 +597,7 @@ const CartPanel = ({
       setIsProcessing(false);
       return;
     }
+    
     const saleData = {
       cartItems: cartItems.map(item => ({ ...item, addons: item.addons || [] })),
       orderType,
@@ -491,11 +607,21 @@ const CartPanel = ({
         discountId: d.discount.id,
         itemDiscounts: d.itemDiscounts || []
       })),
+      appliedPromotions: autoPromotion && autoPromotion.itemPromotions ? [{
+        promotionName: autoPromotion.name,
+        promotionId: autoPromotion.id,
+        itemPromotions: autoPromotion.itemPromotions.map(ip => ({
+          itemIndex: ip.itemIndex,
+          quantity: ip.quantity,
+          promotionAmount: ip.promotionAmount
+        }))
+      }] : [],
       promotionalDiscountAmount: promotionalDiscountValue,
       promotionalDiscountName: autoPromotion?.name || null,
       manualDiscountAmount: manualDiscountValue,
       gcashReference: gcashRef
     };
+    
     try {
       const response = await fetch(`${SALES_API_URL}/auth/sales/`, {
         method: 'POST',
@@ -549,7 +675,7 @@ const CartPanel = ({
                         ))}
                       </div>
                     )}
-                    {/* ✅ FIXED: Combined discounts display */}
+                    {/* Display discounts */}
                     {getItemDiscount(index) > 0 && (
                       <div className="item-discount-applied" style={{fontSize: '11px', color: '#28a745', marginTop: '4px', fontWeight: 600}}>
                         {getCombinedItemDiscounts(index).map((discount, discIdx) => (
@@ -557,6 +683,12 @@ const CartPanel = ({
                             {discount.totalQuantity} {item.name} • {discount.name}: -₱{discount.totalAmount.toFixed(2)}
                           </div>
                         ))}
+                      </div>
+                    )}
+                    {/* ✅ NEW: Display promotions per item */}
+                    {getItemPromotion(index) > 0 && (
+                      <div className="item-promotion-applied" style={{fontSize: '11px', color: '#ff9800', marginTop: '4px', fontWeight: 600}}>
+                        {getItemPromotionQty(index)} {item.name} • {autoPromotion.name}: -₱{getItemPromotion(index).toFixed(2)}
                       </div>
                     )}
                     <div className="flex-spacer" />
@@ -679,6 +811,8 @@ const CartPanel = ({
         isProcessing={isProcessing}
         getItemDiscount={getItemDiscount}
         getItemDiscountedQty={getItemDiscountedQty}
+        getItemPromotion={getItemPromotion}
+        getItemPromotionQty={getItemPromotionQty}
       />
 
       <GCashReferenceModal 

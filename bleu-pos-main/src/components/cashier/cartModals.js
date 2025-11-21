@@ -571,13 +571,14 @@ export const TransactionSummaryModal = ({
   confirmTransaction,
   isProcessing,
   getItemDiscount,
-  getItemDiscountedQty
+  getItemDiscountedQty,
+  getItemPromotion,  // ✅ NEW PROP
+  getItemPromotionQty  // ✅ NEW PROP
 }) => {
   if (!showTransactionSummary) return null;
 
   // Helper function to get combined discounts for an item
   const getCombinedDiscountsForItem = (itemIndex) => {
-    // Group discounts by discount name
     const discountGroups = {};
     
     appliedDiscounts.forEach((discountData) => {
@@ -631,14 +632,16 @@ export const TransactionSummaryModal = ({
             <div className="trnsSummary-items-scrollable">
               {cartItems.map((item, index) => {
                 const itemDiscount = getItemDiscount ? getItemDiscount(index) : 0;
+                const itemPromotion = getItemPromotion ? getItemPromotion(index) : 0; // ✅ NEW
                 const itemTotal = (item.price + getTotalAddonsPrice(item.addons)) * item.quantity;
                 const combinedDiscounts = getCombinedDiscountsForItem(index);
+                const itemPromotionQty = getItemPromotionQty ? getItemPromotionQty(index) : 0; // ✅ NEW
                 
                 return (
                   <div key={index} className="trnsSummary-summary-item">
                     <div className="trnsSummary-item-header">
                       <span className="trnsSummary-item-name">{item.name}</span>
-                      <span className="trnsSummary-item-total">₱{(itemTotal - itemDiscount).toFixed(2)}</span>
+                      <span className="trnsSummary-item-total">₱{(itemTotal - itemDiscount - itemPromotion).toFixed(2)}</span>
                     </div>
                     <div className="trnsSummary-item-details">
                       <span className="trnsSummary-quantity">Qty: {item.quantity}</span>
@@ -653,13 +656,22 @@ export const TransactionSummaryModal = ({
                         ))}
                       </div>
                     )}
+                    {/* Display Discounts */}
                     {combinedDiscounts.length > 0 && (
                       <div className="trnsSummary-item-discount">
                         {combinedDiscounts.map((discount, discIdx) => (
-                          <span key={discIdx}>
-                            {discount.name} ({discount.totalQuantity}): -₱{discount.totalAmount.toFixed(2)}
+                          <span key={discIdx} style={{color: '#28a745'}}>
+                            • {discount.name} ({discount.totalQuantity}): -₱{discount.totalAmount.toFixed(2)}
                           </span>
                         ))}
+                      </div>
+                    )}
+                    {/* ✅ NEW: Display Promotions per item */}
+                    {itemPromotion > 0 && autoPromotion && (
+                      <div className="trnsSummary-item-promotion" style={{fontSize: '12px', color: '#ff9800', marginTop: '4px'}}>
+                        <span>
+                          • {autoPromotion.name} ({itemPromotionQty}): -₱{itemPromotion.toFixed(2)}
+                        </span>
                       </div>
                     )}
                   </div>
@@ -703,7 +715,6 @@ export const TransactionSummaryModal = ({
     </div>
   );
 };
-
 export const GCashReferenceModal = ({
   showGCashReference,
   setShowGCashReference,

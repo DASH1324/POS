@@ -84,6 +84,34 @@ function SalesMonitoring() {
   const [currentPeriodText, setCurrentPeriodText] = useState(
     getPeriodText("today")
   );
+  // State for cashier list and top cashier's full name
+  const [allCashiers, setAllCashiers] = useState([]);
+  const [topCashierFullName, setTopCashierFullName] = useState(null);
+
+  // Fetch all cashiers for the dropdown
+  useEffect(() => {
+    const fetchCashiers = async () => {
+      try {
+        const authToken = localStorage.getItem("authToken");
+        if (!authToken) return;
+
+        const response = await fetch("http://127.0.0.1:4000/users/cashiers", {
+          headers: {
+            Authorization: `Bearer ${authToken}`,
+          },
+        });
+
+        if (!response.ok) {
+          throw new Error("Failed to fetch cashiers");
+        }
+        const data = await response.json();
+        setAllCashiers(data);
+      } catch (err) {
+        console.error("Error fetching cashiers:", err);
+      }
+    };
+    fetchCashiers();
+  }, []);
 
   // Fetch sales data from backend
   const fetchSalesData = async () => {
@@ -98,9 +126,6 @@ function SalesMonitoring() {
         throw new Error("No authentication token found. Please log in.");
       }
 
-      // If 'Merchandise' is selected, we must fetch ALL categories from the backend
-      // to be able to manually filter and combine 'Merchandise' + 'All Items' on the frontend.
-      // For any other category, we can let the backend do the filtering.
       const categoryToFetch =
         selectedCategory === "Merchandise"
           ? null
@@ -134,8 +159,6 @@ function SalesMonitoring() {
       const data = await response.json();
       setSalesData(data.salesData);
 
-      // If 'Merchandise' was selected, the backend totals are for ALL categories.
-      // We must recalculate them from the filtered data to show accurate metrics.
       if (selectedCategory === "Merchandise") {
         const filteredForTotals = data.salesData.filter(
           (item) =>
@@ -159,7 +182,6 @@ function SalesMonitoring() {
           profitMargin: data.profitMargin,
         });
       } else {
-        // For all other cases, the totals from the backend are correct.
         setTotals({
           totalSales: data.totalRevenue,
           totalTransactions: data.transactionCount,
@@ -182,11 +204,9 @@ function SalesMonitoring() {
     setCurrentPeriodText(getPeriodText(dateRange));
   }, [dateRange, selectedCategory, selectedCashier]);
 
-  // This memo performs the final filtering and transformation on the data for display
   const processedData = useMemo(() => {
     let dataToProcess = salesData;
 
-    // If 'Merchandise' is selected, filter the raw sales data from the state
     if (selectedCategory === "Merchandise") {
       dataToProcess = salesData.filter(
         (item) =>
@@ -194,7 +214,6 @@ function SalesMonitoring() {
       );
     }
 
-    // Transform 'All Items' category to 'Merchandise' for display
     return dataToProcess.map((item) => {
       if (item.category === "All Items") {
         return { ...item, category: "Merchandise" };
@@ -203,7 +222,6 @@ function SalesMonitoring() {
     });
   }, [salesData, selectedCategory]);
 
-  // Calculate metrics using the correct totals from state and the processed data
   const metrics = useMemo(() => {
     const {
       totalSales = 0,
@@ -225,7 +243,7 @@ function SalesMonitoring() {
       (a, b) => b[1] - a[1]
     )[0];
     const topCashier = topCashierEntry
-      ? { name: topCashierEntry[0], sales: topCashierEntry[1] }
+      ? { name: topCashierEntry[0], sales: topCashierEntry[1] } // name is username
       : null;
 
     return {
@@ -238,7 +256,40 @@ function SalesMonitoring() {
     };
   }, [processedData, totals]);
 
-  // Sales breakdown by product
+  // Fetch top cashier's full name when metrics change
+  useEffect(() => {
+    const fetchTopCashierName = async () => {
+      if (!metrics.topCashier || !metrics.topCashier.name) {
+        setTopCashierFullName(null);
+        return;
+      }
+
+      try {
+        const authToken = localStorage.getItem("authToken");
+        if (!authToken) return;
+
+        const response = await fetch(
+          `http://127.0.0.1:4000/users/employee_name?username=${metrics.topCashier.name}`,
+          {
+            headers: { Authorization: `Bearer ${authToken}` },
+          }
+        );
+
+        if (response.ok) {
+          const data = await response.json();
+          setTopCashierFullName(data.employee_name);
+        } else {
+          setTopCashierFullName(metrics.topCashier.name); // Fallback to username
+        }
+      } catch (err) {
+        console.error("Error fetching top cashier's name:", err);
+        setTopCashierFullName(metrics.topCashier.name); // Fallback on error
+      }
+    };
+
+    fetchTopCashierName();
+  }, [metrics.topCashier]);
+
   const salesBreakdown = useMemo(() => {
     const breakdown = {};
     const totalSales = metrics.totalSales;
@@ -268,7 +319,6 @@ function SalesMonitoring() {
       .sort((a, b) => b.totalSales - a.totalSales);
   }, [processedData, metrics.totalSales]);
 
-  // Category breakdown
   const categoryBreakdown = useMemo(() => {
     const breakdown = {};
     processedData.forEach((item) => {
@@ -280,7 +330,6 @@ function SalesMonitoring() {
     return Object.values(breakdown);
   }, [processedData]);
 
-  // Sales trend data
   const salesTrend = useMemo(() => {
     const trend = {};
     processedData.forEach((item) => {
@@ -295,7 +344,6 @@ function SalesMonitoring() {
       .sort((a, b) => new Date(a.name) - new Date(b.name));
   }, [processedData]);
 
-  // Top selling products
   const topProducts = useMemo(() => {
     return salesBreakdown.slice(0, 10).map((item) => ({
       name: item.product,
@@ -304,13 +352,6 @@ function SalesMonitoring() {
   }, [salesBreakdown]);
 
   const COLORS = ["#00b4d8", "#0096c7", "#0077b6", "#023e8a", "#03045e"];
-
-  const uniqueCategories = [
-    ...new Set(processedData.map((item) => item.category)),
-  ];
-  const uniqueCashiers = [
-    ...new Set(processedData.map((item) => item.cashier).filter(Boolean)),
-  ];
 
   const salesBreakdownColumns = [
     {
@@ -511,9 +552,9 @@ function SalesMonitoring() {
                 className="salesMonSelect salesMonSelectCashier"
               >
                 <option value="all">All Cashiers</option>
-                {uniqueCashiers.map((cashier) => (
-                  <option key={cashier} value={cashier}>
-                    {cashier}
+                {allCashiers.map((cashier) => (
+                  <option key={cashier.UserID} value={cashier.Username}>
+                    {cashier.FullName}
                   </option>
                 ))}
               </select>
@@ -535,42 +576,8 @@ function SalesMonitoring() {
           ) : (
             <>
               {processedData.length === 0 && !error && (
-                <div
-                  style={{
-                    backgroundColor: "#fff3cd",
-                    border: "1px solid #ffc107",
-                    borderRadius: "8px",
-                    padding: "20px",
-                    margin: "20px",
-                    display: "flex",
-                    alignItems: "center",
-                    gap: "15px",
-                  }}
-                >
-                  <FaExclamationTriangle
-                    style={{
-                      color: "#856404",
-                      fontSize: "24px",
-                      flexShrink: 0,
-                    }}
-                  />
-                  <div>
-                    <h4
-                      style={{
-                        margin: "0 0 5px 0",
-                        color: "#856404",
-                        fontSize: "16px",
-                        fontWeight: "600",
-                      }}
-                    >
-                      No Sales Data Available
-                    </h4>
-                    <p
-                      style={{ margin: 0, color: "#856404", fontSize: "14px" }}
-                    >
-                      There are no sales records for the selected filters.
-                    </p>
-                  </div>
+                <div className="no-data-container">
+                  <p>No sales records found for the selected filters.</p>
                 </div>
               )}
               {error && (
@@ -682,7 +689,7 @@ function SalesMonitoring() {
                           className="salesMonCardValue"
                           style={{ fontSize: "18px" }}
                         >
-                          {metrics.topCashier.name}
+                          {topCashierFullName || metrics.topCashier.name}
                         </div>
                         <div
                           style={{

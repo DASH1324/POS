@@ -794,3 +794,20 @@ body {
         page-break-after: always;
     }
 }
+
+/* === NO DATA CONTAINER (New style) === */
+.no-data-container {
+  background-color: #fff;
+  border: 1px solid #e5e7eb;
+  border-radius: 12px;
+  padding: 80px 20px;
+  text-align: center;
+  color: #6b7280;
+  font-size: 1rem;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.08);
+}
+
+.no-data-container p {
+  margin: 0;
+  font-weight: 500;
+}

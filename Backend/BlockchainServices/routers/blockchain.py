@@ -25,8 +25,8 @@ oauth2_scheme = OAuth2PasswordBearer(tokenUrl="http://localhost:4000/auth/token"
 # --- Auth Configuration ---
 USER_SERVICE_ME_URL = "http://localhost:4000/auth/users/me"
 
-BUILDBEAR_RPC_URL = os.getenv("BUILDBEAR_RPC_URL", "https://rpc.buildbear.io/disciplinary-clea-8e7277ae")
-PRIVATE_KEY = os.getenv("PRIVATE_KEY", "aaa9d856bac05e3f90105eab3d7ecd4578006d618a9b22c76c30d5785a48d0a4")
+BUILDBEAR_RPC_URL = os.getenv("BUILDBEAR_RPC_URL", "https://rpc.buildbear.io/implicit-sabretooth-88cad266")
+PRIVATE_KEY = os.getenv("PRIVATE_KEY", "855db9a9d5d0183fe837b02b05e9440375b89de9ad5122c643247e4d89cfec74")
 CONTRACT_ADDRESS = os.getenv("CONTRACT_ADDRESS", "0x14B5BB91Ea29056F2BECEC93fFeCEcaA26AC467B")
 
 # COMPLETE Smart Contract ABI - This matches your Solidity contract exactly
@@ -278,7 +278,17 @@ async def log_to_blockchain(log_data: ActivityLogRequest) -> ActivityLogResponse
         # Prepare transaction
         nonce = w3.eth.get_transaction_count(account.address)
         
-        # Build transaction
+        # Check account balance
+        balance = w3.eth.get_balance(account.address)
+        logger.info(f"Account balance: {w3.from_wei(balance, 'ether')} ETH")
+
+        if balance == 0:
+            raise HTTPException(
+                status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+                detail="Account has insufficient funds. Please fund the account or use a pre-funded test account."
+            )
+
+        # Build transaction with lower gas settings for testnet
         tx = contract.functions.logActivity(
             log_data.service_identifier,
             log_data.action,
@@ -290,8 +300,8 @@ async def log_to_blockchain(log_data: ActivityLogRequest) -> ActivityLogResponse
         ).build_transaction({
             'from': account.address,
             'nonce': nonce,
-            'gas': 2000000,
-            'gasPrice': w3.eth.gas_price
+            'gas': 500000,  # Reduced gas limit
+            'gasPrice': w3.eth.gas_price // 10  # Lower gas price for testnet
         })
         
         # Sign transaction
