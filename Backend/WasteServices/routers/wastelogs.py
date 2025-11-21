@@ -330,15 +330,13 @@ class SpillageOut(BaseModel):
     session_start: Optional[datetime] = None
     session_end: Optional[datetime] = None
 
-# API Endpoints
-
 @router.get("/products-sold", response_model=List[ProductSoldInfo])
 async def get_products_sold_by_session(
     session_id: int,
     token: str = Depends(oauth2_scheme)
 ):
     """Get all products sold during a specific cashier session"""
-    await validate_token_and_roles(token, ["admin", "manager", "staff"])
+    await validate_token_and_roles(token, ["admin", "manager", "staff", "cashier"])  # ✅ Added "cashier" role
     
     conn = await get_db_connection()
     try:
@@ -358,25 +356,19 @@ async def get_products_sold_by_session(
                     detail=f"Session {session_id} not found"
                 )
             
-            # Get products sold during this session
+           
             query = """
                 SELECT DISTINCT 
                     si.ItemName AS product_name,
                     si.Category AS category
                 FROM SaleItems si
                 INNER JOIN Sales s ON si.SaleID = s.SaleID
-                WHERE s.CashierName = ?
-                    AND s.CreatedAt >= ?
-                    AND (? IS NULL OR s.CreatedAt <= ?)
+                WHERE s.SessionID = ?
+                    AND s.Status = 'completed'
                 ORDER BY si.Category, si.ItemName
             """
             
-            await cursor.execute(query, (
-                session.CashierName, 
-                session.SessionStart,
-                session.SessionEnd,
-                session.SessionEnd
-            ))
+            await cursor.execute(query, (session_id,))
             rows = await cursor.fetchall()
             
             return [
@@ -397,7 +389,7 @@ async def get_products_sold_by_session(
     finally:
         await conn.close()
 
-
+# Endpoint to log spillage
 @router.post("/", response_model=SpillageOut)
 async def log_spillage(
     spillage: SpillageCreate,
@@ -433,22 +425,20 @@ async def log_spillage(
                     detail=f"Session {spillage.session_id} not found"
                 )
             
-            # Verify product was sold during this session
+            # Verify product was sold during this session using SessionID
             verify_query = """
                 SELECT COUNT(*) as count
                 FROM SaleItems si
                 INNER JOIN Sales s ON si.SaleID = s.SaleID
                 WHERE si.ItemName = ?
                     AND si.Category = ?
-                    AND s.CashierName = ?
-                    AND s.CreatedAt >= ?
-                    AND (? IS NULL OR s.CreatedAt <= ?)
+                    AND s.SessionID = ?
+                    AND s.Status = 'completed'
             """
             
             await cursor.execute(
                 verify_query,
-                (spillage.product_name, spillage.category, session.CashierName,
-                 session.SessionStart, session.SessionEnd, session.SessionEnd)
+                (spillage.product_name, spillage.category, spillage.session_id)
             )
             row = await cursor.fetchone()
             
@@ -707,7 +697,7 @@ async def delete_spillage(
     finally:
         await conn.close()
 
-
+#edit log spillage
 @router.put("/{spillage_id}", response_model=SpillageOut)
 async def update_spillage(
     spillage_id: int,
@@ -767,22 +757,20 @@ async def update_spillage(
                     detail=f"Session {spillage.session_id} not found"
                 )
             
-            # Verify product was sold
+            # ✅ FIXED: Verify product was sold using SessionID
             verify_query = """
                 SELECT COUNT(*) as count
                 FROM SaleItems si
                 INNER JOIN Sales s ON si.SaleID = s.SaleID
                 WHERE si.ItemName = ?
                     AND si.Category = ?
-                    AND s.CashierName = ?
-                    AND s.CreatedAt >= ?
-                    AND (? IS NULL OR s.CreatedAt <= ?)
+                    AND s.SessionID = ?
+                    AND s.Status = 'completed'
             """
             
             await cursor.execute(
                 verify_query,
-                (spillage.product_name, spillage.category, new_session.CashierName,
-                 new_session.SessionStart, new_session.SessionEnd, new_session.SessionEnd)
+                (spillage.product_name, spillage.category, spillage.session_id)
             )
             row = await cursor.fetchone()
             
@@ -896,7 +884,6 @@ async def update_spillage(
         )
     finally:
         await conn.close()
-
 
 @router.get("/sessions/active")
 async def get_active_sessions(token: str = Depends(oauth2_scheme)):

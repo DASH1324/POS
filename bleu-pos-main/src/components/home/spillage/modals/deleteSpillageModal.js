@@ -56,42 +56,42 @@ function LogSpillageDeleteModal({ show, onClose, onConfirm, spillage }) {
   };
 
   const handleDelete = async () => {
-    setIsDeleting(true);
-    setError(null);
+  setIsDeleting(true);
+  setError(null);
 
-    try {
-      const token = localStorage.getItem("authToken");
-      if (!token) throw new Error("No authentication token found");
+  try {
+    const token = localStorage.getItem("authToken");
+    if (!token) throw new Error("No authentication token found");
 
-      try {
-        await handleInventoryRestock(token);
-      } catch (inventoryError) {
-        setError(`Inventory restock failed: ${inventoryError.message}. Spillage not deleted.`);
-        setIsDeleting(false);
-        return;
-      }
-
-      const response = await fetch(`http://127.0.0.1:9003/wastelogs/${spillage.spillage_id}`, {
+    // ✅ ONLY delete spillage - backend handles inventory in background
+    const response = await fetch(
+      `http://127.0.0.1:9003/wastelogs/${spillage.spillage_id}`,
+      {
         method: "DELETE",
         headers: {
           Authorization: `Bearer ${token}`,
           "Content-Type": "application/json",
         },
-      });
-
-      if (!response.ok) {
-        const errorData = await response.json();
-        throw new Error(errorData.detail || "Failed to delete spillage");
       }
+    );
 
-      if (onConfirm) onConfirm(spillage.spillage_id);
-      onClose();
-    } catch (err) {
-      setError(err.message);
-    } finally {
-      setIsDeleting(false);
+    if (!response.ok) {
+      const errorData = await response.json();
+      throw new Error(errorData.detail || "Failed to delete spillage");
     }
-  };
+
+    // ✅ Close immediately - inventory handled by backend
+    console.log("Spillage deleted successfully. Inventory will be restocked in background.");
+    if (onConfirm) onConfirm(spillage.spillage_id);
+    onClose();
+    
+  } catch (err) {
+    console.error("Error deleting spillage:", err);
+    setError(err.message);
+  } finally {
+    setIsDeleting(false);
+  }
+};
 
   return (
     <div className="logSpillage-delete-overlay" onClick={onClose}>

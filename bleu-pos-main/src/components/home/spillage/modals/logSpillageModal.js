@@ -322,86 +322,68 @@ function LogSpillageModal({ show, onClose, onSave, loggedByName }) {
   };
 
   const handleSubmit = async (e) => {
-    e.preventDefault();
-    let newErrors = {};
+  e.preventDefault();
+  let newErrors = {};
 
-    if (!cashierName.trim()) newErrors.cashierName = "Cashier name is required";
-    if (!date.trim()) newErrors.date = "Date is required";
-    if (!selectedSessionId) newErrors.productType = "No valid session found for this cashier and date";
-    if (!productType.trim()) newErrors.productType = "Product type is required";
-    if (!productName.trim()) newErrors.productName = "Product name is required";
-    if (!quantity.trim()) newErrors.quantity = "Quantity is required";
-    else if (parseInt(quantity) <= 0) newErrors.quantity = "Quantity must be greater than 0";
-    if (!reason.trim()) newErrors.reason = "Reason is required";
+  if (!cashierName.trim()) newErrors.cashierName = "Cashier name is required";
+  if (!date.trim()) newErrors.date = "Date is required";
+  if (!selectedSessionId) newErrors.productType = "No valid session found for this cashier and date";
+  if (!productType.trim()) newErrors.productType = "Product type is required";
+  if (!productName.trim()) newErrors.productName = "Product name is required";
+  if (!quantity.trim()) newErrors.quantity = "Quantity is required";
+  else if (parseInt(quantity) <= 0) newErrors.quantity = "Quantity must be greater than 0";
+  if (!reason.trim()) newErrors.reason = "Reason is required";
 
-    if (Object.keys(newErrors).length > 0) {
-      setErrors(newErrors);
-      return;
+  if (Object.keys(newErrors).length > 0) {
+    setErrors(newErrors);
+    return;
+  }
+
+  setIsSaving(true);
+
+  try {
+    const token = localStorage.getItem("authToken");
+    
+    const spillageData = {
+      session_id: selectedSessionId,
+      spillage_date: date,
+      product_name: productName,
+      category: productType,
+      quantity: parseInt(quantity),
+      reason: reason,
+      logged_by: loggedByName
+    };
+
+    const response = await fetch("http://localhost:9003/wastelogs/", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${token}`,
+      },
+      body: JSON.stringify(spillageData),
+    });
+
+    if (!response.ok) {
+      const errorData = await response.json();
+      throw new Error(errorData.detail || "Failed to save spillage");
     }
 
-    setIsSaving(true);
-
-    try {
-      const token = localStorage.getItem("authToken");
-      
-      const spillageData = {
-        session_id: selectedSessionId,
-        spillage_date: date,
-        product_name: productName,
-        category: productType,
-        quantity: parseInt(quantity),
-        reason: reason,
-        logged_by: loggedByName
-      };
-
-      // Save spillage log
-      const response = await fetch("http://localhost:9003/wastelogs/", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          Authorization: `Bearer ${token}`,
-        },
-        body: JSON.stringify(spillageData),
-      });
-
-      if (!response.ok) {
-        const errorData = await response.json();
-        throw new Error(errorData.detail || "Failed to save spillage");
-      }
-
-      const savedSpillage = await response.json();
-      
-      // Deduct from appropriate inventory based on category
-      try {
-        if (isMerchandiseCategory(productType)) {
-          console.log(`Category '${productType}' is merchandise. Deducting from Merchandise table.`);
-          await deductFromMerchandise(spillageData, token);
-        } else {
-          console.log(`Category '${productType}' is not merchandise. Deducting from IMS (ingredients/materials).`);
-          await deductFromIMS(spillageData, token);
-        }
-        console.log("Spillage logged and inventory deducted successfully");
-      } catch (imsError) {
-        console.error("Warning: Spillage saved but inventory deduction failed:", imsError);
-        setErrors({
-          submit: "Spillage saved, but inventory deduction may have failed. Please verify inventory levels.",
-        });
-        onSave(savedSpillage);
-        onClose();
-        return;
-      }
-
-      onSave(savedSpillage);
-      onClose();
-    } catch (error) {
-      console.error("Error saving spillage:", error);
-      setErrors({
-        submit: error.message || "Failed to save spillage. Please try again.",
-      });
-    } finally {
-      setIsSaving(false);
-    }
-  };
+    const savedSpillage = await response.json();
+    
+    // ✅ Close immediately - inventory handled by backend
+    console.log("Spillage logged successfully. Inventory will be updated in background.");
+    onSave(savedSpillage);
+    onClose();
+    
+  } catch (error) {
+    console.error("Error saving spillage:", error);
+    setErrors({
+      submit: error.message || "Failed to save spillage. Please try again.",
+    });
+  } finally {
+    setIsSaving(false);
+  }
+};
 
   return (
     <div className="spillage-modal-overlay" onClick={onClose}>

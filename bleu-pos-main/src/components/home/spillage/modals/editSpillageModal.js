@@ -386,82 +386,70 @@ function EditSpillageModal({ spillage, onClose, onUpdate, loggedByName }) {
   };
 
   const handleSubmit = async (e) => {
-    e.preventDefault();
-    let newErrors = {};
+  e.preventDefault();
+  let newErrors = {};
 
-    if (!cashierName.trim()) newErrors.cashierName = "Cashier name is required";
-    if (!date.trim()) newErrors.date = "Date is required";
-    if (!selectedSession) newErrors.productType = "No valid session found for this cashier and date";
-    if (!productType.trim()) newErrors.productType = "Product type is required";
-    if (!productName.trim()) newErrors.productName = "Product name is required";
-    if (!amount || isNaN(amount) || parseInt(amount) <= 0) {
-      newErrors.amount = "Enter a valid amount";
-    }
-    if (!reason.trim()) newErrors.reason = "Reason is required";
+  if (!cashierName.trim()) newErrors.cashierName = "Cashier name is required";
+  if (!date.trim()) newErrors.date = "Date is required";
+  if (!selectedSession) newErrors.productType = "No valid session found for this cashier and date";
+  if (!productType.trim()) newErrors.productType = "Product type is required";
+  if (!productName.trim()) newErrors.productName = "Product name is required";
+  if (!amount || isNaN(amount) || parseInt(amount) <= 0) {
+    newErrors.amount = "Enter a valid amount";
+  }
+  if (!reason.trim()) newErrors.reason = "Reason is required";
 
-    if (Object.keys(newErrors).length > 0) {
-      setErrors(newErrors);
-      return;
-    }
+  if (Object.keys(newErrors).length > 0) {
+    setErrors(newErrors);
+    return;
+  }
 
-    setIsUpdating(true);
+  setIsUpdating(true);
 
-    try {
-      const token = localStorage.getItem("authToken");
-      
-      // STEP 1: Handle inventory adjustment (restock old + deduct new)
-      try {
-        await handleInventoryAdjustment(token);
-        console.log("Inventory adjustment completed successfully");
-      } catch (inventoryError) {
-        console.error("Inventory adjustment failed:", inventoryError);
-        setErrors({
-          submit: `Inventory adjustment failed: ${inventoryError.message}. Spillage record not updated.`,
-        });
-        setIsUpdating(false);
-        return; // Don't proceed with spillage update if inventory fails
+  try {
+    const token = localStorage.getItem("authToken");
+    
+    const response = await fetch(
+      `http://localhost:9003/wastelogs/${spillage.spillage_id}`,
+      {
+        method: "PUT",
+        headers: {
+          Authorization: `Bearer ${token}`,
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          session_id: parseInt(selectedSession),
+          product_name: productName,
+          category: productType,
+          quantity: parseInt(amount),
+          spillage_date: date,
+          reason: reason,
+          logged_by: loggedByName,
+        }),
       }
+    );
 
-      // STEP 2: Update spillage record in database
-      const response = await fetch(
-        `http://localhost:9003/wastelogs/${spillage.spillage_id}`,
-        {
-          method: "PUT",
-          headers: {
-            Authorization: `Bearer ${token}`,
-            "Content-Type": "application/json",
-          },
-          body: JSON.stringify({
-            session_id: parseInt(selectedSession),
-            product_name: productName,
-            category: productType,
-            quantity: parseInt(amount),
-            spillage_date: date,
-            reason: reason,
-            logged_by: loggedByName,
-          }),
-        }
-      );
-
-      if (response.ok) {
-        const updatedData = await response.json();
-        onUpdate(updatedData);
-        onClose();
-      } else {
-        const errorData = await response.json();
-        setErrors({
-          submit: `Failed to update spillage: ${errorData.detail || errorData.message || "Unknown error"}`,
-        });
-      }
-    } catch (error) {
-      console.error("Error updating spillage:", error);
-      setErrors({
-        submit: "An error occurred while updating the spillage",
-      });
-    } finally {
-      setIsUpdating(false);
+    if (!response.ok) {
+      const errorData = await response.json();
+      throw new Error(errorData.detail || "Failed to update spillage");
     }
-  };
+
+    const updatedData = await response.json();
+    
+    // ✅ Close immediately - inventory handled by backend
+    console.log("Spillage updated successfully. Inventory will be adjusted in background.");
+    onUpdate(updatedData);
+    onClose();
+    
+  } catch (error) {
+    console.error("Error updating spillage:", error);
+    setErrors({
+      submit: error.message || "Failed to update spillage. Please try again.",
+    });
+  } finally {
+    setIsUpdating(false);
+  }
+};
 
   return (
     <div className="spillage-modal-overlay" onClick={onClose}>

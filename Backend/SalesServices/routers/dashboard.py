@@ -535,6 +535,7 @@ async def get_best_selling_items(
         await cursor.close()
         await conn.close()
 
+
 @router_dashboard.get("/admin/shift-performance")
 async def get_shift_performance(
     filter: Literal["Today", "Yesterday", "This Week", "Last Week", "This Month"] = "Today",
@@ -564,18 +565,20 @@ async def get_shift_performance(
         else:  # This Month
             date_filter = "s.CreatedAt >= DATEADD(month, DATEDIFF(month, 0, GETDATE()), 0)"
         
+        # JOIN with CashierSessions to get CashierName
         query = f"""
             SELECT 
-                ISNULL(s.CashierName, 'Unknown') as CashierUsername,
+                ISNULL(cs.CashierName, 'Unknown') as CashierUsername,
                 ISNULL(SUM(si.Quantity * si.UnitPrice), 0) 
                 - ISNULL(SUM(s.TotalDiscountAmount), 0) 
                 - ISNULL(SUM(s.PromotionalDiscountAmount), 0) as TotalSales,
                 COUNT(DISTINCT s.SaleID) as OrderCount
             FROM Sales s
             INNER JOIN SaleItems si ON s.SaleID = si.SaleID
+            LEFT JOIN CashierSessions cs ON s.SessionID = cs.SessionID
             WHERE s.Status = 'completed'
             AND {date_filter}
-            GROUP BY s.CashierName
+            GROUP BY cs.CashierName
             HAVING COUNT(DISTINCT s.SaleID) > 0
             ORDER BY TotalSales DESC
         """
@@ -607,9 +610,6 @@ async def get_shift_performance(
     finally:
         await cursor.close()
         await conn.close()
-
-
-# ============= MANAGER ENDPOINTS =============
 
 @router_dashboard.get("/manager/active-orders")
 async def get_active_orders(
@@ -1070,12 +1070,13 @@ async def get_canceled_orders_analysis(
         if filter == "By Cashier":
             await cursor.execute("""
                 SELECT 
-                    ISNULL(s.CashierName, 'Unknown') as Name,
+                    ISNULL(cs.CashierName, 'Unknown') as Name,
                     COUNT(*) as CanceledCount
                 FROM Sales s
+                LEFT JOIN CashierSessions cs ON s.SessionID = cs.SessionID
                 WHERE s.Status = 'cancelled'
                 AND CAST(s.UpdatedAt AS DATE) = CAST(GETDATE() AS DATE)
-                GROUP BY s.CashierName
+                GROUP BY cs.CashierName
                 HAVING COUNT(*) > 0
                 ORDER BY CanceledCount DESC
             """)
