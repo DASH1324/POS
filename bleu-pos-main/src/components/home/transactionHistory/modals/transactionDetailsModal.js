@@ -104,6 +104,26 @@ const TransHisModal = ({
   );
   
   const isRefunded = transaction.status.toLowerCase() === 'refunded' || totalRefundedAmount > 0;
+  
+  // Check if transaction is from today
+  const isToday = () => {
+    const transactionDate = new Date(transaction.date);
+    const today = new Date();
+    
+    // DEBUG: Check what values we're comparing
+    console.log("Transaction date:", transaction.date);
+    console.log("Transaction Date object:", transactionDate);
+    console.log("Today Date object:", today);
+    console.log("Is today?", 
+      transactionDate.getDate() === today.getDate() &&
+      transactionDate.getMonth() === today.getMonth() &&
+      transactionDate.getFullYear() === today.getFullYear()
+    );
+    
+    return transactionDate.getDate() === today.getDate() &&
+           transactionDate.getMonth() === today.getMonth() &&
+           transactionDate.getFullYear() === today.getFullYear();
+  };
 
   return (
     <div className="transHis-modal-overlay" onClick={onClose}>
@@ -189,7 +209,6 @@ const TransHisModal = ({
                   </span>
                 </div>
               )}
-              {/* --- THIS IS THE FIX --- */}
               {transaction.promotionalDiscount > 0 && (
                 <div className="transHis-modal-discount-item" style={{ marginTop: '8px' }}>
                   <FontAwesomeIcon icon={faPercent} />
@@ -325,7 +344,7 @@ const TransHisModal = ({
             </div>
           </div>
 
-          {/* Price Breakdown - Now uses backend data correctly */}
+          {/* Price Breakdown */}
           <div className="transHis-modal-price-breakdown">
             <div className="transHis-modal-breakdown-row">
               <span>Subtotal:</span>
@@ -375,9 +394,9 @@ const TransHisModal = ({
               {/* Refund info display */}
             </div>
           )}
-
+        
           {/* Action Buttons */}
-          {transaction.status.toLowerCase() === "completed" && (
+          {transaction.status.toLowerCase() === "completed" && isToday() && (
             <div className="transHis-modal-actions">
               {isUserAdmin ? (
                 <div className="transHis-admin-message"></div>
@@ -392,13 +411,23 @@ const TransHisModal = ({
                       >
                         Full Refund
                       </button>
-                      <button 
-                        className="transHis-modal-action-btn transHis-modal-partial-refund-btn"
-                        onClick={toggleRefundMode}
-                        disabled={transaction.items.every(item => item.isFullyRefunded)}
-                      >
-                        Refund Item
-                      </button>
+                      {(() => {
+                        // Check if there's any item with quantity > 1 that's not fully refunded
+                        const hasPartialRefundableItems = transaction.items.some(item => {
+                          const availableQty = item.quantity - (item.refundedQuantity || 0);
+                          return availableQty > 1;
+                        });
+                        
+                        return hasPartialRefundableItems && (
+                          <button 
+                            className="transHis-modal-action-btn transHis-modal-partial-refund-btn"
+                            onClick={toggleRefundMode}
+                            disabled={transaction.items.every(item => item.isFullyRefunded)}
+                          >
+                            Refund Item
+                          </button>
+                        );
+                      })()}
                     </>
                   ) : (
                     <>
