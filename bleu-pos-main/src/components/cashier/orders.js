@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useCallback } from "react";
+import { useLocation } from "react-router-dom";
 import "./orders.css";
 import Navbar from "../navbar";
 import DataTable from "react-data-table-component";
@@ -81,6 +82,7 @@ function Orders() {
   const [filterDate, setFilterDate] = useState(new Date().toISOString().slice(0, 10));
   const [filterStatus, setFilterStatus] = useState("");
   const [selectedOrder, setSelectedOrder] = useState(null);
+  const location = useLocation();
   const [username, setUsername] = useState('');
   const [userRole, setUserRole] = useState('');
   const [storeOrders, setStoreOrders] = useState([]);
@@ -174,7 +176,7 @@ function Orders() {
               appliedDiscounts: order.appliedDiscounts || [],
               addOns: order.addOns || order.appliedAddOns || order.addons || 0,
               cashierName: order.cashierName || 'Unknown',
-              reference_number: order.GCashReferenceNumber || null,
+              reference_number: order.gcashReference || order.GCashReferenceNumber || null,
               updatedAt: order.updatedAt || order.date,
               email: order.email || order.customer_email || null
             };
@@ -874,6 +876,44 @@ function Orders() {
   };
 
   useEffect(() => { 
+    // Handle navigation from notifications
+    if (location.state?.selectedOrderId && location.state?.openPanel) {
+      console.log('📍 Navigation state detected:', location.state);
+      
+      // Remove the 'SO-' prefix if it exists
+      const orderIdToFind = String(location.state.selectedOrderId).replace(/^SO-/, '');
+      console.log('🔍 Looking for order ID:', orderIdToFind);
+      
+      // Search in both store and online orders
+      const allOrders = [...storeOrders, ...onlineOrders];
+      console.log('📦 Total orders available:', allOrders.length);
+      
+      const orderToSelect = allOrders.find(order => String(order.id) === orderIdToFind);
+      
+      if (orderToSelect) {
+        console.log('✅ Order found:', orderToSelect);
+        
+        // Set the correct tab based on order source
+        if (orderToSelect.source === 'store') {
+          setActiveTab('store');
+        } else if (orderToSelect.source === 'online') {
+          setActiveTab('online');
+        }
+        
+        // Set the selected order to open the panel
+        setSelectedOrder(orderToSelect);
+        
+        // Clear the navigation state to prevent re-triggering
+        window.history.replaceState({}, document.title);
+      } else {
+        console.warn('⚠️ Order not found with ID:', orderIdToFind);
+        console.log('Available order IDs:', allOrders.map(o => o.id));
+      }
+      
+      return; // Exit early to prevent the normal selection logic
+    }
+
+    // Normal selection logic for filtered data
     if (filteredData.length > 0) { 
       if (!selectedOrder || !filteredData.find(o => o.id === selectedOrder.id)) { 
         setSelectedOrder(filteredData[0]); 
@@ -881,7 +921,7 @@ function Orders() {
     } else { 
       setSelectedOrder(null); 
     } 
-  }, [filteredData, selectedOrder]);
+  }, [location.state, storeOrders, onlineOrders, filteredData, selectedOrder]);
 
   useEffect(() => { 
     setFilterDate(getTodayLocalDate()); 

@@ -132,7 +132,7 @@ export const DiscountsModal = ({
   applyDiscountWithItems,
   appliedDiscounts = [],
   removeAllDiscounts,
-  autoPromotion, // NEW PROP
+  autoPromotion,
 }) => {
   const [selectedDiscount, setSelectedDiscount] = useState(null);
   const [selectedItemsQty, setSelectedItemsQty] = useState({});
@@ -151,8 +151,20 @@ export const DiscountsModal = ({
     }
   }, [showDiscountsModal]);
 
+  // ✅ NEW: Helper to get per-item promotion amount
+  const getItemPromotionAmount = (itemIndex) => {
+    if (!autoPromotion || !autoPromotion.itemPromotions) return 0;
+    const itemPromo = autoPromotion.itemPromotions.find(p => p.itemIndex === itemIndex);
+    if (!itemPromo) return 0;
+    
+    const item = cartItems[itemIndex];
+    if (!item) return 0;
+    
+    // Calculate per-item promotion amount
+    return itemPromo.promotionAmount / itemPromo.quantity;
+  };
+
   const handleDiscountSelect = (discount) => {
-    // Don't allow selection if discount is not enabled (lower value than promo)
     if (!discount.isEnabled) return;
     
     const subtotal = getSubtotal();
@@ -203,7 +215,9 @@ export const DiscountsModal = ({
     const eligibleItems = cartItems
       .map((item, index) => ({ item, index }))
       .filter(({ item, index }) => 
-        isItemEligible(item, selectedDiscount) && getAvailableQuantity(index) > 0
+        isItemEligible(item, selectedDiscount) && 
+        getAvailableQuantity(index) > 0 &&
+        isDiscountBetterThanPromotion(item, index, selectedDiscount) // ✅ NEW CHECK
       );
     
     const allSelected = eligibleItems.every(({ index }) => 
@@ -229,6 +243,24 @@ export const DiscountsModal = ({
       case 'specific_categories': return discount.applicableCategories?.includes(item.category);
       default: return false;
     }
+  };
+
+  // ✅ NEW: Check if discount is better than promotion for this specific item
+  const isDiscountBetterThanPromotion = (item, itemIndex, discount) => {
+    if (!discount) return false;
+    
+    const itemPrice = item.price + getTotalAddonsPrice(item.addons);
+    let perItemDiscount = 0;
+    
+    if (discount.type === 'percentage') {
+      perItemDiscount = itemPrice * (discount.value / 100);
+    } else if (discount.type === 'fixed') {
+      perItemDiscount = Math.min(discount.value, itemPrice);
+    }
+    
+    const itemPromotionAmount = getItemPromotionAmount(itemIndex);
+    
+    return perItemDiscount > itemPromotionAmount;
   };
 
   const calculateSelectedSubtotal = () => {
@@ -330,7 +362,11 @@ export const DiscountsModal = ({
 
   const subtotal = getSubtotal();
   const eligibleItems = cartItems.filter((item, index) => 
-    selectedDiscount ? isItemEligible(item, selectedDiscount) && getAvailableQuantity(index) > 0 : false
+    selectedDiscount ? 
+      isItemEligible(item, selectedDiscount) && 
+      getAvailableQuantity(index) > 0 &&
+      isDiscountBetterThanPromotion(item, index, selectedDiscount) // ✅ NEW CHECK
+    : false
   );
   
   const allEligibleSelected = eligibleItems.length > 0 && 
@@ -351,7 +387,6 @@ export const DiscountsModal = ({
           </div>
           
           <div className="cDiscount-content-split">
-            {/* Left Panel - Discount Selection */}
             <div className="cDiscount-panel cDiscount-panel-left">
               <div className="cDiscount-panel-header">
                 <h4 className="cDiscount-panel-title">Select Discount</h4>
@@ -374,7 +409,6 @@ export const DiscountsModal = ({
                 {!isLoading && !error && availableDiscounts.map(discount => {
                   const isSelected = selectedDiscount?.id === discount.id;
                   const isEligible = !discount.minAmount || subtotal >= discount.minAmount;
-                  // Use the isEnabled flag from the discount object
                   const isClickable = discount.isEnabled !== false && isEligible;
                   const isLowerThanPromo = discount.isEnabled === false;
                   
@@ -409,14 +443,12 @@ export const DiscountsModal = ({
                               {' | '}Min. Spend: ₱{Number(discount.minAmount).toFixed(2)}
                             </span>
                           )}
-                          {/* Show potential discount value */}
                           {discount.potentialDiscount > 0 && (
                             <span className="cDiscount-potential" style={{color: '#666', marginLeft: '8px'}}>
                               (Saves ₱{discount.potentialDiscount.toFixed(2)})
                             </span>
                           )}
                         </div>
-                        {/* Show reason why it's disabled */}
                         {isLowerThanPromo && autoPromotion && (
                           <div className="cDiscount-disabled-reason" style={{fontSize: '11px', color: '#ff9800', marginTop: '4px'}}>
                             Lower than "{autoPromotion.name}" promo (₱{autoPromotion.discountAmount?.toFixed(2)})
@@ -437,7 +469,6 @@ export const DiscountsModal = ({
               </div>
             </div>
 
-            {/* Right Panel - Item Selection with Quantity */}
             <div className="cDiscount-panel cDiscount-panel-right">
               <div className="cDiscount-panel-header">
                 {selectedDiscount && eligibleItems.length > 0 && (
@@ -465,6 +496,11 @@ export const DiscountsModal = ({
                   
                   const availableQty = getAvailableQuantity(index);
                   if (availableQty === 0) return null;
+                  
+                  // ✅ NEW: Check if discount is better than promotion for this item
+                  const canApplyDiscount = isDiscountBetterThanPromotion(item, index, selectedDiscount);
+                  
+                  if (!canApplyDiscount) return null; // ✅ Don't show items where promo is better
                   
                   const selectedQty = selectedItemsQty[index] || 0;
                   const itemPrice = item.price + getTotalAddonsPrice(item.addons);
@@ -572,12 +608,11 @@ export const TransactionSummaryModal = ({
   isProcessing,
   getItemDiscount,
   getItemDiscountedQty,
-  getItemPromotion,  // ✅ NEW PROP
-  getItemPromotionQty  // ✅ NEW PROP
+  getItemPromotion,
+  getItemPromotionQty
 }) => {
   if (!showTransactionSummary) return null;
 
-  // Helper function to get combined discounts for an item
   const getCombinedDiscountsForItem = (itemIndex) => {
     const discountGroups = {};
     
@@ -632,10 +667,10 @@ export const TransactionSummaryModal = ({
             <div className="trnsSummary-items-scrollable">
               {cartItems.map((item, index) => {
                 const itemDiscount = getItemDiscount ? getItemDiscount(index) : 0;
-                const itemPromotion = getItemPromotion ? getItemPromotion(index) : 0; // ✅ NEW
+                const itemPromotion = getItemPromotion ? getItemPromotion(index) : 0;
                 const itemTotal = (item.price + getTotalAddonsPrice(item.addons)) * item.quantity;
                 const combinedDiscounts = getCombinedDiscountsForItem(index);
-                const itemPromotionQty = getItemPromotionQty ? getItemPromotionQty(index) : 0; // ✅ NEW
+                const itemPromotionQty = getItemPromotionQty ? getItemPromotionQty(index) : 0;
                 
                 return (
                   <div key={index} className="trnsSummary-summary-item">
@@ -656,7 +691,6 @@ export const TransactionSummaryModal = ({
                         ))}
                       </div>
                     )}
-                    {/* Display Discounts */}
                     {combinedDiscounts.length > 0 && (
                       <div className="trnsSummary-item-discount">
                         {combinedDiscounts.map((discount, discIdx) => (
@@ -666,11 +700,10 @@ export const TransactionSummaryModal = ({
                         ))}
                       </div>
                     )}
-                    {/* ✅ NEW: Display Promotions per item */}
-                    {itemPromotion > 0 && autoPromotion && (
+                    {itemPromotion > 0 && autoPromotion && autoPromotion.itemPromotions && (
                       <div className="trnsSummary-item-promotion" style={{fontSize: '12px', color: '#ff9800', marginTop: '4px'}}>
                         <span>
-                          • {autoPromotion.name} ({itemPromotionQty}): -₱{itemPromotion.toFixed(2)}
+                          • {autoPromotion.itemPromotions.find(p => p.itemIndex === index)?.promotionName || autoPromotion.name} ({itemPromotionQty}): -₱{itemPromotion.toFixed(2)}
                         </span>
                       </div>
                     )}
@@ -715,6 +748,7 @@ export const TransactionSummaryModal = ({
     </div>
   );
 };
+
 export const GCashReferenceModal = ({
   showGCashReference,
   setShowGCashReference,

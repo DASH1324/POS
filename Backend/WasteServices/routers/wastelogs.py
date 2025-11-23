@@ -336,7 +336,7 @@ async def get_products_sold_by_session(
     token: str = Depends(oauth2_scheme)
 ):
     """Get all products sold during a specific cashier session"""
-    await validate_token_and_roles(token, ["admin", "manager", "staff", "cashier"])  # ✅ Added "cashier" role
+    await validate_token_and_roles(token, ["admin", "manager", "staff", "cashier"])  
     
     conn = await get_db_connection()
     try:
@@ -503,24 +503,24 @@ async def log_spillage(
                 spillage_id=result.SpillageID
             )
             
-            # Schedule blockchain logging in background
-            background_tasks.add_task(
-                log_to_blockchain_background,
-                token=token,
-                action="CREATE",
-                entity_id=result.SpillageID,
-                actor_username=user_data.get("username", spillage.logged_by),
-                change_description=f"New spillage: {spillage.quantity} units of {spillage.product_name}",
-                data={
-                    "spillage_id": result.SpillageID,
-                    "session_id": spillage.session_id,
-                    "cashier_name": session.CashierName,
-                    "product_name": spillage.product_name,
-                    "category": spillage.category,
-                    "quantity": spillage.quantity,
-                    "reason": spillage.reason
-                }
-            )
+            # Removed blockchain logging 
+            #background_tasks.add_task(
+            #    log_to_blockchain_background,
+            #    token=token,
+            #    action="CREATE",
+            #    entity_id=result.SpillageID,
+            #    actor_username=user_data.get("username", spillage.logged_by),
+            #    change_description=f"New spillage: {spillage.quantity} units of {spillage.product_name}",
+            #    data={
+            #        "spillage_id": result.SpillageID,
+            #        "session_id": spillage.session_id,
+            #        "cashier_name": session.CashierName,
+            #        "product_name": spillage.product_name,
+            #        "category": spillage.category,
+            #        "quantity": spillage.quantity,
+            #        "reason": spillage.reason
+            #    }
+            #)
             
             return spillage_out
             
@@ -668,20 +668,20 @@ async def delete_spillage(
                 spillage_id=spillage_id
             )
             
-            # Schedule blockchain logging in background
-            background_tasks.add_task(
-                log_to_blockchain_background,
-                token=token,
-                action="DELETE",
-                entity_id=spillage_id,
-                actor_username=user_data.get("username", "system"),
-                change_description=f"Deleted spillage: {record.ProductName} ({record.Quantity} units)",
-                data={
-                    "spillage_id": spillage_id,
-                    "product_name": record.ProductName,
-                    "quantity": record.Quantity
-                }
-            )
+            # Removed blockchain logging 
+            #background_tasks.add_task(
+            #    log_to_blockchain_background,
+            #    token=token,
+            #    action="DELETE",
+            #    entity_id=spillage_id,
+            #    actor_username=user_data.get("username", "system"),
+            #    change_description=f"Deleted spillage: {record.ProductName} ({record.Quantity} units)",
+            #    data={
+            #        "spillage_id": spillage_id,
+            #        "product_name": record.ProductName,
+            #        "quantity": record.Quantity
+            #    }
+            #)
             
             return {"message": f"Spillage record {spillage_id} deleted successfully"}
             
@@ -842,20 +842,20 @@ async def update_spillage(
             
             change_desc = "Updated: " + ", ".join(changes) if changes else "Spillage updated"
             
-            # Schedule blockchain logging in background
-            background_tasks.add_task(
-                log_to_blockchain_background,
-                token=token,
-                action="UPDATE",
-                entity_id=spillage_id,
-                actor_username=user_data.get("username", spillage.logged_by),
-                change_description=change_desc,
-                data={
-                    "spillage_id": spillage_id,
-                    "old_data": old_spillage_data,
-                    "new_data": new_spillage_data
-                }
-            )
+            # Removed blockchain logging 
+            #background_tasks.add_task(
+            #    log_to_blockchain_background,
+            #    token=token,
+            #    action="UPDATE",
+            #    entity_id=spillage_id,
+            #    actor_username=user_data.get("username", spillage.logged_by),
+            #    change_description=change_desc,
+            #    data={
+            #        "spillage_id": spillage_id,
+            #        "old_data": old_spillage_data,
+            #        "new_data": new_spillage_data
+            #    }
+            #)
             
             return SpillageOut(
                 spillage_id=result.SpillageID,

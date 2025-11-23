@@ -170,7 +170,7 @@ const TransHisModal = ({
           </div>
 
           {/* GCash Reference */}
-          {transaction.paymentMethod === "GCash" && transaction.GCashReferenceNumber && (
+          {transaction.paymentMethod && transaction.paymentMethod.toLowerCase() === "gcash" && transaction.GCashReferenceNumber && (
             <div className="transHis-modal-reference">
               <span className="transHis-modal-label">GCash Reference #:</span>
               <span className="transHis-modal-value">{transaction.GCashReferenceNumber}</span>

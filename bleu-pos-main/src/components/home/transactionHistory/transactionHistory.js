@@ -259,6 +259,46 @@ function TransactionHistory() {
     }
   }, [navigate]);
 
+  const getDateRange = useCallback(() => {
+    const now = new Date();
+    switch (dateRange) {
+      case "today":
+        // Use local date, not UTC
+        const todayStart = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 0, 0, 0, 0);
+        const todayEnd = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 23, 59, 59, 999);
+        return [todayStart, todayEnd];
+      case "thisWeek":
+        const sevenDaysAgo = new Date(now);
+        sevenDaysAgo.setDate(now.getDate() - 6);
+        sevenDaysAgo.setHours(0, 0, 0, 0);
+        return [sevenDaysAgo, now];
+      case "thisMonth":
+        return [startOfMonth(now), endOfMonth(now)];
+      case "thisYear":
+        return [startOfYear(now), endOfYear(now)];
+      case "custom":
+        if (customStart && customEnd) {
+          const start = new Date(customStart);
+          start.setHours(0, 0, 0, 0);
+          const end = new Date(customEnd);
+          end.setHours(23, 59, 59, 999);
+          return [start, end];
+        }
+        return [null, null];
+      default:
+        return [null, null];
+    }
+  }, [dateRange, customStart, customEnd]);
+
+  // Helper to format dates in local timezone
+  const formatLocalDate = (date) => {
+    if (!date) return null;
+    const year = date.getFullYear();
+    const month = String(date.getMonth() + 1).padStart(2, '0');
+    const day = String(date.getDate()).padStart(2, '0');
+    return `${year}-${month}-${day}`;
+  };
+
   useEffect(() => {
     fetchCashiers();
   }, []);
@@ -278,15 +318,14 @@ function TransactionHistory() {
     if (!token) return;
 
     const [start, end] = getDateRange();
-    const startDate = start ? start.toISOString().split('T')[0] : null;
-    const endDate = end ? end.toISOString().split('T')[0] : null;
+    
+    // Format dates in local timezone
+    const startDate = formatLocalDate(start);
+    const endDate = formatLocalDate(end);
 
     fetchStatistics(token, startDate, endDate, activeTab);
-  }, [dateRange, customStart, customEnd, activeTab, fetchStatistics]);
+  }, [dateRange, customStart, customEnd, activeTab, fetchStatistics, getDateRange]);
 
-  useEffect(() => {
-    setCurrentPeriodText(getPeriodText(dateRange, customStart, customEnd));
-  }, [dateRange, customStart, customEnd]);
 
   const handleClearFilters = () => {
     setSearchTerm("");
@@ -303,8 +342,10 @@ function TransactionHistory() {
     if (token) {
       fetchTransactions(token);
       const [start, end] = getDateRange();
-      const startDate = start ? start.toISOString().split('T')[0] : null;
-      const endDate = end ? end.toISOString().split('T')[0] : null;
+      
+      const startDate = formatLocalDate(start);
+      const endDate = formatLocalDate(end);
+      
       fetchStatistics(token, startDate, endDate, activeTab);
     } else {
       navigate("/");
@@ -441,34 +482,6 @@ function TransactionHistory() {
       alert(`Error processing partial refund: ${error.message}`);
     }
   };
-
-  const getDateRange = useCallback(() => {
-    const now = new Date();
-    switch (dateRange) {
-      case "today":
-        return [startOfToday(), endOfToday()];
-      case "thisWeek":
-      const sevenDaysAgo = new Date(now);
-      sevenDaysAgo.setDate(now.getDate() - 6); // 6 days ago + today = 7 days
-      sevenDaysAgo.setHours(0, 0, 0, 0);
-      return [sevenDaysAgo, now];
-      case "thisMonth":
-        return [startOfMonth(now), endOfMonth(now)];
-      case "thisYear":
-        return [startOfYear(now), endOfYear(now)];
-      case "custom":
-        if (customStart && customEnd) {
-          const start = new Date(customStart);
-          start.setHours(0, 0, 0, 0);
-          const end = new Date(customEnd);
-          end.setHours(23, 59, 59, 999);
-          return [start, end];
-        }
-        return [null, null];
-      default:
-        return [null, null];
-    }
-  }, [dateRange, customStart, customEnd]);
 
   const filteredTransactions = useMemo(() => {
     const [start, end] = getDateRange();

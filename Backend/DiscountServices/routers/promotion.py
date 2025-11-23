@@ -90,8 +90,6 @@ async def log_to_blockchain_background(
             response = await client.post(BLOCKCHAIN_LOG_URL, json=payload, headers=headers)
             response.raise_for_status()
     except Exception as e:
-        # For background tasks, we print the error but don't raise an HTTPException,
-        # as the primary API request has already succeeded.
         print(f"⚠️  Blockchain logging failed: {e}")
 
 # HELPER FUNCTION TO AUTO-EXPIRE PROMOTIONS
@@ -211,18 +209,18 @@ async def create_promotion(
             
             await conn.commit()
             
-            # OPTIMIZED: Log to blockchain in the background
-            blockchain_data = promotion_data.model_dump()
-            blockchain_data['id'] = new_id
-            background_tasks.add_task(
-                log_to_blockchain_background,
-                token=token,
-                action="CREATE",
-                entity_id=new_id,
-                actor_username=user_data.get("username", "unknown"),
-                change_description=f"Created promotion: {promotion_data.promotionName}",
-                data=blockchain_data
-            )
+            # Removed blockchain logging
+            #blockchain_data = promotion_data.model_dump()
+            #blockchain_data['id'] = new_id
+            #background_tasks.add_task(
+            #    log_to_blockchain_background,
+            #    token=token,
+            #    action="CREATE",
+            #    entity_id=new_id,
+            #    actor_username=user_data.get("username", "unknown"),
+            #    change_description=f"Created promotion: {promotion_data.promotionName}",
+            #    data=blockchain_data
+            #)
             
             return PromotionDetailOut(id=new_id, **promotion_data.model_dump())
     except Exception as e:
@@ -242,8 +240,6 @@ async def get_all_promotions(token: str = Depends(oauth2_scheme)):
         await auto_expire_promotions(conn)
         
         async with conn.cursor() as cursor:
-            # OPTIMIZED: Replaced 3 separate queries with a single, more efficient query
-            # using STUFF and FOR XML PATH for compatibility with older SQL Server versions.
             sql = """
                 SELECT 
                     p.id, p.name, p.application_type, p.promotion_type, p.promotion_value, p.buy_quantity, 
@@ -340,8 +336,8 @@ async def get_promotion(promotion_id: int, token: str = Depends(oauth2_scheme)):
                 bogoDiscountType=base_data['bogo_discount_type'],
                 bogoDiscountValue=base_data['bogo_discount_value'], 
                 minQuantity=base_data['min_quantity'],
-                validFrom=base_data['valid_from'].date(),  # <-- ADDED .date()
-                validTo=base_data['valid_to'].date(),      # <-- ADDED .date()
+                validFrom=base_data['valid_from'].date(),  
+                validTo=base_data['valid_to'].date(),      
                 status=base_data['status']
             )
     except Exception as e:
@@ -405,16 +401,16 @@ async def update_promotion(
 
             await conn.commit()
             
-            blockchain_data = {"before": old_data, "after": promotion_data.model_dump(), "id": promotion_id}
-            change_desc = f"Updated promotion: {promotion_data.promotionName}"
-            
-            # OPTIMIZED: Log to blockchain in the background
-            background_tasks.add_task(
-                log_to_blockchain_background,
-                token=token, action="UPDATE", entity_id=promotion_id,
-                actor_username=user_data.get("username", "unknown"),
-                change_description=change_desc, data=blockchain_data
-            )
+            # Removed blockchain logging 
+            #blockchain_data = {"before": old_data, "after": promotion_data.model_dump(), "id": promotion_id}
+            #change_desc = f"Updated promotion: {promotion_data.promotionName}"
+            #
+            #background_tasks.add_task(
+            #    log_to_blockchain_background,
+            #    token=token, action="UPDATE", entity_id=promotion_id,
+            #    actor_username=user_data.get("username", "unknown"),
+            #    change_description=change_desc, data=blockchain_data
+            #)
             
             return PromotionDetailOut(id=promotion_id, **promotion_data.model_dump())
     except Exception as e:
@@ -447,17 +443,17 @@ async def delete_promotion(
             
             await conn.commit()
             
-            # OPTIMIZED: Log to blockchain in the background
-            blockchain_data = {"id": promotion_id, "name": promotion_data.get('name')}
-            background_tasks.add_task(
-                log_to_blockchain_background,
-                token=token,
-                action="DELETE",
-                entity_id=promotion_id,
-                actor_username=user_data.get("username", "unknown"),
-                change_description=f"Deleted promotion: {promotion_data.get('name')}",
-                data=blockchain_data
-            )
+            # Removed blockchain logging 
+            #blockchain_data = {"id": promotion_id, "name": promotion_data.get('name')}
+            #background_tasks.add_task(
+            #    log_to_blockchain_background,
+            #    token=token,
+            #    action="DELETE",
+            #    entity_id=promotion_id,
+            #    actor_username=user_data.get("username", "unknown"),
+            #    change_description=f"Deleted promotion: {promotion_data.get('name')}",
+            #    data=blockchain_data
+            #)
             
             return {"message": "Promotion deleted successfully."}
     except Exception as e:

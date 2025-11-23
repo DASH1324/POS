@@ -64,22 +64,22 @@ function Products() {
   }, []);
 
   const fetchMerchandise = useCallback(async (token) => {
-    try {
-      const response = await fetch(`${MERCHANDISE_API_URL}/merchandise/`, {
-        headers: { Authorization: `Bearer ${token}` },
-      });
-      if (!response.ok) {
-        const errorText = await response.text();
-        throw new Error(`Failed to fetch merchandise: ${response.status} - ${errorText}`);
-      }
-      const data = await response.json();
-      console.log("Merchandise data:", data);
-      setMerchandise(data);
-    } catch (err) {
-      console.error("Merchandise fetch error:", err);
-      setError((error) => error || err.message);
+  try {
+    const response = await fetch(`${MERCHANDISE_API_URL}/merchandise/menu`, {
+      headers: { Authorization: `Bearer ${token}` },
+    });
+    if (!response.ok) {
+      const errorText = await response.text();
+      throw new Error(`Failed to fetch merchandise: ${response.status} - ${errorText}`);
     }
-  }, []);
+    const data = await response.json();
+    console.log("Merchandise data:", data);
+    setMerchandise(data);
+  } catch (err) {
+    console.error("Merchandise fetch error:", err);
+    setError((error) => error || err.message);
+  }
+}, []);
 
   useEffect(() => {
     const token = getAuthToken();
@@ -301,6 +301,14 @@ function Products() {
                       {type.productTypeName}
                     </button>
                   ))}
+                  <button
+                    className={`productList-tab ${
+                      activeTab === "merch" ? "productList-tab--active" : ""
+                    }`}
+                    onClick={() => setActiveTab("merch")}
+                  >
+                    Merchandise
+                  </button>
                 </div>
 
                 {/* Filter Bar - Right Side */}
@@ -388,7 +396,26 @@ function Products() {
                     paginationRowsPerPageOptions={[5]}
                     fixedHeader
                     fixedHeaderScrollHeight="60vh"
-                    onRowClicked={(row) => setSelectedProduct(row)}
+                    onRowClicked={(row) => {
+                      if (activeTab === "merch") {
+                        // Normalize merchandise data to expected product properties
+                        const normalizedMerch = {
+                          ...row,
+                          ProductImage: row.MerchandiseImage || row.ProductImage,
+                          ProductName: row.MerchandiseName || row.ProductName,
+                          ProductCategory: row.MerchandiseCategory || row.ProductCategory || "Merchandise",
+                          ProductSizes: row.MerchandiseSizes || row.ProductSizes || [],
+                          ProductSize: row.MerchandiseSize || row.ProductSize || "",
+                          ProductPrice: row.MerchandisePrice || row.ProductPrice || 0,
+                          ProductDescription: row.MerchandiseDescription || row.ProductDescription || "",
+                          ProductImg: row.MerchandiseImage || row.ProductImg,
+                          ImageUrl: row.MerchandiseImage || row.ImageUrl,
+                        };
+                        setSelectedProduct(normalizedMerch);
+                      } else {
+                        setSelectedProduct(row);
+                      }
+                    }}
                     noDataComponent={
                       <div style={{ padding: "24px", textAlign: "center" }}>
                         {error ? (

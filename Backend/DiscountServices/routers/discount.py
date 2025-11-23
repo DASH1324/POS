@@ -174,26 +174,26 @@ async def create_discount(
             
             await conn.commit()
             
-            # Log to blockchain in background - doesn't block response
-            blockchain_data = {
-                "id": new_id,
-                "name": discount_data.discountName,
-                "status": discount_data.status,
-                "application_type": discount_data.applicationType,
-                "discount_type": discount_data.discountType,
-                "discount_value": str(discount_data.discountValue),
-                "minimum_spend": str(discount_data.minSpend),
-                "valid_from": discount_data.validFrom.isoformat(),
-                "valid_to": discount_data.validTo.isoformat(),
-                "selected_products": discount_data.selectedProducts,
-                "selected_categories": discount_data.selectedCategories
-            }
-            
-            background_tasks.add_task(
-                log_to_blockchain_async,
-                token, "CREATE", new_id, user_data.get("username", "unknown"),
-                f"Created discount: {discount_data.discountName}", blockchain_data
-            )
+            # Removed blockchain logging 
+            #blockchain_data = {
+            #    "id": new_id,
+            #    "name": discount_data.discountName,
+            #    "status": discount_data.status,
+            #    "application_type": discount_data.applicationType,
+            #    "discount_type": discount_data.discountType,
+            #    "discount_value": str(discount_data.discountValue),
+            #    "minimum_spend": str(discount_data.minSpend),
+            #    "valid_from": discount_data.validFrom.isoformat(),
+            #    "valid_to": discount_data.validTo.isoformat(),
+            #    "selected_products": discount_data.selectedProducts,
+            #    "selected_categories": discount_data.selectedCategories
+            #}
+            #
+            #background_tasks.add_task(
+            #    log_to_blockchain_async,
+            #    token, "CREATE", new_id, user_data.get("username", "unknown"),
+            #    f"Created discount: {discount_data.discountName}", blockchain_data
+            #)
             
             return DiscountDetailOut(id=new_id, **discount_data.model_dump())
     except Exception as e:
@@ -291,7 +291,7 @@ async def get_discount(discount_id: int, token: str = Depends(oauth2_scheme)):
             await cursor.execute("SELECT category_name FROM discount_applicable_categories WHERE discount_id=?", discount_id)
             categories = [row.category_name for row in await cursor.fetchall()]
 
-            # ✅ FIX: Convert datetime from database to date before Pydantic validation
+            # Convert datetime from database to date before Pydantic validation
             return DiscountDetailOut(
                 id=base_data['id'], 
                 discountName=base_data['name'], 
@@ -301,8 +301,8 @@ async def get_discount(discount_id: int, token: str = Depends(oauth2_scheme)):
                 discountType=base_data['discount_type'],
                 discountValue=base_data['discount_value'], 
                 minSpend=base_data['minimum_spend'],
-                validFrom=base_data['valid_from'].date(),  # <-- FIX APPLIED
-                validTo=base_data['valid_to'].date(),      # <-- FIX APPLIED
+                validFrom=base_data['valid_from'].date(),  
+                validTo=base_data['valid_to'].date(),      
                 status=base_data['status']
             )
     except Exception as e:
@@ -363,31 +363,31 @@ async def update_discount(
             
             change_desc = f"Updated discount: {', '.join(changes) if changes else 'modified fields'}"
             
-            # Log to blockchain in background
-            blockchain_data = {
-                "id": discount_id,
-                "name": discount_data.discountName,
-                "status": discount_data.status,
-                "application_type": discount_data.applicationType,
-                "discount_type": discount_data.discountType,
-                "discount_value": str(discount_data.discountValue),
-                "minimum_spend": str(discount_data.minSpend),
-                "valid_from": discount_data.validFrom.isoformat(),
-                "valid_to": discount_data.validTo.isoformat(),
-                "selected_products": discount_data.selectedProducts,
-                "selected_categories": discount_data.selectedCategories,
-                "previous_values": {
-                    "name": old_data['name'],
-                    "status": old_data['status'],
-                    "discount_value": str(old_data['discount_value'])
-                }
-            }
-            
-            background_tasks.add_task(
-                log_to_blockchain_async,
-                token, "UPDATE", discount_id, user_data.get("username", "unknown"),
-                change_desc, blockchain_data
-            )
+            # Removed blockchain logging
+            #blockchain_data = {
+            #    "id": discount_id,
+            #    "name": discount_data.discountName,
+            #    "status": discount_data.status,
+            #    "application_type": discount_data.applicationType,
+            #    "discount_type": discount_data.discountType,
+            #    "discount_value": str(discount_data.discountValue),
+            #    "minimum_spend": str(discount_data.minSpend),
+            #    "valid_from": discount_data.validFrom.isoformat(),
+            #    "valid_to": discount_data.validTo.isoformat(),
+            #    "selected_products": discount_data.selectedProducts,
+            #    "selected_categories": discount_data.selectedCategories,
+            #    "previous_values": {
+            #        "name": old_data['name'],
+            #        "status": old_data['status'],
+            #        "discount_value": str(old_data['discount_value'])
+            #    }
+            #}
+            #
+            #background_tasks.add_task(
+            #    log_to_blockchain_async,
+            #    token, "UPDATE", discount_id, user_data.get("username", "unknown"),
+            #    change_desc, blockchain_data
+            #)
             
             return DiscountDetailOut(id=discount_id, **discount_data.model_dump())
     except Exception as e:
@@ -425,19 +425,19 @@ async def delete_discount(
             
             await conn.commit()
             
-            # Log to blockchain in background
-            blockchain_data = {
-                "id": discount_id,
-                "name": discount_name,
-                "deleted": True,
-                "deleted_at": datetime.now().isoformat()
-            }
-            
-            background_tasks.add_task(
-                log_to_blockchain_async,
-                token, "DELETE", discount_id, user_data.get("username", "unknown"),
-                f"Deleted discount: {discount_name}", blockchain_data
-            )
+            # Removed blockchain logging
+            #blockchain_data = {
+            #    "id": discount_id,
+            #    "name": discount_name,
+            #    "deleted": True,
+            #    "deleted_at": datetime.now().isoformat()
+            #}
+            #
+            #background_tasks.add_task(
+            #    log_to_blockchain_async,
+            #    token, "DELETE", discount_id, user_data.get("username", "unknown"),
+            #    f"Deleted discount: {discount_name}", blockchain_data
+            #)
             
             return {"message": "Discount deleted successfully."}
     except Exception as e:

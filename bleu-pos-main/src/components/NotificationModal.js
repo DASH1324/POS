@@ -1,4 +1,5 @@
-import React, { useEffect, useRef } from 'react';
+import React from 'react';
+import { useNavigate } from 'react-router-dom';
 import './NotificationModal.css';
 
 // Helper to format time difference
@@ -33,7 +34,6 @@ const playNotificationSound = () => {
     const audio = new Audio('/Notif.mp3');
     audio.volume = 0.8;
     
-    // Try to play
     const playPromise = audio.play();
     
     if (playPromise !== undefined) {
@@ -42,10 +42,8 @@ const playNotificationSound = () => {
           console.log('🔊 Notification sound played successfully');
         })
         .catch(err => {
-          // If autoplay is blocked, just log it (not an error)
           if (err.name === 'NotAllowedError') {
             console.log('ℹ️ Sound blocked by browser - user needs to interact with page first');
-            // The sound will play on next notification after user clicks anywhere
           } else {
             console.error('Error playing notification sound:', err);
           }
@@ -57,9 +55,10 @@ const playNotificationSound = () => {
 };
 
 const NotificationModal = ({ isOpen, onClose, notifications, onMarkAllAsRead }) => {
+  const navigate = useNavigate();
+
   // Handler for marking individual notification as read
   const handleMarkAsRead = async (notificationId, isRead) => {
-    // Don't do anything if already read
     if (isRead) return;
     
     try {
@@ -70,11 +69,31 @@ const NotificationModal = ({ isOpen, onClose, notifications, onMarkAllAsRead }) 
       if (!response.ok) {
         throw new Error('Failed to mark notification as read');
       }
-      
-      // The WebSocket will broadcast the update to all clients
-      // so we don't need to manually update state here
     } catch (error) {
       console.error('Error marking notification as read:', error);
+    }
+  };
+
+  // Handler for clicking on a notification - navigate to order
+  const handleNotificationClick = async (notification) => {
+    console.log('📍 Notification clicked:', notification);
+    
+    // Mark as read first
+    await handleMarkAsRead(notification.NotificationID, notification.IsRead);
+    
+    // Close the modal
+    onClose();
+    
+    // Navigate to orders page with the order ID
+    if (notification.SaleID) {
+      console.log('🧭 Navigating to order:', notification.SaleID);
+      navigate('/cashier/orders', { 
+        state: { 
+          selectedOrderId: notification.SaleID,
+          openPanel: true,
+          timestamp: Date.now() // Force state change detection
+        } 
+      });
     }
   };
 
@@ -97,8 +116,8 @@ const NotificationModal = ({ isOpen, onClose, notifications, onMarkAllAsRead }) 
               <div 
                 key={notif.NotificationID} 
                 className={`notification-item ${notif.IsRead ? 'read' : ''}`}
-                onClick={() => handleMarkAsRead(notif.NotificationID, notif.IsRead)}
-                style={{ cursor: notif.IsRead ? 'default' : 'pointer' }}
+                onClick={() => handleNotificationClick(notif)}
+                style={{ cursor: 'pointer' }}
               >
                 <div className="notification-icon">
                   {notif.IsRead ? '🔕' : '🔔'}

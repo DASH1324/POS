@@ -458,6 +458,7 @@ async def partial_refund_order(
     Only allows refunding orders that have status 'completed'.
     Refunds must be processed within 30 minutes of order completion.
     Requires manager authorization.
+    CALCULATES NET REFUND AMOUNT AFTER DISCOUNTS AND PROMOTIONS.
     """
     allowed_roles = ["cashier", "admin", "manager"]
     if current_user.get("userRole") not in allowed_roles:
@@ -535,7 +536,7 @@ async def partial_refund_order(
             
             already_refunded = {row.SaleItemID: row.TotalRefunded for row in await cursor.fetchall()}
             
-            # Calculate refund amounts and validate quantities
+            # Calculate refund amounts with discounts and promotions
             total_refund_amount = Decimal('0.0')
             refund_details = []
             
@@ -559,12 +560,30 @@ async def partial_refund_order(
                         detail=f"Cannot refund {req_item.refundQuantity} of {req_item.itemName}. Only {remaining_qty} remaining."
                     )
                 
-                # Calculate refund amount (including addons proportionally)
+                # CRITICAL: Calculate NET price per unit after discounts/promotions
                 unit_price = Decimal(str(matching_item.UnitPrice))
+                
+                # Get item-level discounts
+                await cursor.execute("""
+                    SELECT COALESCE(SUM(DiscountAmount), 0) as TotalItemDiscount
+                    FROM SaleItemDiscounts
+                    WHERE SaleItemID = ?
+                """, req_item.saleItemId)
+                discount_result = await cursor.fetchone()
+                total_item_discount = discount_result.TotalItemDiscount or Decimal('0')
+                
+                # Get item-level promotions
+                await cursor.execute("""
+                    SELECT COALESCE(SUM(PromotionAmount), 0) as TotalItemPromotion
+                    FROM SaleItemPromotions
+                    WHERE SaleItemID = ?
+                """, req_item.saleItemId)
+                promo_result = await cursor.fetchone()
+                total_item_promo = promo_result.TotalItemPromotion or Decimal('0')
                 
                 # Get addon cost for this item
                 await cursor.execute("""
-                    SELECT SUM(a.Price * sia.Quantity) as AddonTotal
+                    SELECT COALESCE(SUM(a.Price * sia.Quantity), 0) as AddonTotal
                     FROM SaleItemAddons sia
                     JOIN Addons a ON sia.AddonID = a.AddonID
                     WHERE sia.SaleItemID = ?
@@ -572,9 +591,15 @@ async def partial_refund_order(
                 addon_result = await cursor.fetchone()
                 addon_total = addon_result.AddonTotal or Decimal('0.0')
                 
-                # Total cost per unit (item + addons divided by quantity)
-                total_unit_cost = unit_price + (addon_total / original_qty if original_qty > 0 else Decimal('0.0'))
-                item_refund_amount = total_unit_cost * Decimal(str(req_item.refundQuantity))
+                # Calculate NET line value
+                # Formula: (UnitPrice × Qty) + Addons - ItemDiscounts - ItemPromotions
+                line_value = (unit_price * original_qty) + addon_total - total_item_discount - total_item_promo
+                
+                # Calculate net price per unit
+                net_price_per_unit = line_value / original_qty if original_qty > 0 else Decimal('0.0')
+                
+                # Calculate refund amount for requested quantity
+                item_refund_amount = net_price_per_unit * Decimal(str(req_item.refundQuantity))
                 
                 total_refund_amount += item_refund_amount
                 refund_details.append({
@@ -657,13 +682,11 @@ async def partial_refund_order(
             if len(refund_details) > 3:
                 items_text += f" +{len(refund_details) - 3} more items"
             
-            # Blockchain description (without manager name, frontend adds it)
             blockchain_description = (
                 f"processed a Partial Refund: \"{items_text}\" "
                 f"(Total: ₱{float(total_refund_amount):.2f})"
             )
             
-            # Blockchain Logging (PARTIAL REFUND) - Cashier is the actor
             cashier_username = current_user.get('username', 'unknown')
             
             refund_data = {
@@ -684,7 +707,7 @@ async def partial_refund_order(
                 action="REFUND",
                 entity_type="SALE",
                 entity_id=parsed_id,
-                actor_username=cashier_username,  # Cashier is the actor
+                actor_username=cashier_username,
                 change_description=blockchain_description,
                 data=refund_data,
                 token=current_user['access_token']
@@ -1002,6 +1025,7 @@ async def partial_refund_order_today(
     """
     Process a partial refund for specific items in a completed order.
     Refunds must be processed on the SAME CALENDAR DAY as order completion.
+    CALCULATES NET REFUND AMOUNT AFTER DISCOUNTS AND PROMOTIONS.
     """
     allowed_roles = ["cashier", "manager"]
     if current_user.get("userRole") not in allowed_roles:
@@ -1045,7 +1069,7 @@ async def partial_refund_order_today(
             placeholders = ','.join(['?' for _ in sale_item_ids])
             
             await cursor.execute(
-                f"SELECT SaleItemID, Quantity, UnitPrice FROM SaleItems WHERE SaleID = ? AND SaleItemID IN ({placeholders})",
+                f"SELECT SaleItemID, ItemName, Quantity, UnitPrice FROM SaleItems WHERE SaleID = ? AND SaleItemID IN ({placeholders})",
                 parsed_id, *sale_item_ids
             )
             valid_items = await cursor.fetchall()
@@ -1065,7 +1089,13 @@ async def partial_refund_order_today(
             
             for req_item in request.items:
                 db_item = next((item for item in valid_items if item.SaleItemID == req_item.saleItemId), None)
-                remaining_qty = db_item.Quantity - already_refunded.get(req_item.saleItemId, 0)
+                
+                if not db_item:
+                    raise HTTPException(status_code=400, detail=f"Item {req_item.itemName} not found.")
+                
+                original_qty = db_item.Quantity
+                already_refunded_qty = already_refunded.get(req_item.saleItemId, 0)
+                remaining_qty = original_qty - already_refunded_qty
                 
                 if req_item.refundQuantity > remaining_qty:
                     raise HTTPException(
@@ -1073,11 +1103,44 @@ async def partial_refund_order_today(
                         detail=f"Cannot refund {req_item.refundQuantity} of {req_item.itemName}. Only {remaining_qty} remaining."
                     )
                 
-                await cursor.execute("SELECT SUM(a.Price * sia.Quantity) as AddonTotal FROM SaleItemAddons sia JOIN Addons a ON sia.AddonID = a.AddonID WHERE sia.SaleItemID = ?", req_item.saleItemId)
+                # CRITICAL: Calculate NET price per unit after discounts/promotions
+                unit_price = Decimal(str(db_item.UnitPrice))
+                
+                # Get item-level discounts
+                await cursor.execute("""
+                    SELECT COALESCE(SUM(DiscountAmount), 0) as TotalItemDiscount
+                    FROM SaleItemDiscounts
+                    WHERE SaleItemID = ?
+                """, req_item.saleItemId)
+                discount_result = await cursor.fetchone()
+                total_item_discount = discount_result.TotalItemDiscount or Decimal('0')
+                
+                # Get item-level promotions
+                await cursor.execute("""
+                    SELECT COALESCE(SUM(PromotionAmount), 0) as TotalItemPromotion
+                    FROM SaleItemPromotions
+                    WHERE SaleItemID = ?
+                """, req_item.saleItemId)
+                promo_result = await cursor.fetchone()
+                total_item_promo = promo_result.TotalItemPromotion or Decimal('0')
+                
+                # Get addon cost
+                await cursor.execute("""
+                    SELECT COALESCE(SUM(a.Price * sia.Quantity), 0) as AddonTotal 
+                    FROM SaleItemAddons sia 
+                    JOIN Addons a ON sia.AddonID = a.AddonID 
+                    WHERE sia.SaleItemID = ?
+                """, req_item.saleItemId)
                 addon_total = (await cursor.fetchone()).AddonTotal or Decimal('0.0')
                 
-                total_unit_cost = db_item.UnitPrice + (addon_total / db_item.Quantity if db_item.Quantity > 0 else Decimal('0.0'))
-                item_refund_amount = total_unit_cost * Decimal(req_item.refundQuantity)
+                # Calculate NET line value
+                line_value = (unit_price * original_qty) + addon_total - total_item_discount - total_item_promo
+                
+                # Calculate net price per unit
+                net_price_per_unit = line_value / original_qty if original_qty > 0 else Decimal('0.0')
+                
+                # Calculate refund amount
+                item_refund_amount = net_price_per_unit * Decimal(str(req_item.refundQuantity))
                 total_refund_amount += item_refund_amount
                 
                 refund_details.append({
@@ -1095,18 +1158,19 @@ async def partial_refund_order_today(
             refund_id = (await cursor.fetchone())[0]
             
             for detail in refund_details:
-                await cursor.execute("INSERT INTO RefundedItems (RefundID, SaleItemID, RefundedQuantity, RefundAmount) VALUES (?, ?, ?, ?)", refund_id, detail['sale_item_id'], detail['refund_quantity'], detail['refund_amount'])
+                await cursor.execute("""
+                    INSERT INTO RefundedItems (RefundID, SaleItemID, RefundedQuantity, RefundAmount, CreatedAt) 
+                    VALUES (?, ?, ?, ?, GETDATE())
+                """, refund_id, detail['sale_item_id'], detail['refund_quantity'], detail['refund_amount'])
 
             await cursor.execute("UPDATE Sales SET UpdatedAt = GETDATE() WHERE SaleID = ?", parsed_id)
             await conn.commit()
             
-            # Get manager's full name for blockchain
             manager_full_name = await get_full_name_from_username(
                 request.managerUsername,
                 current_user['access_token']
             )
             
-            # Build detailed item description
             item_descriptions = []
             for detail in refund_details[:3]:
                 item_descriptions.append(f"{detail['refund_quantity']}x {detail['item_name']}")
