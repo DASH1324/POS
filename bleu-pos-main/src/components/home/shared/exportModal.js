@@ -54,3 +54,33 @@ export const NoDataModal = ({ onClose }) => {
     </div>
   );
 };
+
+// Unable to Load Data Component (Inline)
+export const UnableToLoadData = () => {
+  return (
+    <div className="salesMon-state-container">
+      <div className="salesMon-state-icon salesMon-state-error">
+        <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+        </svg>
+      </div>
+      <h2>Unable to Load Data</h2>
+      <p>We encountered an error while loading your data. Please try again later.</p>
+    </div>
+  );
+};
+
+// No Data Component (Inline)
+export const NoData = () => {
+  return (
+    <div className="salesMon-state-container">
+      <div className="salesMon-state-icon salesMon-state-warning">
+        <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M20 13V6a2 2 0 00-2-2H6a2 2 0 00-2 2v7m16 0v5a2 2 0 01-2 2H6a2 2 0 01-2-2v-5m16 0h-2.586a1 1 0 00-.707.293l-2.414 2.414a1 1 0 01-.707.293h-3.172a1 1 0 01-.707-.293l-2.414-2.414A1 1 0 006.586 13H4" />
+        </svg>
+      </div>
+      <h2>No Data</h2>
+      <p>There is no data available to display at this time.</p>
+    </div>
+  );
+};

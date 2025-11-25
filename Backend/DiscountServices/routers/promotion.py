@@ -15,7 +15,6 @@ from database import get_db_connection
 
 EXTERNAL_PRODUCTS_API_URL = "http://127.0.0.1:8001/is_products/products/details/" 
 AUTH_SERVICE_ME_URL = "http://localhost:4000/auth/users/me"
-# Update this to match your actual blockchain service port
 BLOCKCHAIN_LOG_URL = os.getenv("BLOCKCHAIN_LOG_URL", "http://localhost:9005/blockchain/log")
 
 router = APIRouter() 

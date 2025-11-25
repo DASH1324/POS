@@ -8,6 +8,7 @@ import DetailsProductModal from "./modals/detailsProductModal";
 import Loading from "../shared/loading";
 import { FaFilter, FaSearch } from "react-icons/fa";
 import '../../confirmAlertCustom.css';
+import { UnableToLoadData, NoData } from "../shared/exportModal";
 
 const API_BASE_URL = "http://127.0.0.1:8001";
 const MERCHANDISE_API_URL = "http://127.0.0.1:8002";
@@ -273,17 +274,7 @@ function Products() {
 
         <div className="productList-content">
           {error ? (
-            <div
-              style={{
-                display: "flex",
-                alignItems: "center",
-                justifyContent: "center",
-                height: "400px",
-                color: "red",
-              }}
-            >
-              Error: {error}
-            </div>
+            <UnableToLoadData />
           ) : (
             <>
               {/* Tabs and Filter Wrapper */}
@@ -416,17 +407,7 @@ function Products() {
                         setSelectedProduct(row);
                       }
                     }}
-                    noDataComponent={
-                      <div style={{ padding: "24px", textAlign: "center" }}>
-                        {error ? (
-                          <span style={{ color: "red" }}>Error: {error}</span>
-                        ) : activeTab === "merch" ? (
-                          "No merchandise found."
-                        ) : (
-                          "No products found in this category."
-                        )}
-                      </div>
-                    }
+                    noDataComponent={<NoData />}
                     customStyles={{
                       headCells: {
                         style: {

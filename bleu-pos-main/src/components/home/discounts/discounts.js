@@ -13,6 +13,7 @@ import DiscountDetailsModal from "./discountDetailsModal";
 import PromotionDetailsModal from "./promotionDetailsModal";
 import Loading from "../shared/loading";
 import '../../confirmAlertCustom.css';
+import { UnableToLoadData, NoData } from "../shared/exportModal";
 
 const getAuthToken = () => {
   return localStorage.getItem("authToken");
@@ -738,11 +739,7 @@ function Discounts() {
         <div className="mngDiscountPromo">
           <Header pageTitle="Discount & Promotion Management" />
           <div className="mngDiscountPromo-content">
-            <div style={{ padding: "20px", textAlign: "center", color: "red" }}>
-              Authentication failed. Please login again.
-              <br />
-              <button onClick={() => navigate("/")}>Go to Login</button>
-            </div>
+            <UnableToLoadData />
           </div>
         </div>
       </div>
@@ -756,15 +753,7 @@ function Discounts() {
         <div className="mngDiscountPromo">
           <Header pageTitle="Discount & Promotion Management" />
           <div className="mngDiscountPromo-content">
-            <div style={{ padding: "20px", textAlign: "center" }}>
-              <div style={{ color: "red", marginBottom: "10px" }}>
-                Error loading data: {error}
-              </div>
-              <button onClick={handleRefresh} style={{ marginRight: "10px" }}>
-                Retry
-              </button>
-              <button onClick={() => navigate("/")}>Back to Login</button>
-            </div>
+            <UnableToLoadData />
           </div>
         </div>
       </div>
@@ -907,9 +896,7 @@ function Discounts() {
                       setSelectedDiscount(row);
                       setIsDiscountDetailsOpen(true);
                     }}
-                    noDataComponent={
-                      <div style={{ padding: "24px" }}>No discounts found.</div>
-                    }
+                    noDataComponent={<NoData />}
                     customStyles={{
                       headCells: {
                         style: {
@@ -950,9 +937,7 @@ function Discounts() {
                       setSelectedPromotion(row);
                       setIsPromotionDetailsOpen(true);
                     }}
-                    noDataComponent={
-                      <div style={{ padding: "24px" }}>No promotions found.</div>
-                    }
+                    noDataComponent={<NoData />}
                     customStyles={{
                       headCells: {
                         style: {

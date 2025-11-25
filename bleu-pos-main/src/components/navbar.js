@@ -311,8 +311,8 @@ const Navbar = ({ isCartOpen, isOrderPanelOpen }) => {
       <div className="navbar-right">
         <div className="navbar-date">
           {currentDate.toLocaleString("en-US", {
-            weekday: "long", year: "numeric", month: "long", day: "numeric",
-            hour: "numeric", minute: "numeric", second: "numeric",
+            weekday: "short", month: "short", day: "numeric", year: "numeric",
+            hour: "numeric", minute: "numeric", hour12: true
           })}
         </div>
         <div className="navbar-profile" ref={profileDropdownRef}>

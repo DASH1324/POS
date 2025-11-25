@@ -219,3 +219,50 @@ async def start_session(
     finally:
         if cursor: await cursor.close()
         if conn: await conn.close()
+
+@router.get('/check-closed-today')
+async def check_closed_session_today(
+    token: str = Depends(oauth2_scheme),
+    cashier_name: str = Query(..., description="The cashier's username")
+):
+    """
+    Checks if a cashier has already closed a session today.
+    """
+    await validate_token_and_roles(token, allowed_roles=["manager", "admin", "cashier"])
+
+    conn, cursor = None, None
+    try:
+        conn = await get_db_connection()
+        cursor = await conn.cursor()
+        
+        # Check for closed sessions today
+        await cursor.execute(
+            """
+            SELECT TOP 1 SessionID, SessionEnd 
+            FROM CashierSessions 
+            WHERE CashierName = ? 
+              AND Status = 'Closed'
+              AND CAST(SessionEnd AS DATE) = CAST(GETDATE() AS DATE)
+            ORDER BY SessionEnd DESC
+            """,
+            (cashier_name,)
+        )
+        closed_session = await cursor.fetchone()
+
+        if closed_session:
+            return {
+                "hasClosedSessionToday": True,
+                "sessionId": closed_session[0],
+                "sessionEnd": closed_session[1].isoformat() if closed_session[1] else None
+            }
+        else:
+            return {
+                "hasClosedSessionToday": False
+            }
+            
+    except Exception as e:
+        print(f"Error checking closed session: {e}")
+        raise HTTPException(status_code=500, detail="Failed to check closed session status.")
+    finally:
+        if cursor: await cursor.close()
+        if conn: await conn.close()

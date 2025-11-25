@@ -11,6 +11,7 @@ import DeleteSpillageModal from "./modals/deleteSpillageModal";
 import CustomDateModal from "../shared/customDateModal";
 import Loading from "../shared/loading";
 import { toast } from 'react-toastify';
+import { UnableToLoadData, NoData } from "../shared/exportModal";
 import '../../confirmAlertCustom.css';
 import {
   startOfToday,
@@ -38,7 +39,8 @@ function Spillage() {
   const [loggedByName, setLoggedByName] = useState("");
   const [userRole, setUserRole] = useState("");
   const [isFilterOpen, setIsFilterOpen] = useState(false);
-  const [cashiersMap, setCashiersMap] = useState({}); // Map username to full name
+  const [cashiersMap, setCashiersMap] = useState({});
+  const [error, setError] = useState(null);
 
   useEffect(() => {
     const role = localStorage.getItem("userRole");
@@ -139,9 +141,11 @@ function Spillage() {
 
       const data = await response.json();
       setSpillageData(data);
+      setError(null); // Clear any previous errors
     } catch (error) {
       console.error("Error fetching spillage data:", error);
       setSpillageData([]);
+      setError(error.message); // Set error message
     }
   };
 
@@ -351,82 +355,88 @@ function Spillage() {
       <div className="mSpillage">
         <Header pageTitle="Spillage Management" />
         <div className="mSpillage-content">
+          {/* Filter and Button - Always visible */}
+          <div className="mSpillage-filter-wrapper">
+            <div className={`mSpillage-filter-bar ${isFilterOpen ? "open" : "collapsed"}`}>
+              <button
+                className="mSpillage-filter-toggle-btn"
+                onClick={() => setIsFilterOpen(!isFilterOpen)}
+              >
+                <FaFilter />
+              </button>
+
+              <div className="mSpillage-filter-item">
+                <div className="mSpillage-search-wrapper">
+                  <FaSearch className="mSpillage-search-icon" />
+                  <input
+                    type="text"
+                    placeholder="Search by Product..."
+                    value={searchTerm}
+                    onChange={(e) => setSearchTerm(e.target.value)}
+                    className="mSpillage-search-input"
+                  />
+                </div>
+              </div>
+
+              <div className="mSpillage-filter-item">
+                <span>Date Range:</span>
+                <select
+                  value={dateRange}
+                  onChange={(e) => {
+                    const v = e.target.value;
+                    setDateRange(v);
+                    if (v === "custom") setIsCustomModalOpen(true);
+                  }}
+                  className="mSpillage-select"
+                >
+                  <option value="today">Today</option>
+                  <option value="thisWeek">This Week</option>
+                  <option value="thisMonth">This Month</option>
+                  <option value="thisYear">This Year</option>
+                  <option value="custom">Custom</option>
+                </select>
+              </div>
+
+              <div className="mSpillage-filter-item">
+                <span>Category:</span>
+                <select
+                  value={categoryFilter}
+                  onChange={(e) => setCategoryFilter(e.target.value)}
+                  className="mSpillage-select"
+                >
+                  <option value="">All Categories</option>
+                  {uniqueCategories.map((c) => (
+                    <option key={c} value={c}>
+                      {c}
+                    </option>
+                  ))}
+                </select>
+              </div>
+
+              <button className="mSpillage-clear-btn" onClick={handleClearFilters}>
+                Clear Filters
+              </button>
+            </div>
+              
+            {userRole !== 'admin' && (
+              <button
+                className="mSpillage-add-btn"
+                onClick={() => setIsLogModalOpen(true)}
+              >
+                <FaPlus /> Log Spillage
+              </button>
+            )}
+          </div>
+
+          {/* Content area with loading/error/data states */}
           {isLoading ? (
-            <Loading/>
+            <Loading />
+          ) : error ? (
+            <UnableToLoadData />
+          ) : spillageData.length === 0 ? (
+            <NoData />
           ) : (
             <>
-            <div className="mSpillage-filter-wrapper">
-              <div className={`mSpillage-filter-bar ${isFilterOpen ? "open" : "collapsed"}`}>
-                <button
-                  className="mSpillage-filter-toggle-btn"
-                  onClick={() => setIsFilterOpen(!isFilterOpen)}
-                >
-                  <FaFilter />
-                </button>
-
-                <div className="mSpillage-filter-item">
-                  <div className="mSpillage-search-wrapper">
-                    <FaSearch className="mSpillage-search-icon" />
-                    <input
-                      type="text"
-                      placeholder="Search by Product..."
-                      value={searchTerm}
-                      onChange={(e) => setSearchTerm(e.target.value)}
-                      className="mSpillage-search-input"
-                    />
-                  </div>
-                </div>
-
-                <div className="mSpillage-filter-item">
-                  <span>Date Range:</span>
-                  <select
-                    value={dateRange}
-                    onChange={(e) => {
-                      const v = e.target.value;
-                      setDateRange(v);
-                      if (v === "custom") setIsCustomModalOpen(true);
-                    }}
-                    className="mSpillage-select"
-                  >
-                    <option value="today">Today</option>
-                    <option value="thisWeek">This Week</option>
-                    <option value="thisMonth">This Month</option>
-                    <option value="thisYear">This Year</option>
-                    <option value="custom">Custom</option>
-                  </select>
-                </div>
-
-                <div className="mSpillage-filter-item">
-                  <span>Category:</span>
-                  <select
-                    value={categoryFilter}
-                    onChange={(e) => setCategoryFilter(e.target.value)}
-                    className="mSpillage-select"
-                  >
-                    <option value="">All Categories</option>
-                    {uniqueCategories.map((c) => (
-                      <option key={c} value={c}>
-                        {c}
-                      </option>
-                    ))}
-                  </select>
-                </div>
-
-                <button className="mSpillage-clear-btn" onClick={handleClearFilters}>
-                  Clear Filters
-                </button>
-              </div>
-                
-                {userRole !== 'admin' && (
-                  <button
-                    className="mSpillage-add-btn"
-                    onClick={() => setIsLogModalOpen(true)}
-                  >
-                    <FaPlus /> Log Spillage
-                  </button>
-                )}
-              </div>
-
               {/* Summary Cards */}
               {filteredData.length > 0 && (
                 <div className="mSpillage-cards-container">
@@ -539,6 +549,7 @@ function Spillage() {
             </>
           )}
 
+          {/* Modals */}
           <SpillageDetailsModal
             show={isDetailsModalOpen}
             onClose={() => setIsDetailsModalOpen(false)}

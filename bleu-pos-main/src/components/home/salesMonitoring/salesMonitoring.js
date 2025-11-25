@@ -23,12 +23,11 @@ import {
   FaBoxOpen,
   FaPercentage,
   FaUserFriends,
-  FaExclamationTriangle,
 } from "react-icons/fa";
 import { FaFilter } from "react-icons/fa";
 import DataTable from "react-data-table-component";
 import { generatePDFReport, generateCSVReport } from "./salesMonitoringExport";
-import { ExportModal, NoDataModal } from "../shared/exportModal";
+import { ExportModal, NoDataModal, UnableToLoadData, NoData } from "../shared/exportModal";
 import "./salesMonitoring.css";
 import Sidebar from "../shared/sidebar";
 import Header from "../shared/header";
@@ -573,273 +572,229 @@ function SalesMonitoring() {
         <div className="salesMonMetrics-content">
           {loading ? (
             <Loading />
+          ) : error ? (
+            <UnableToLoadData />
+          ) : processedData.length === 0 ? (
+            <NoData />
           ) : (
             <>
-              {processedData.length === 0 && !error && (
-                <div className="no-data-container">
-                  <p>No sales records found for the selected filters.</p>
-                </div>
-              )}
-              {error && (
-                <div
-                  style={{
-                    backgroundColor: "#f8d7da",
-                    border: "1px solid #f5c2c7",
-                    borderRadius: "8px",
-                    padding: "20px",
-                    margin: "20px",
-                    display: "flex",
-                    alignItems: "center",
-                    gap: "15px",
-                  }}
-                >
-                  <FaExclamationTriangle
-                    style={{
-                      color: "#842029",
-                      fontSize: "24px",
-                      flexShrink: 0,
-                    }}
-                  />
-                  <div>
-                    <h4
-                      style={{
-                        margin: "0 0 5px 0",
-                        color: "#842029",
-                        fontSize: "16px",
-                        fontWeight: "600",
-                      }}
-                    >
-                      Unable to Load Sales Data
-                    </h4>
-                    <p
-                      style={{ margin: 0, color: "#842029", fontSize: "14px" }}
-                    >
-                      {error}
-                    </p>
+              <div className="salesMonMetrics">
+                <div className="salesMonCard">
+                  <div className="salesMonCardIcon salesMonIconRevenue">
+                    <FaCashRegister />
+                  </div>
+                  <div className="salesMonCardContent">
+                    <div className="salesMonCardLabel">Total Sales</div>
+                    <div className="salesMonCardValue">
+                      ₱
+                      {metrics.totalSales.toLocaleString("en-PH", {
+                        maximumFractionDigits: 2,
+                      })}
+                    </div>
                   </div>
                 </div>
-              )}
-              {processedData.length > 0 && metrics && (
-                <div className="salesMonMetrics">
-                  <div className="salesMonCard">
-                    <div className="salesMonCardIcon salesMonIconRevenue">
-                      <FaCashRegister />
+                <div className="salesMonCard">
+                  <div className="salesMonCardIcon salesMonIconProfit">
+                    <FaChartLine />
+                  </div>
+                  <div className="salesMonCardContent">
+                    <div className="salesMonCardLabel">
+                      Total Transactions
                     </div>
-                    <div className="salesMonCardContent">
-                      <div className="salesMonCardLabel">Total Sales</div>
+                    <div className="salesMonCardValue salesMonValueProfit">
+                      {metrics.totalTransactions}
+                    </div>
+                  </div>
+                </div>
+                <div className="salesMonCard">
+                  <div className="salesMonCardIcon salesMonIconQuantity">
+                    <FaBoxOpen />
+                  </div>
+                  <div className="salesMonCardContent">
+                    <div className="salesMonCardLabel">Items Sold</div>
+                    <div className="salesMonCardValueRow">
                       <div className="salesMonCardValue">
-                        ₱
-                        {metrics.totalSales.toLocaleString("en-PH", {
-                          maximumFractionDigits: 2,
-                        })}
+                        {metrics.totalItemsSold}
                       </div>
+                      <div className="salesMonCardUnit">items</div>
                     </div>
                   </div>
-                  <div className="salesMonCard">
-                    <div className="salesMonCardIcon salesMonIconProfit">
-                      <FaChartLine />
-                    </div>
-                    <div className="salesMonCardContent">
-                      <div className="salesMonCardLabel">
-                        Total Transactions
-                      </div>
-                      <div className="salesMonCardValue salesMonValueProfit">
-                        {metrics.totalTransactions}
-                      </div>
-                    </div>
-                  </div>
-                  <div className="salesMonCard">
-                    <div className="salesMonCardIcon salesMonIconQuantity">
-                      <FaBoxOpen />
-                    </div>
-                    <div className="salesMonCardContent">
-                      <div className="salesMonCardLabel">Items Sold</div>
-                      <div className="salesMonCardValueRow">
-                        <div className="salesMonCardValue">
-                          {metrics.totalItemsSold}
-                        </div>
-                        <div className="salesMonCardUnit">items</div>
-                      </div>
-                    </div>
-                  </div>
-                  <div className="salesMonCard">
-                    <div className="salesMonCardIcon salesMonIconMargin">
-                      <FaPercentage />
-                    </div>
-                    <div className="salesMonCardContent">
-                      <div className="salesMonCardLabel">
-                        Average Sale Value
-                      </div>
-                      <div className="salesMonCardValue salesMonValueMargin">
-                        ₱
-                        {metrics.averageSaleValue.toLocaleString("en-PH", {
-                          maximumFractionDigits: 2,
-                        })}
-                      </div>
-                    </div>
-                  </div>
-                  {metrics.topCashier && (
-                    <div className="salesMonCard salesMonCardWide">
-                      <div className="salesMonCardIcon salesMonIconCashier">
-                        <FaUserFriends />
-                      </div>
-                      <div className="salesMonCardContent">
-                        <div className="salesMonCardLabel">Top Cashier</div>
-                        <div
-                          className="salesMonCardValue"
-                          style={{ fontSize: "18px" }}
-                        >
-                          {topCashierFullName || metrics.topCashier.name}
-                        </div>
-                        <div
-                          style={{
-                            fontSize: "14px",
-                            color: "#22c55e",
-                            fontWeight: "600",
-                          }}
-                        >
-                          ₱
-                          {metrics.topCashier.sales.toLocaleString("en-PH", {
-                            maximumFractionDigits: 2,
-                          })}
-                        </div>
-                      </div>
-                    </div>
-                  )}
                 </div>
-              )}
-              {processedData.length > 0 && (
-                <div className="salesMonChartsAndTable">
-                  <div className="salesMonCharts">
-                    <div className="salesMonChartCard">
-                      <h3 className="salesMonChartTitle">Sales Trend</h3>
-                      <ResponsiveContainer width="100%" height={300}>
-                        <AreaChart data={salesTrend}>
-                          <defs>
-                            <linearGradient
-                              id="colorSalesTrend"
-                              x1="0"
-                              y1="0"
-                              x2="0"
-                              y2="1"
-                            >
-                              <stop
-                                offset="5%"
-                                stopColor="#00b4d8"
-                                stopOpacity={0.8}
-                              />
-                              <stop
-                                offset="95%"
-                                stopColor="#00b4d8"
-                                stopOpacity={0}
-                              />
-                            </linearGradient>
-                          </defs>
-                          <CartesianGrid strokeDasharray="3 3" />
-                          <XAxis dataKey="name" />
-                          <YAxis />
-                          <Tooltip
-                            formatter={(value) => `₱${value.toFixed(2)}`}
-                            contentStyle={{
-                              borderRadius: "4px",
-                              border: "1px solid #ccc",
-                            }}
-                          />
-                          <Area
-                            type="monotone"
-                            dataKey="sales"
-                            stroke="#00b4d8"
-                            strokeWidth={2}
-                            fillOpacity={1}
-                            fill="url(#colorSalesTrend)"
-                          />
-                        </AreaChart>
-                      </ResponsiveContainer>
+                <div className="salesMonCard">
+                  <div className="salesMonCardIcon salesMonIconMargin">
+                    <FaPercentage />
+                  </div>
+                  <div className="salesMonCardContent">
+                    <div className="salesMonCardLabel">
+                      Average Sale Value
                     </div>
-                    <div className="salesMonChartCard">
-                      <h3 className="salesMonChartTitle">Sales by Category</h3>
-                      <ResponsiveContainer width="100%" height={300}>
-                        <PieChart>
-                          <Pie
-                            data={categoryBreakdown}
-                            dataKey="value"
-                            nameKey="name"
-                            cx="50%"
-                            cy="50%"
-                            outerRadius={100}
-                            label={{ fontSize: 12 }}
-                          >
-                            {categoryBreakdown.map((entry, index) => (
-                              <Cell
-                                key={`cell-${index}`}
-                                fill={COLORS[index % COLORS.length]}
-                              />
-                            ))}
-                          </Pie>
-                          <Tooltip
-                            formatter={(value) => `₱${value.toFixed(2)}`}
-                            contentStyle={{
-                              borderRadius: "4px",
-                              border: "1px solid #ccc",
-                            }}
-                          />
-                          <Legend />
-                        </PieChart>
-                      </ResponsiveContainer>
-                    </div>
-                    <div className="salesMonChartCard salesMonChartCardWide">
-                      <h3 className="salesMonChartTitle">
-                        Top-Selling Products
-                      </h3>
-                      <ResponsiveContainer width="100%" height={300}>
-                        <BarChart data={topProducts} layout="vertical">
-                          <CartesianGrid strokeDasharray="3 3" />
-                          <XAxis type="number" />
-                          <YAxis
-                            dataKey="name"
-                            type="category"
-                            width={120}
-                            tick={{ fontSize: 11 }}
-                          />
-                          <Tooltip
-                            contentStyle={{
-                              borderRadius: "4px",
-                              border: "1px solid #ccc",
-                            }}
-                          />
-                          <Bar
-                            dataKey="value"
-                            fill="#00b4d8"
-                            radius={[0, 8, 8, 0]}
-                          />
-                        </BarChart>
-                      </ResponsiveContainer>
+                    <div className="salesMonCardValue salesMonValueMargin">
+                      ₱
+                      {metrics.averageSaleValue.toLocaleString("en-PH", {
+                        maximumFractionDigits: 2,
+                      })}
                     </div>
                   </div>
-                  <div className="salesMonTableCard">
-                    <h3 className="salesMonTableTitle">
-                      Sales Breakdown
-                      <Link
-                        to="/home/salesReport"
-                        className="salesMon-view-all-btn"
+                </div>
+                {metrics.topCashier && (
+                  <div className="salesMonCard salesMonCardWide">
+                    <div className="salesMonCardIcon salesMonIconCashier">
+                      <FaUserFriends />
+                    </div>
+                    <div className="salesMonCardContent">
+                      <div className="salesMonCardLabel">Top Cashier</div>
+                      <div
+                        className="salesMonCardValue"
+                        style={{ fontSize: "18px" }}
                       >
-                        View All Report
-                      </Link>
+                        {topCashierFullName || metrics.topCashier.name}
+                      </div>
+                      <div
+                        style={{
+                          fontSize: "14px",
+                          color: "#22c55e",
+                          fontWeight: "600",
+                        }}
+                      >
+                        ₱
+                        {metrics.topCashier.sales.toLocaleString("en-PH", {
+                          maximumFractionDigits: 2,
+                        })}
+                      </div>
+                    </div>
+                  </div>
+                )}
+              </div>
+              <div className="salesMonChartsAndTable">
+                <div className="salesMonCharts">
+                  <div className="salesMonChartCard">
+                    <h3 className="salesMonChartTitle">Sales Trend</h3>
+                    <ResponsiveContainer width="100%" height={300}>
+                      <AreaChart data={salesTrend}>
+                        <defs>
+                          <linearGradient
+                            id="colorSalesTrend"
+                            x1="0"
+                            y1="0"
+                            x2="0"
+                            y2="1"
+                          >
+                            <stop
+                              offset="5%"
+                              stopColor="#00b4d8"
+                              stopOpacity={0.8}
+                            />
+                            <stop
+                              offset="95%"
+                              stopColor="#00b4d8"
+                              stopOpacity={0}
+                            />
+                          </linearGradient>
+                        </defs>
+                        <CartesianGrid strokeDasharray="3 3" />
+                        <XAxis dataKey="name" />
+                        <YAxis />
+                        <Tooltip
+                          formatter={(value) => `₱${value.toFixed(2)}`}
+                          contentStyle={{
+                            borderRadius: "4px",
+                            border: "1px solid #ccc",
+                          }}
+                        />
+                        <Area
+                          type="monotone"
+                          dataKey="sales"
+                          stroke="#00b4d8"
+                          strokeWidth={2}
+                          fillOpacity={1}
+                          fill="url(#colorSalesTrend)"
+                        />
+                      </AreaChart>
+                    </ResponsiveContainer>
+                  </div>
+                  <div className="salesMonChartCard">
+                    <h3 className="salesMonChartTitle">Sales by Category</h3>
+                    <ResponsiveContainer width="100%" height={300}>
+                      <PieChart>
+                        <Pie
+                          data={categoryBreakdown}
+                          dataKey="value"
+                          nameKey="name"
+                          cx="50%"
+                          cy="50%"
+                          outerRadius={100}
+                          label={{ fontSize: 12 }}
+                        >
+                          {categoryBreakdown.map((entry, index) => (
+                            <Cell
+                              key={`cell-${index}`}
+                              fill={COLORS[index % COLORS.length]}
+                            />
+                          ))}
+                        </Pie>
+                        <Tooltip
+                          formatter={(value) => `₱${value.toFixed(2)}`}
+                          contentStyle={{
+                            borderRadius: "4px",
+                            border: "1px solid #ccc",
+                          }}
+                        />
+                        <Legend />
+                      </PieChart>
+                    </ResponsiveContainer>
+                  </div>
+                  <div className="salesMonChartCard salesMonChartCardWide">
+                    <h3 className="salesMonChartTitle">
+                      Top-Selling Products
                     </h3>
-                    <DataTable
-                      columns={salesBreakdownColumns}
-                      data={salesBreakdown}
-                      striped
-                      customStyles={customStyles}
-                      noDataComponent={
-                        <div style={{ padding: "20px", textAlign: "center" }}>
-                          No sales data available
-                        </div>
-                      }
-                    />
+                    <ResponsiveContainer width="100%" height={300}>
+                      <BarChart data={topProducts} layout="vertical">
+                        <CartesianGrid strokeDasharray="3 3" />
+                        <XAxis type="number" />
+                        <YAxis
+                          dataKey="name"
+                          type="category"
+                          width={120}
+                          tick={{ fontSize: 11 }}
+                        />
+                        <Tooltip
+                          contentStyle={{
+                            borderRadius: "4px",
+                            border: "1px solid #ccc",
+                          }}
+                        />
+                        <Bar
+                          dataKey="value"
+                          fill="#00b4d8"
+                          radius={[0, 8, 8, 0]}
+                        />
+                      </BarChart>
+                    </ResponsiveContainer>
                   </div>
                 </div>
-              )}
+                <div className="salesMonTableCard">
+                  <h3 className="salesMonTableTitle">
+                    Sales Breakdown
+                    <Link
+                      to="/home/salesReport"
+                      className="salesMon-view-all-btn"
+                    >
+                      View All Report
+                    </Link>
+                  </h3>
+                  <DataTable
+                    columns={salesBreakdownColumns}
+                    data={salesBreakdown}
+                    striped
+                    customStyles={customStyles}
+                    noDataComponent={
+                      <div style={{ padding: "20px", textAlign: "center" }}>
+                        No sales data available
+                      </div>
+                    }
+                  />
+                </div>
+              </div>
             </>
           )}
         </div>

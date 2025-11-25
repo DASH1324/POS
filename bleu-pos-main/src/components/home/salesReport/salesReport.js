@@ -5,12 +5,12 @@ import Header from "../shared/header";
 import DataTable from "react-data-table-component";
 import { 
   FaFileExport, FaDollarSign, 
-  FaReceipt, FaFilter, FaExclamationTriangle,
+  FaReceipt, FaFilter,
   FaCashRegister, FaUndo, FaBalanceScale 
-} from "react-icons/fa"; 
+} from "react-icons/fa";
 import CustomDateModal from "../shared/customDateModal";
 import { generatePDFReport, generateCSVReport } from "./salesReportExport";
-import { ExportModal, NoDataModal } from "../shared/exportModal";
+import { ExportModal, NoDataModal, UnableToLoadData, NoData } from "../shared/exportModal";
 import SalesReportModal from "./salesReportModal";
 import Loading from "../shared/loading";
 import '../../confirmAlertCustom.css';
@@ -377,11 +377,13 @@ function SalesReport() {
         
         {/* --- Scrollable Content Area --- */}
         <div className="aSalesRep-scrollable-content">
-          {isLoading && <Loading />}
-          
-          {error && <div className="aSalesRep-error-container"><FaExclamationTriangle/><span>{error}</span></div>}
-          
-          {!isLoading && !error && reportData && (
+          {isLoading ? (
+            <Loading />
+          ) : error ? (
+            <UnableToLoadData />
+          ) : !reportData || !reportData.productBreakdown || reportData.productBreakdown.length === 0 ? (
+            <NoData />
+          ) : (
             <>
               {/* --- Summary Cards --- */}
               <div className="aSalesRep-cards-container">

@@ -17,6 +17,7 @@ import {
   faFilter,
 } from '@fortawesome/free-solid-svg-icons';
 import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
+import { toast } from 'react-toastify';
 
 
 // API Endpoints
@@ -520,8 +521,7 @@ function CashierSales({ shiftLabel = "Morning Shift", shiftTime = "6:00AM – 2:
       return;
     }
     
-    // ** THE FIX IS HERE **
-    setPinError(""); // Clear previous errors on a new attempt
+    setPinError("");
     setIsSubmitting(true);
     const token = localStorage.getItem('authToken');
 
@@ -534,7 +534,8 @@ function CashierSales({ shiftLabel = "Morning Shift", shiftTime = "6:00AM – 2:
         });
         const data = await response.json();
         if (!response.ok) throw new Error(data.detail || "Failed to close the session.");
-        alert(`Session closed successfully! Verified by: ${data.checkedBy}`);
+        
+        toast.success(`Session closed successfully! Verified by: ${data.checkedBy}`);
         setShowPinModal(false);
         setActiveSessionId(null);
         setError(`Session ${data.sessionId} has been closed.`);
@@ -553,14 +554,23 @@ function CashierSales({ shiftLabel = "Morning Shift", shiftTime = "6:00AM – 2:
         });
         const data = await response.json();
         if (!response.ok) throw new Error(data.detail || "Failed to report discrepancy.");
-        alert(`Discrepancy of ₱${Math.abs(discrepancyInSession).toFixed(2)} has been reported and session closed.\nVerified by: ${data.checkedBy}\nClosing Cash: ₱${data.closingCash.toFixed(2)}\nCash Sales: ₱${data.grossCashSales.toFixed(2)}`);
+        
+        toast.warning(`Discrepancy of ₱${Math.abs(discrepancyInSession).toFixed(2)} reported and session closed. Verified by: ${data.checkedBy}`);
         setShowPinModal(false);
         setActiveSessionId(null);
         setError(`Session ${data.sessionId} has been closed with discrepancy reported.`);
       }
 
+      // Redirect to logout after successful session closure
+      setTimeout(() => {
+        localStorage.removeItem('authToken');
+        localStorage.removeItem('username');
+        window.location.href = 'http://localhost:4002';
+      }, 2000); // 2 second delay to show the success message
+
     } catch (err) {
       setPinError(err.message);
+      toast.error(`Failed to process: ${err.message}`);
     } finally {
       setIsSubmitting(false);
     }
@@ -626,45 +636,148 @@ function CashierSales({ shiftLabel = "Morning Shift", shiftTime = "6:00AM – 2:
     );
   };
 
-  const renderCashTallyContent = () => {
+const renderCashTallyContent = () => {
     if (isLoading) return <div className="cashier-loading-container"><FontAwesomeIcon icon={faSpinner} spin size="3x" /><p>Loading Session Data...</p></div>;
+    
+    const billDenominations = denominations.filter(d => d.key.startsWith('bills'));
+    const coinDenominations = denominations.filter(d => !d.key.startsWith('bills'));
+    
     return (
         <div className="cashier-cash-tally-container">
             <div className="cashier-cash-count-section">
-                <div className="cashier-cash-header"><div className="cashier-cash-title"><FontAwesomeIcon icon={faCashRegister} /><h2>Cash Drawer Count</h2></div></div>
-                <div className="cashier-cash-table">
-                    <div className="cashier-cash-table-header"><span>Denomination</span><span>Count</span><span>Total Value</span></div>
-                    {denominations.map((denom) => (<div key={denom.key} className="cashier-cash-row"><span className="cashier-denom-label">{denom.label}</span><div className="cashier-count-input-container"><input type="number" min="0" value={cashCounts[denom.key]} onChange={(e) => handleCashCountChange(denom.key, e.target.value)} className="cashier-count-input" disabled={!activeSessionId || isSubmitting} /></div><span className="cashier-total-value">₱{(cashCounts[denom.key] * denom.value).toFixed(2)}</span></div>))}
+                <div className="cashier-cash-header">
+                  <div className="cashier-cash-title">
+                    <FontAwesomeIcon icon={faCashRegister} />
+                    <div>
+                      <h2>Cash Drawer Count</h2>
+                      <p className="cashier-cash-subtitle">Count all bills and coins in your drawer</p>
+                    </div>
+                  </div>
+                  <div className="cashier-total-counted">
+                    <span className="cashier-total-label">Total Counted</span>
+                    <span className="cashier-total-amount">₱{actualCashCounted.toFixed(2)}</span>
+                  </div>
+                </div>
+
+                {/* Bills Section */}
+                <div className="cashier-denomination-group">
+                  <h3 className="cashier-group-title">Bills</h3>
+                  <div className="cashier-cash-grid">
+                    {billDenominations.map((denom) => (
+                      <div key={denom.key} className="cashier-cash-item">
+                        <div className="cashier-denom-info">
+                          <span className="cashier-denom-value">₱{denom.value}</span>
+                          <span className="cashier-denom-type">Bill</span>
+                        </div>
+                        <input 
+                          type="number" 
+                          min="0" 
+                          value={cashCounts[denom.key]} 
+                          onChange={(e) => handleCashCountChange(denom.key, e.target.value)} 
+                          className="cashier-count-input" 
+                          placeholder="0"
+                          disabled={!activeSessionId || isSubmitting} 
+                        />
+                        <span className="cashier-item-total">₱{(cashCounts[denom.key] * denom.value).toFixed(2)}</span>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+
+                {/* Coins Section */}
+                <div className="cashier-denomination-group">
+                  <h3 className="cashier-group-title">Coins</h3>
+                  <div className="cashier-cash-grid">
+                    {coinDenominations.map((denom) => (
+                      <div key={denom.key} className="cashier-cash-item">
+                        <div className="cashier-denom-info">
+                          <span className="cashier-denom-value">
+                            {denom.value >= 1 ? `₱${denom.value}` : `${(denom.value * 100).toFixed(0)}¢`}
+                          </span>
+                          <span className="cashier-denom-type">Coin</span>
+                        </div>
+                        <input 
+                          type="number" 
+                          min="0" 
+                          value={cashCounts[denom.key]} 
+                          onChange={(e) => handleCashCountChange(denom.key, e.target.value)} 
+                          className="cashier-count-input" 
+                          placeholder="0"
+                          disabled={!activeSessionId || isSubmitting} 
+                        />
+                        <span className="cashier-item-total">₱{(cashCounts[denom.key] * denom.value).toFixed(2)}</span>
+                      </div>
+                    ))}
+                  </div>
                 </div>
             </div>
+
             <div className="cashier-cash-summary-section">
                 <div className="cashier-cash-summary-card">
-                    <div className="cashier-summary-header"><FontAwesomeIcon icon={faCoins} /><h3>Cash Summary (Current Session)</h3></div>
+                    <div className="cashier-summary-header">
+                      <FontAwesomeIcon icon={faCoins} />
+                      <h3>Session Summary</h3>
+                    </div>
                     {error && !error.includes("No active session") && <div className="cashier-summary-error">{error}</div>}
-                    <div className="cashier-summary-row"><span>Initial Cash</span><span className="cashier-initial-amount">₱{initialCash.toFixed(2)}</span></div>
-                    <div className="cashier-summary-row"><span>Cash Sales (This Session)</span>{isSessionSalesLoading ? <FontAwesomeIcon icon={faSpinner} spin/> : <span className="cashier-sales-amount">₱{sessionSalesData.cashSales.toFixed(2)}</span>}</div>
-                    <div className="cashier-summary-row"><span>Expected Cash</span><span className="cashier-expected-amount">₱{expectedCashInSession.toFixed(2)}</span></div>
-                    <div className="cashier-summary-row"><span>Actual Cash (Counted)</span><span className="cashier-actual-amount">₱{actualCashCounted.toFixed(2)}</span></div>
-                    <div className={`cashier-summary-row cashier-discrepancy ${hasDiscrepancyInSession ? 'has-discrepancy' : 'no-discrepancy'}`}><span className="cashier-discrepancy-label"><FontAwesomeIcon icon={hasDiscrepancyInSession ? faExclamationTriangle : faCheckCircle} />Discrepancy</span><span className={`cashier-discrepancy-amount ${discrepancyInSession > 0 ? 'positive' : discrepancyInSession < 0 ? 'negative' : 'zero'}`}>{discrepancyInSession >= 0 ? '+' : ''}₱{discrepancyInSession.toFixed(2)}</span></div>
+                    
+                    <div className="cashier-summary-breakdown">
+                      <div className="cashier-summary-item">
+                        <span className="cashier-summary-label">Starting Cash</span>
+                        <span className="cashier-summary-value">₱{initialCash.toFixed(2)}</span>
+                      </div>
+                      <div className="cashier-summary-item">
+                        <span className="cashier-summary-label">Cash Sales</span>
+                        {isSessionSalesLoading ? (
+                          <FontAwesomeIcon icon={faSpinner} spin/>
+                        ) : (
+                          <span className="cashier-summary-value highlight">+₱{sessionSalesData.cashSales.toFixed(2)}</span>
+                        )}
+                      </div>
+                      <div className="cashier-summary-divider"></div>
+                      <div className="cashier-summary-item">
+                        <span className="cashier-summary-label">Expected Total</span>
+                        <span className="cashier-summary-value bold">₱{expectedCashInSession.toFixed(2)}</span>
+                      </div>
+                      <div className="cashier-summary-item">
+                        <span className="cashier-summary-label">Counted Total</span>
+                        <span className="cashier-summary-value bold">₱{actualCashCounted.toFixed(2)}</span>
+                      </div>
+                    </div>
+
+                    <div className={`cashier-discrepancy-card ${hasDiscrepancyInSession ? 'has-discrepancy' : 'no-discrepancy'}`}>
+                      <div className="cashier-discrepancy-header">
+                        <FontAwesomeIcon icon={hasDiscrepancyInSession ? faExclamationTriangle : faCheckCircle} />
+                        <span>{hasDiscrepancyInSession ? 'Discrepancy Detected' : 'Cash Balanced (No Discrepancy)'}</span>
+                      </div>
+                     <div className="cashier-discrepancy-value">
+                        {discrepancyInSession > 0 ? '+' : discrepancyInSession < 0 ? '-' : ''}₱{Math.abs(discrepancyInSession).toFixed(2)}
+                      </div> 
+                      {hasDiscrepancyInSession && (
+                        <p className="cashier-discrepancy-note">
+                          {discrepancyInSession > 0 ? 'Cash over by' : 'Cash short by'} ₱{Math.abs(discrepancyInSession).toFixed(2)}
+                        </p>
+                      )}
+                    </div>
                     
                     <div className="cashier-action-buttons">
-                        {hasDiscrepancyInSession && (
+                        {hasDiscrepancyInSession ? (
                             <button 
                                 className="cashier-report-btn" 
                                 onClick={handleReportDiscrepancy} 
                                 disabled={!activeSessionId || isSubmitting}>
-                                <FontAwesomeIcon icon={faExclamationTriangle} /> Report Discrepancy
+                                <FontAwesomeIcon icon={faExclamationTriangle} /> 
+                                Report & Close Session
+                            </button>
+                        ) : (
+                            <button 
+                                className="cashier-confirm-btn" 
+                                onClick={handleConfirmCount} 
+                                disabled={!activeSessionId || isSubmitting}>
+                                <FontAwesomeIcon icon={isSubmitting ? faSpinner : faCheckCircle} spin={isSubmitting} /> 
+                                {isSubmitting ? 'Processing...' : 'Confirm & Close Session'}
                             </button>
                         )}
-                        <button 
-                            className="cashier-confirm-btn" 
-                            onClick={handleConfirmCount} 
-                            disabled={!activeSessionId || isSubmitting || hasDiscrepancyInSession}>
-                            <FontAwesomeIcon icon={isSubmitting ? faSpinner : faCheckCircle} spin={isSubmitting} /> 
-                            {isSubmitting ? 'Submitting...' : 'Confirm Count'}
-                        </button>
                     </div>
-
                 </div>
                 {error && <div className="cashier-summary-info">{error}</div>}
             </div>

@@ -29,7 +29,7 @@ BUILDBEAR_RPC_URL = os.getenv("BUILDBEAR_RPC_URL", "https://rpc.buildbear.io/imp
 PRIVATE_KEY = os.getenv("PRIVATE_KEY", "855db9a9d5d0183fe837b02b05e9440375b89de9ad5122c643247e4d89cfec74")
 CONTRACT_ADDRESS = os.getenv("CONTRACT_ADDRESS", "0x14B5BB91Ea29056F2BECEC93fFeCEcaA26AC467B")
 
-# COMPLETE Smart Contract ABI - This matches your Solidity contract exactly
+# Matches the solidity smart contract
 ACTIVITY_LOG_ABI = [
     {
         "inputs": [
@@ -150,9 +150,8 @@ try:
 except Exception as e:
     logger.error(f"❌ Failed to initialize Web3: {e}")
 
-# ========================================
+
 # PYDANTIC MODELS
-# ========================================
 class ActivityLogRequest(BaseModel):
     service_identifier: str = Field(..., description="Service name (e.g., 'POS_SALES', 'DISCOUNTS', 'PROMOTIONS')")
     action: str = Field(..., description="Action type: CREATE, UPDATE, DELETE")
@@ -190,9 +189,7 @@ class BlockchainLogQueryResponse(BaseModel):
     transaction_hash: Optional[str] = None
     block_number: Optional[int] = None
 
-# ========================================
 # AUTHORIZATION HELPER
-# ========================================
 async def get_current_active_user(token: str = Depends(oauth2_scheme)):
     """Verify user token with auth service"""
     async with httpx.AsyncClient() as client:
@@ -217,9 +214,7 @@ async def get_current_active_user(token: str = Depends(oauth2_scheme)):
                 detail="Could not connect to the authentication service."
             )
 
-# ========================================
 # HELPER FUNCTIONS
-# ========================================
 def generate_data_hash(data: Dict[str, Any]) -> str:
     """Generate SHA-256 hash of the data"""
     data_string = json.dumps(data, sort_keys=True, default=str)
@@ -260,9 +255,8 @@ async def save_to_database(
     finally:
         await conn.close()
 
-# ========================================
-# BLOCKCHAIN INTERACTION FUNCTIONS - FIXED
-# ========================================
+# BLOCKCHAIN INTERACTION FUNCTIONS - 
+
 async def log_to_blockchain(log_data: ActivityLogRequest) -> ActivityLogResponse:
     """Send activity log to BuildBear blockchain"""
     if not w3 or not account or not contract:
@@ -288,7 +282,6 @@ async def log_to_blockchain(log_data: ActivityLogRequest) -> ActivityLogResponse
                 detail="Account has insufficient funds. Please fund the account or use a pre-funded test account."
             )
 
-        # Build transaction with lower gas settings for testnet
         tx = contract.functions.logActivity(
             log_data.service_identifier,
             log_data.action,
@@ -300,8 +293,8 @@ async def log_to_blockchain(log_data: ActivityLogRequest) -> ActivityLogResponse
         ).build_transaction({
             'from': account.address,
             'nonce': nonce,
-            'gas': 500000,  # Reduced gas limit
-            'gasPrice': w3.eth.gas_price // 10  # Lower gas price for testnet
+            'gas': 500000,  
+            'gasPrice': w3.eth.gas_price // 10  
         })
         
         # Sign transaction
@@ -309,27 +302,27 @@ async def log_to_blockchain(log_data: ActivityLogRequest) -> ActivityLogResponse
 
         # Send transaction
         tx_hash = w3.eth.send_raw_transaction(signed_tx.raw_transaction)
-        logger.info(f"📤 Transaction sent: {tx_hash.hex()}")
+        logger.info(f"Transaction sent: {tx_hash.hex()}")
         
         # Wait for transaction receipt
         tx_receipt = w3.eth.wait_for_transaction_receipt(tx_hash, timeout=120)
-        logger.info(f"✅ Transaction confirmed in block {tx_receipt['blockNumber']}")
+        logger.info(f"Transaction confirmed in block {tx_receipt['blockNumber']}")
         
-        # FIXED: Parse the event from the receipt to get the log ID
+        # Parse the event from the receipt to get the log ID
         log_id = None
         try:
             # Get ActivityLogged event from receipt
             event_logs = contract.events.ActivityLogged().process_receipt(tx_receipt)
             if event_logs:
                 log_id = event_logs[0]['args']['logId']
-                logger.info(f"✅ Log ID from event: {log_id}")
+                logger.info(f"Log ID from event: {log_id}")
         except Exception as e:
-            logger.warning(f"⚠️  Could not parse event, using logCount instead: {e}")
+            logger.warning(f"Could not parse event, using logCount instead: {e}")
         
         # Fallback: Get log ID from contract state
         if log_id is None:
             log_id = contract.functions.logCount().call() - 1
-            logger.info(f"✅ Log ID from logCount: {log_id}")
+            logger.info(f"Log ID from logCount: {log_id}")
         
         # Save to database
         await save_to_database(
@@ -341,7 +334,7 @@ async def log_to_blockchain(log_data: ActivityLogRequest) -> ActivityLogResponse
             data_hash=data_hash
         )
         
-        logger.info(f"✅ Successfully logged to blockchain: TX {tx_hash.hex()}")
+        logger.info(f"Successfully logged to blockchain: TX {tx_hash.hex()}")
         
         return ActivityLogResponse(
             log_id=log_id,
@@ -358,7 +351,7 @@ async def log_to_blockchain(log_data: ActivityLogRequest) -> ActivityLogResponse
         )
     
     except Exception as e:
-        logger.error(f"❌ Blockchain logging failed: {e}", exc_info=True)
+        logger.error(f"Blockchain logging failed: {e}", exc_info=True)
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Failed to log to blockchain: {str(e)}"
@@ -375,7 +368,7 @@ async def create_activity_log(
     """
     # Ensure actor username matches authenticated user
     if log_data.actor_username != current_user.get("username"):
-        logger.warning(f"⚠️  Actor username mismatch: {log_data.actor_username} vs {current_user.get('username')}")
+        logger.warning(f"Actor username mismatch: {log_data.actor_username} vs {current_user.get('username')}")
     
     # Log to blockchain
     result = await log_to_blockchain(log_data)
@@ -389,15 +382,16 @@ async def get_activity_logs(
     entity_type: Optional[str] = None,
     actor_username: Optional[str] = None,
     action: Optional[str] = None,
-    start_date: Optional[str] = None,  # ADD THIS
-    end_date: Optional[str] = None,    # ADD THIS
-    limit: int = 50,
+    start_date: Optional[str] = None,
+    end_date: Optional[str] = None,
+    limit: Optional[int] = None,  # Changed: Make it Optional instead of default 50
     current_user: dict = Depends(get_current_active_user)
 ):
     """
     Query activity logs from the database.
     Filters: service, entity_type, actor_username, action, start_date, end_date
     Date format: YYYY-MM-DD (e.g., 2025-01-15)
+    If limit is not specified, returns all records.
     """
     conn = await get_db_connection()
     try:
@@ -430,12 +424,10 @@ async def get_activity_logs(
                 query += " AND Action = ?"
                 params.append(action)
             
-            # ADD DATE FILTERING
+            # Date filtering
             if start_date:
                 try:
-                    # Validate date format
                     datetime.strptime(start_date, '%Y-%m-%d')
-                    # Filter for dates >= start_date (beginning of day)
                     query += " AND CAST(CreatedAt AS DATE) >= ?"
                     params.append(start_date)
                 except ValueError:
@@ -443,19 +435,17 @@ async def get_activity_logs(
             
             if end_date:
                 try:
-                    # Validate date format
                     datetime.strptime(end_date, '%Y-%m-%d')
-                    # Filter for dates <= end_date (end of day)
                     query += " AND CAST(CreatedAt AS DATE) <= ?"
                     params.append(end_date)
                 except ValueError:
                     logger.warning(f"Invalid end_date format: {end_date}")
             
-            # Apply limit with proper SQL syntax
-            final_query = ""
-            if limit and limit > 0:
+            # Apply limit only if specified
+            if limit is not None and limit > 0:
                 final_query = f"SELECT TOP {limit} * FROM ({query}) AS T ORDER BY T.CreatedAt DESC"
             else:
+                # return all records
                 final_query = f"{query} ORDER BY CreatedAt DESC"
             
             await cursor.execute(final_query, tuple(params))
@@ -479,6 +469,7 @@ async def get_activity_logs(
                     block_number=row.BlockNumber
                 ))
             
+            logger.info(f"✅ Retrieved {len(results)} logs (limit: {limit or 'none'})")
             return results
     
     except Exception as e:

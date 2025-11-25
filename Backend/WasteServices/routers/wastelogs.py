@@ -542,9 +542,13 @@ async def get_spillage_logs(
     start_date: Optional[date] = None, 
     end_date: Optional[date] = None,
     session_id: Optional[int] = None,
+    cashier_name: Optional[str] = None,  # <-- ADDED: To receive cashier_name
+    date: Optional[date] = None,          # <-- ADDED: To receive a single date
     token: str = Depends(oauth2_scheme)
 ):
-    """Get all spillage records with optional filtering"""
+    """
+    Get all spillage records with optional filtering by date, session, and cashier.
+    """
     await validate_token_and_roles(token, ["admin", "manager", "cashier"])
 
     conn = None
@@ -560,23 +564,39 @@ async def get_spillage_logs(
                 INNER JOIN CashierSessions cs ON ps.SessionID = cs.SessionID
             """
             
+            # --- MODIFIED SECTION ---
             conditions = ["ps.isDeleted = 0"]
             params = []
             
-            if start_date:
-                conditions.append("CAST(ps.SpillageDate AS DATE) >= ?")
-                params.append(start_date)
+            # Prioritize single date filter if provided (matches frontend)
+            if date:
+                conditions.append("CAST(ps.SpillageDate AS DATE) = ?")
+                params.append(date)
+            else:
+                # Fallback to date range if single date is not used
+                if start_date:
+                    conditions.append("CAST(ps.SpillageDate AS DATE) >= ?")
+                    params.append(start_date)
+                if end_date:
+                    conditions.append("CAST(ps.SpillageDate AS DATE) <= ?")
+                    params.append(end_date)
             
-            if end_date:
-                conditions.append("CAST(ps.SpillageDate AS DATE) <= ?")
-                params.append(end_date)
-                
+            # Filter by session if provided
             if session_id:
                 conditions.append("ps.SessionID = ?")
                 params.append(session_id)
+
+            # Filter by cashier name if provided
+            if cashier_name:
+                conditions.append("cs.CashierName = ?")
+                params.append(cashier_name)
             
-            query += " WHERE " + " AND ".join(conditions)
+            # Append conditions to the query if any exist
+            if len(conditions) > 0:
+                query += " WHERE " + " AND ".join(conditions)
+            
             query += " ORDER BY ps.LoggedAt DESC"
+            # --- END MODIFIED SECTION ---
             
             await cursor.execute(query, tuple(params))
             rows = await cursor.fetchall()

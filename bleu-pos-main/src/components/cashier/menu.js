@@ -2,6 +2,7 @@ import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import Navbar from '../navbar';
 import CartPanel from './cartPanel.js';
 import Loading from "../home/shared/loading";
+import { toast } from 'react-toastify';
 import './menu.css';
 
 const API_BASE_URL = 'http://127.0.0.1:9001/api';
@@ -239,7 +240,7 @@ function Menu() {
 
         const dynamicCategories = {};
         apiDetails.forEach(p => {
-          const group = p.ProductTypeName.toUpperCase() + 'S';
+          const group = p.ProductTypeName.toUpperCase();
           const category = p.ProductCategory;
           if (!dynamicCategories[group]) dynamicCategories[group] = [];
           if (!dynamicCategories[group].includes(category)) dynamicCategories[group].push(category);
@@ -667,7 +668,7 @@ function Menu() {
       setInitialCashError('Please enter a valid non-negative number.');
       return;
     }
-    setInitialCashError('');
+    setInitialCashError('');  
 
     try {
       const token = localStorage.getItem('authToken');
@@ -693,9 +694,11 @@ function Menu() {
       
       console.log(`Initial cash of ₱${amount.toFixed(2)} submitted successfully.`);
       setShowInitialCashModal(false);
+      toast.success(`Initial cash of ₱${amount.toFixed(2)} submitted successfully`);
       
     } catch (err) {
       setInitialCashError(err.message);
+      toast.error(`Failed to submit initial cash: ${err.message}`);
     }
   };
 

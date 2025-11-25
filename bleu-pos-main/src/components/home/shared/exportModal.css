@@ -139,6 +139,60 @@
   color: #ffc107;
 }
 
+/* ==================== DATA STATE COMPONENTS (INLINE) ==================== */
+.salesMon-state-container {
+  background: #fff;
+  border-radius: 10px;
+  text-align: center;
+  padding: 40px 40px;
+  margin: 0 auto;
+  position: relative;
+  max-width: 700px;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.12);
+  overflow: hidden;
+}
+
+.salesMon-state-icon {
+  width: 70px;
+  height: 70px;
+  margin: auto;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.salesMon-state-icon svg {
+  width: 48px;
+  height: 48px;
+}
+
+.salesMon-state-error {
+  background: linear-gradient(135deg, #ffebee 0%, #ffcdd2 100%);
+  color: #f44336;
+}
+
+.salesMon-state-warning {
+  background: linear-gradient(135deg, #fff3cd 0%, #ffe69c 100%);
+  color: #ffc107;
+}
+
+.salesMon-state-container h2 {
+  font-size: 24px;
+  font-weight: 700;
+  color: #1a1a1a;
+  margin-bottom: 12px;
+}
+
+.salesMon-state-container p {
+  font-size: 16px;
+  color: #666;
+  line-height: 1.6;
+  margin: 0;
+}
+
+/* ==================== RESPONSIVE DESIGN ==================== */
+
 /* Responsive Design for Modals */
 @media (max-width: 768px) {
   .salesMon-export-modal {
@@ -164,6 +218,29 @@
     width: 100%;
     min-width: unset;
   }
+
+  /* Inline State Components */
+  .salesMon-state-container {
+    padding: 40px 20px;
+  }
+
+  .salesMon-state-icon {
+    width: 64px;
+    height: 64px;
+  }
+
+  .salesMon-state-icon svg {
+    width: 40px;
+    height: 40px;
+  }
+
+  .salesMon-state-container h2 {
+    font-size: 20px;
+  }
+
+  .salesMon-state-container p {
+    font-size: 14px;
+  }
 }
 
 @media (max-width: 480px) {
@@ -184,5 +261,30 @@
   .salesMon-export-modal p {
     font-size: 13px;
     margin-bottom: 20px;
+  }
+
+  /* Inline State Components */
+  .salesMon-state-container {
+    padding: 30px 15px;
+  }
+
+  .salesMon-state-icon {
+    width: 56px;
+    height: 56px;
+    margin-bottom: 20px;
+  }
+
+  .salesMon-state-icon svg {
+    width: 32px;
+    height: 32px;
+  }
+
+  .salesMon-state-container h2 {
+    font-size: 18px;
+    margin-bottom: 10px;
+  }
+
+  .salesMon-state-container p {
+    font-size: 13px;
   }
 }

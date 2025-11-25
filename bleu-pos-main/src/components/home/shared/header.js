@@ -124,13 +124,8 @@ const Header = ({ pageTitle }) => {
       <div className="header-right">
         <div className="header-date">
           {currentDate.toLocaleString("en-US", {
-            weekday: "long",
-            year: "numeric",
-            month: "long",
-            day: "numeric",
-            hour: "numeric",
-            minute: "numeric",
-            second: "numeric",
+            weekday: "short", month: "short", day: "numeric", year: "numeric",
+            hour: "numeric", minute: "numeric", hour12: true
           })}
         </div>
         <div className="header-profile">

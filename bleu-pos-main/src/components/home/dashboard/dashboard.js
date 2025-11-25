@@ -622,15 +622,27 @@ const Dashboard = () => {
                       {loadingStates.canceledOrders ? (
                         <ChartLoader />
                       ) : canceledOrdersData.length > 0 ? (
-                        <ResponsiveContainer width="100%" height={350}>
-                          <BarChart data={canceledOrdersData} layout="vertical">
-                            <CartesianGrid strokeDasharray="3 3" />
-                            <XAxis type="number" />
-                            <YAxis dataKey="name" type="category" width={120} />
-                            <Tooltip />
-                            <Bar dataKey="canceled" fill="#e83e8c" name="Canceled Orders" />
-                          </BarChart>
-                        </ResponsiveContainer>
+                        (() => {
+                          // Replace unknown/null cashier names with "System" when filter is By Cashier
+                          const transformedCanceledOrdersData = canceledOrdersFilter === "By Cashier"
+                            ? canceledOrdersData.map(item => ({
+                                ...item,
+                                name: (!item.name || item.name.toLowerCase() === "unknown") ? "System" : item.name
+                              }))
+                            : canceledOrdersData;
+
+                          return (
+                            <ResponsiveContainer width="100%" height={350}>
+                              <BarChart data={transformedCanceledOrdersData} layout="vertical">
+                                <CartesianGrid strokeDasharray="3 3" />
+                                <XAxis type="number" />
+                                <YAxis dataKey="name" type="category" width={120} />
+                                <Tooltip />
+                                <Bar dataKey="canceled" fill="#e83e8c" name="Canceled Orders" />
+                              </BarChart>
+                            </ResponsiveContainer>
+                          );
+                        })()
                       ) : (
                         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', height: 350, color: '#999' }}>
                           No canceled orders for this period
