@@ -141,11 +141,11 @@ function Spillage() {
 
       const data = await response.json();
       setSpillageData(data);
-      setError(null); // Clear any previous errors
+      setError(null);
     } catch (error) {
       console.error("Error fetching spillage data:", error);
       setSpillageData([]);
-      setError(error.message); // Set error message
+      setError(error.message);
     }
   };
 
@@ -433,76 +433,74 @@ function Spillage() {
             <Loading />
           ) : error ? (
             <UnableToLoadData />
-          ) : spillageData.length === 0 ? (
+          ) : filteredData.length === 0 ? (
             <NoData />
           ) : (
             <>
               {/* Summary Cards */}
-              {filteredData.length > 0 && (
-                <div className="mSpillage-cards-container">
-                  <div className="mSpillage-stat-card">
-                    <div className="mSpillage-card-icon mSpillage-icon-blue">
-                      <FaClipboardList />
-                    </div>
-                    <div className="mSpillage-card-content">
-                      <div className="mSpillage-card-label">TOTAL REPORTS</div>
-                      <div className="mSpillage-card-value">{summary.totalReports}</div>
-                    </div>
+              <div className="mSpillage-cards-container">
+                <div className="mSpillage-stat-card">
+                  <div className="mSpillage-card-icon mSpillage-icon-blue">
+                    <FaClipboardList />
                   </div>
-
-                  <div className="mSpillage-stat-card">
-                    <div className="mSpillage-card-icon mSpillage-icon-red">
-                      <FaDollarSign />
-                    </div>
-                    <div className="mSpillage-card-content">
-                      <div className="mSpillage-card-label">TOTAL ESTIMATED COST</div>
-                      <div className="mSpillage-card-value">{formatCurrency(summary.totalEstimatedCost)}</div>
-                    </div>
+                  <div className="mSpillage-card-content">
+                    <div className="mSpillage-card-label">TOTAL REPORTS</div>
+                    <div className="mSpillage-card-value">{summary.totalReports}</div>
                   </div>
+                </div>
 
-                  <div className="mSpillage-stat-card">
-                    <div className="mSpillage-card-icon mSpillage-icon-orange">
-                      <FaExclamationTriangle />
-                    </div>
-                    <div className="mSpillage-card-content">
-                      <div className="mSpillage-card-label">MOST FREQUENT CAUSE</div>
-                      <div className="mSpillage-card-value" style={{ fontSize: "16px" }}>
-                        {summary.mostFrequentCause.length > 25 
-                          ? summary.mostFrequentCause.substring(0, 25) + "..." 
-                          : summary.mostFrequentCause}
-                      </div>
-                      <div className="mSpillage-card-subvalue">
-                        {summary.mostFrequentCount} {summary.mostFrequentCount === 1 ? 'incident' : 'incidents'}
-                      </div>
-                    </div>
+                <div className="mSpillage-stat-card">
+                  <div className="mSpillage-card-icon mSpillage-icon-red">
+                    <FaDollarSign />
                   </div>
-
-                  <div className="mSpillage-stat-card">
-                    <div className="mSpillage-card-icon mSpillage-icon-purple">
-                      <FaBoxes />
-                    </div>
-                    <div className="mSpillage-card-content">
-                      <div className="mSpillage-card-label">TOTAL ITEMS WASTED</div>
-                      <div className="mSpillage-card-value">{summary.totalItemsWasted}</div>
-                    </div>
+                  <div className="mSpillage-card-content">
+                    <div className="mSpillage-card-label">TOTAL ESTIMATED COST</div>
+                    <div className="mSpillage-card-value">{formatCurrency(summary.totalEstimatedCost)}</div>
                   </div>
+                </div>
 
-                  <div className="mSpillage-stat-card">
-                    <div className="mSpillage-card-icon mSpillage-icon-teal">
-                      <FaUserTie />
+                <div className="mSpillage-stat-card">
+                  <div className="mSpillage-card-icon mSpillage-icon-orange">
+                    <FaExclamationTriangle />
+                  </div>
+                  <div className="mSpillage-card-content">
+                    <div className="mSpillage-card-label">MOST FREQUENT CAUSE</div>
+                    <div className="mSpillage-card-value" style={{ fontSize: "16px" }}>
+                      {summary.mostFrequentCause.length > 25 
+                        ? summary.mostFrequentCause.substring(0, 25) + "..." 
+                        : summary.mostFrequentCause}
                     </div>
-                    <div className="mSpillage-card-content">
-                      <div className="mSpillage-card-label">STAFF MOST INVOLVED</div>
-                      <div className="mSpillage-card-value" style={{ fontSize: "18px" }}>
-                        {summary.staffMostInvolved}
-                      </div>
-                      <div className="mSpillage-card-subvalue">
-                        {summary.staffMostInvolvedCount} {summary.staffMostInvolvedCount === 1 ? 'report' : 'reports'}
-                      </div>
+                    <div className="mSpillage-card-subvalue">
+                      {summary.mostFrequentCount} {summary.mostFrequentCount === 1 ? 'incident' : 'incidents'}
                     </div>
                   </div>
                 </div>
-              )}
+
+                <div className="mSpillage-stat-card">
+                  <div className="mSpillage-card-icon mSpillage-icon-purple">
+                    <FaBoxes />
+                  </div>
+                  <div className="mSpillage-card-content">
+                    <div className="mSpillage-card-label">TOTAL ITEMS WASTED</div>
+                    <div className="mSpillage-card-value">{summary.totalItemsWasted}</div>
+                  </div>
+                </div>
+
+                <div className="mSpillage-stat-card">
+                  <div className="mSpillage-card-icon mSpillage-icon-teal">
+                    <FaUserTie />
+                  </div>
+                  <div className="mSpillage-card-content">
+                    <div className="mSpillage-card-label">STAFF MOST INVOLVED</div>
+                    <div className="mSpillage-card-value" style={{ fontSize: "18px" }}>
+                      {summary.staffMostInvolved}
+                    </div>
+                    <div className="mSpillage-card-subvalue">
+                      {summary.staffMostInvolvedCount} {summary.staffMostInvolvedCount === 1 ? 'report' : 'reports'}
+                    </div>
+                  </div>
+                </div>
+              </div>
 
               <div className="mSpillage-table-container">
                 <DataTable
@@ -521,9 +519,6 @@ function Spillage() {
                     setSelectedSpillage(row);
                     setIsDetailsModalOpen(true);
                   }}
-                  noDataComponent={
-                    <div style={{ padding: "24px" }}>No spillage logs found.</div>
-                  }
                   customStyles={{
                     headCells: {
                       style: {

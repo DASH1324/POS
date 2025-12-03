@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
+import { useNavigate } from 'react-router-dom'; // IMPORT ADDED
 import Navbar from '../navbar';
 import CartPanel from './cartPanel.js';
 import Loading from "../home/shared/loading";
@@ -11,6 +12,8 @@ const PRODUCTS_API_URL = 'http://127.0.0.1:8001';
 const MERCHANDISE_API_URL = 'http://127.0.0.1:8002/merchandise/';
 
 function Menu() {
+  const navigate = useNavigate(); // HOOK INITIALIZED
+
   // State for UI and Cart
   const [selectedFilter, setSelectedFilter] = useState({ type: 'all', value: 'All Products' });
   const [cartItems, setCartItems] = useState([]);
@@ -20,6 +23,8 @@ function Menu() {
   const [showInitialCashModal, setShowInitialCashModal] = useState(false);
   const [initialCash, setInitialCash] = useState('');
   const [initialCashError, setInitialCashError] = useState('');
+
+  // NOTE: Closed session modal states removed as we now redirect.
 
   // State for data fetching, loading, and errors
   const [products, setProducts] = useState([]);
@@ -31,7 +36,7 @@ function Menu() {
 
   // --- PROMOTIONS STATE ---
   const [promotions, setPromotions] = useState([]);
-  const [discounts, setDiscounts] = useState([]); // ✅ NEW STATE FOR DISCOUNTS
+  const [discounts, setDiscounts] = useState([]); 
 
   const [showBogoInfoModal, setShowBogoInfoModal] = useState(false);
   const [showBogoCongratsModal, setShowBogoCongratsModal] = useState(false);
@@ -53,13 +58,12 @@ function Menu() {
     } else if (promo.promotion_type === 'fixed') {
         return `₱${promo.promotion_value}`;
     } else if (promo.promotion_type === 'bogo') {
-        // For BOGO, format based on bogo_discount_type
         if (promo.bogo_discount_type === 'percentage') {
             return `${promo.bogo_discount_value}%`;
         } else if (promo.bogo_discount_type === 'fixed_amount') {
             return `₱${promo.bogo_discount_value}`;
         }
-        return ''; // Free items in BOGO
+        return ''; 
     }
     return `${promo.promotion_value}`;
   };
@@ -97,13 +101,9 @@ function Menu() {
         }
         const data = await response.json();
         
-        console.log("Raw API Response:", data);
-        
         const transformedPromotions = data
           .filter(p => p.status === 'active')
           .map(promo => {
-            console.log("Processing promotion:", promo);
-            
             let promotionType = null;
             let buyQty = 1;
             let getQty = 1;
@@ -152,7 +152,7 @@ function Menu() {
               }
             }
             
-            const transformed = {
+            return {
               id: promo.id,
               name: promo.name,
               type: promotionType,
@@ -176,13 +176,9 @@ function Menu() {
               bogo_discount_value: promotionType === 'bogo' ? discountValue : null,
               discountValue: discountValue
             };
-            
-            console.log("Transformed promotion:", transformed);
-            return transformed;
           });
         
         setPromotions(transformedPromotions);
-        console.log("Active promotions loaded and transformed:", transformedPromotions);
       } catch (error) {
         console.error("Error fetching promotions:", error.message);
       }
@@ -197,25 +193,34 @@ function Menu() {
         setIsLoading(false);
         return;
       }
-      
+
       try {
+        // 1. Check if session is closed today first
+        // If closed, checkClosedSessionToday will navigate away.
+        const isClosed = await checkClosedSessionToday(token, username);
+        if (isClosed) {
+          // Stop loading the rest of the menu data
+          return; 
+        }
+
+        // 2. Check active session status
         await checkCashierSession(token, username);
-        
+
         const headers = { 'Authorization': `Bearer ${token}` };
         const [detailsResponse, productsResponse] = await Promise.all([
           fetch(`${PRODUCTS_API_URL}/is_products/products/details/`, { headers }),
           fetch(`${PRODUCTS_API_URL}/is_products/products/`, { headers })
         ]);
-        
+
         if (detailsResponse.status === 401 || productsResponse.status === 401) {
           throw new Error("Your session is invalid or has expired. Please log in again.");
         }
         if (!detailsResponse.ok || !productsResponse.ok) {
           throw new Error(`Failed to fetch product data.`);
         }
-        
+
         const apiDetails = await detailsResponse.json();
-        const apiProducts = await productsResponse.json(); 
+        const apiProducts = await productsResponse.json();
 
         const imageMap = apiProducts.reduce((map, product) => {
           map[product.ProductName] = product.ProductImage;
@@ -223,7 +228,7 @@ function Menu() {
         }, {});
 
         const placeholderImage = 'https://images.unsplash.com/photo-1509042239860-f550ce710b93';
-        
+
         const mappedProducts = apiDetails.map(p => ({
           id: p.ProductID,
           name: p.ProductName,
@@ -231,11 +236,11 @@ function Menu() {
           price: p.Price,
           category: p.ProductCategory,
           status: p.Status,
-          image: imageMap[p.ProductName] || placeholderImage, 
+          image: imageMap[p.ProductName] || placeholderImage,
           sizes: p.Sizes,
           hasAddons: p.HasAddOns,
         }));
-        
+
         setProducts(mappedProducts);
 
         const dynamicCategories = {};
@@ -258,8 +263,7 @@ function Menu() {
         initializeData(activeToken, activeUsername);
         fetchPromotions(activeToken);
     }
-
-  }, []);
+  }, []); // Removed 'navigate' from deps to avoid re-runs/loops, safe in newer React
 
   const fetchMerchandise = async () => {
     setIsLoading(true);
@@ -307,6 +311,31 @@ function Menu() {
     } catch (err) {
       console.error("Session check error:", err);
       setError("Could not verify session status. Please try refreshing.");
+    }
+  };
+
+  // UPDATED FUNCTION: Navigates instead of showing modal
+  const checkClosedSessionToday = async (token, cashierName) => {
+    try {
+      const response = await fetch(`${API_BASE_URL}/session/check-closed-today?cashier_name=${encodeURIComponent(cashierName)}`, {
+        headers: { 'Authorization': `Bearer ${token}` }
+      });
+      if (!response.ok) {
+        const errData = await response.json();
+        throw new Error(errData.detail || 'Failed to check closed session.');
+      }
+      const data = await response.json();
+      
+      if (data.hasClosedSessionToday) {
+        // Redirect to summary page
+        navigate('/cashier-session-summary');
+        return true; // Indicate session is closed
+      }
+      return false; // Session is not closed
+    } catch (err) {
+      console.error("Closed session check error:", err);
+      setError("Could not verify closed session status. Please try refreshing.");
+      return false;
     }
   };
 
@@ -445,11 +474,8 @@ function Menu() {
   }, [cartItems]);
 
   const addToCart = useCallback(async (item, type = 'product') => {
-    console.log('=== ADD TO CART CALLED ===');
-    console.log('Item:', item.name, 'Status:', item.status, 'Type:', type);
     
     if (item.Status === 'Not Available' || item.status === 'Unavailable') {
-      console.log('Product is unavailable, blocking add to cart');
       return;
     }
 
@@ -476,29 +502,11 @@ function Menu() {
       let isFirstAdd = false;
       let wasBogoAlreadyStarted = false;
       const bogoPromo = promotions.find(p => {
-        console.log("Checking promo:", p.name, "Type:", p.type, "Products:", p.products);
-
-        if (!p.type || p.type !== 'bogo') {
-          console.log("  - Skipped: not BOGO type");
-          return false;
-        }
-
-        if (!p.products) {
-          console.log("  - Skipped: no products");
-          return false;
-        }
-
+        if (!p.type || p.type !== 'bogo') return false;
+        if (!p.products) return false;
         const applicableProducts = p.products.split(',').map(name => name.trim());
-        const isApplicable = applicableProducts.includes(item.name);
-
-        console.log("  - Applicable products:", applicableProducts);
-        console.log("  - Current item:", item.name);
-        console.log("  - Is applicable:", isApplicable);
-
-        return isApplicable;
+        return applicableProducts.includes(item.name);
       });
-
-      console.log("Found BOGO promo for", item.name, ":", bogoPromo)
 
       if (bogoPromo) {
         const buyQuantity = bogoPromo.buyQuantity;
@@ -601,8 +609,6 @@ function Menu() {
           }
 
           if (isNowCompleted) {
-            console.log("BOGO Promotion completed! Showing congratulations modal:", bogoPromo);
-
             const valueMatch = bogoPromo.value.match(/(\d+\.?\d*)/);
             const discountValue = valueMatch ? valueMatch[0] : '0';
             const isPercentage = bogoPromo.value.includes('%');
@@ -621,7 +627,6 @@ function Menu() {
       });
 
       if (bogoPromo && isFirstAdd && !previousBogoCompleted) {
-        console.log("First BOGO product added, showing info modal:", bogoPromo);
         setActiveBogoPromo(bogoPromo);
         setShowBogoInfoModal(true);
       }

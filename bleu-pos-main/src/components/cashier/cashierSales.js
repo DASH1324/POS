@@ -561,13 +561,6 @@ function CashierSales({ shiftLabel = "Morning Shift", shiftTime = "6:00AM – 2:
         setError(`Session ${data.sessionId} has been closed with discrepancy reported.`);
       }
 
-      // Redirect to logout after successful session closure
-      setTimeout(() => {
-        localStorage.removeItem('authToken');
-        localStorage.removeItem('username');
-        window.location.href = 'http://localhost:4002';
-      }, 2000); // 2 second delay to show the success message
-
     } catch (err) {
       setPinError(err.message);
       toast.error(`Failed to process: ${err.message}`);

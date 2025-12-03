@@ -1,0 +1,82 @@
+{
+  "version": "2.0.0",
+  "tasks": [
+    {
+      "label": "Start Sales Service",
+      "type": "shell",
+      "command": "cd Backend/SalesServices; python main.py",
+      "presentation": {
+        "reveal": "always",
+        "panel": "dedicated"
+      }
+    },
+    {
+      "label": "Start Session Service",
+      "type": "shell",
+      "command": "cd Backend/SessionServices; python main.py",
+      "presentation": {
+        "reveal": "always",
+        "panel": "dedicated"
+      }
+    },
+    {
+      "label": "Start Discount Service",
+      "type": "shell",
+      "command": "cd Backend/DiscountServices; python main.py",
+      "presentation": {
+        "reveal": "always",
+        "panel": "dedicated"
+      }
+    },
+    {
+      "label": "Start Waste Service",
+      "type": "shell",
+      "command": "cd Backend/WasteServices; python main.py",
+      "presentation": {
+        "reveal": "always",
+        "panel": "dedicated"
+      }
+    },
+    {
+      "label": "Start Notification Service",
+      "type": "shell",
+      "command": "cd Backend/NotificationServices; python main.py",
+      "presentation": {
+        "reveal": "always",
+        "panel": "dedicated"
+      }
+    },
+    {
+      "label": "Start Blockchain Service",
+      "type": "shell",
+      "command": "cd Backend/BlockchainServices; python main.py",
+      "presentation": {
+        "reveal": "always",
+        "panel": "dedicated"
+      },
+      "problemMatcher": []
+    },
+    {
+      "label": "Start Frontend",
+      "type": "shell",
+      "command": "cd bleu-pos-main; npm start",
+      "presentation": {
+        "reveal": "always",
+        "panel": "dedicated"
+      }
+    },
+    {
+      "label": "Start All Services",
+      "dependsOn": [
+        "Start Sales Service",
+        "Start Session Service",
+        "Start Discount Service",
+        "Start Waste Service",
+        "Start Notification Service",
+        "Start Blockchain Service",
+        "Start Frontend"
+      ],
+      "dependsOrder": "parallel"
+    }
+  ]
+}

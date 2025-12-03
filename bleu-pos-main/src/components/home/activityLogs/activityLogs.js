@@ -3,6 +3,8 @@ import { useNavigate } from "react-router-dom";
 import "./activityLogs.css";
 import Sidebar from "../shared/sidebar";
 import Header from "../shared/header";
+import Loading from "../shared/loading";
+import { UnableToLoadData, NoData } from "../shared/exportModal";
 import {
   FaPlus,
   FaEdit,
@@ -17,8 +19,6 @@ import {
   FaBan,
   FaUser,
 } from "react-icons/fa";
-import Lottie from "lottie-react";
-import loadingAnimation from "../../../assets/animation/loading.json";
 import axios from "axios";
 import CustomDateModal from "../shared/customDateModal";
 
@@ -139,8 +139,6 @@ function BlockchainActivityLogs() {
           );
 
           const fullName = response.data.employee_name || username;
-
-          console.log(`Fetched name for ${username}:`, fullName);
           return { username, fullName };
         } catch (err) {
           console.error(`Failed to fetch name for ${username}:`, err);
@@ -157,7 +155,6 @@ function BlockchainActivityLogs() {
         newNameMap[username] = fullName;
       });
 
-      console.log("Actor name map:", newNameMap);
       // Update the state with the new names
       setActorNameMap(newNameMap);
     };
@@ -248,7 +245,6 @@ function BlockchainActivityLogs() {
       const token = localStorage.getItem("authToken");
 
       const params = {
-        // Only set the service filter if the user explicitly set one, otherwise, we filter locally
         service: serviceFilter || undefined,
         entity_type: entityTypeFilter || undefined,
         action: actionFilter || undefined,
@@ -313,10 +309,8 @@ function BlockchainActivityLogs() {
       let allowedServices;
 
       if (serviceFilter) {
-        // If the user has applied a service filter, use it.
         allowedServices = serviceFilter.split(',');
       } else {
-        // If no service filter is applied (default state), use the specified list.
         allowedServices = REQUIRED_TRANSACTION_SERVICES;
       }
 
@@ -325,13 +319,13 @@ function BlockchainActivityLogs() {
         allowedServices.includes(log.service_identifier)
       );
 
-      // Filter by action (keep existing logic)
+      // Filter by action
       transactionLogs = transactionLogs.filter(log => {
         const isTransactionAction = ['CREATE', 'UPDATE', 'REFUND', 'CANCEL', 'AUTO_CANCEL', 'CLOSE_SESSION'].includes(log.action);
         return isTransactionAction;
       });
 
-      // Group logs by individual transaction (don't group multiple transactions together)
+      // Group logs by individual transaction
       const grouped = groupTransactionLogs(transactionLogs);
       setGroupedLogs(grouped);
     } catch (err) {
@@ -368,26 +362,22 @@ function BlockchainActivityLogs() {
       group.events.sort(
         (a, b) => new Date(a.created_at) - new Date(b.created_at)
       );
-      // Update first timestamp to earliest event
       group.firstTimestamp = group.events[0]?.created_at;
     });
 
-    // Convert to array and sort by first timestamp (newest first)
     return Object.values(groups).sort(
       (a, b) => new Date(b.firstTimestamp) - new Date(a.firstTimestamp)
     );
   };
 
-  // Group transaction logs - group by entity_id to show all events for same order
+  // Group transaction logs
   const groupTransactionLogs = (logs) => {
     const groups = {};
 
     logs.forEach((log) => {
-      // Normalize the key - treat POS_SALES/Sale and PURCHASE_ORDER_SERVICE/PurchaseOrder as the same
       let normalizedService = log.service_identifier;
       let normalizedType = log.entity_type;
 
-      // Treat PurchaseOrder updates as part of Sale transactions
       if (log.service_identifier === 'PURCHASE_ORDER_SERVICE' && log.entity_type === 'PurchaseOrder') {
         normalizedService = 'POS_SALES';
         normalizedType = 'Sale';
@@ -398,8 +388,8 @@ function BlockchainActivityLogs() {
       if (!groups[key]) {
         groups[key] = {
           id: key,
-          service: normalizedService,  // Use normalized service
-          entityType: normalizedType,   // Use normalized type
+          service: normalizedService,
+          entityType: normalizedType,
           entityId: log.entity_id,
           firstTimestamp: log.created_at,
           events: [],
@@ -409,16 +399,13 @@ function BlockchainActivityLogs() {
       groups[key].events.push(log);
     });
 
-    // Sort events within each group by timestamp
     Object.values(groups).forEach((group) => {
       group.events.sort(
         (a, b) => new Date(a.created_at) - new Date(b.created_at)
       );
-      // Update first timestamp to earliest event
       group.firstTimestamp = group.events[0]?.created_at;
     });
 
-    // Convert to array and sort by first timestamp (newest first)
     return Object.values(groups).sort(
       (a, b) => new Date(b.firstTimestamp) - new Date(a.firstTimestamp)
     );
@@ -438,7 +425,6 @@ function BlockchainActivityLogs() {
     handleClearFilters();
   }, [activeTab]);
 
-  // Handler for applying a custom date range from the modal
   const handleCustomApply = (startDate, endDate) => {
     const startStr = formatDateForAPI(new Date(startDate));
     const endStr = formatDateForAPI(new Date(endDate));
@@ -458,7 +444,7 @@ function BlockchainActivityLogs() {
       case "POS_SALES_AUTO_CANCEL":
         return <FaBan className="activityLogs-icon-white" />;
       case "CASHIER_SESSION":
-      case "CASH_TALLY": // FIX: Added CASH_TALLY for icon
+      case "CASH_TALLY":
         return <FaUser className="activityLogs-icon-white" />;
       case "POS_SALES_REFUND":
         return <FaUndo className="activityLogs-icon-white" />;
@@ -480,7 +466,7 @@ function BlockchainActivityLogs() {
       POS_SALES_AUTO_CANCEL: "#ef4444",
       POS_SALES_REFUND: "#f59e0b",
       CASHIER_SESSION: "#8b5cf6",
-      CASH_TALLY: "#8b5cf6", // FIX: Added CASH_TALLY for color
+      CASH_TALLY: "#8b5cf6",
       PRODUCTS_SERVICE: "#f59e0b",
     };
     return colors[service] || "#6b7280";
@@ -497,7 +483,6 @@ function BlockchainActivityLogs() {
       case "REFUND":
         return <FaUndo className="activityLogs-action-icon" />;
       case "CANCEL":
-        return <FaBan className="activityLogs-action-icon" />;
       case "AUTO_CANCEL":
         return <FaBan className="activityLogs-action-icon" />;
       default:
@@ -512,35 +497,26 @@ function BlockchainActivityLogs() {
       case "UPDATE":
         return "activityLogs-event-info";
       case "DELETE":
+      case "CANCEL":
+      case "AUTO_CANCEL":
         return "activityLogs-event-error";
       case "REFUND":
         return "activityLogs-event-warning";
-      case "CANCEL":
-        return "activityLogs-event-error";
-      case "AUTO_CANCEL":
-        return "activityLogs-event-error";
       default:
         return "";
     }
   };
 
   const getActionText = (action) => {
-    switch (action) {
-      case "CREATE":
-        return "created";
-      case "UPDATE":
-        return "updated";
-      case "DELETE":
-        return "deleted";
-      case "REFUND":
-        return "refunded";
-      case "CANCEL":
-        return "cancelled";
-      case "AUTO_CANCEL":
-        return "auto-cancelled";
-      default:
-        return action.toLowerCase();
-    }
+    const actionMap = {
+      CREATE: "created",
+      UPDATE: "updated",
+      DELETE: "deleted",
+      REFUND: "refunded",
+      CANCEL: "cancelled",
+      AUTO_CANCEL: "auto-cancelled",
+    };
+    return actionMap[action] || action.toLowerCase();
   };
 
   const formatTimestamp = (timestamp) => {
@@ -556,19 +532,15 @@ function BlockchainActivityLogs() {
   };
 
   const getEntityTitle = (group) => {
-    // Normalize entity type for comparison
     const normalizedType = group.entityType?.toUpperCase();
 
-    // For POS_SALES in activity logs
     if (group.service === 'POS_SALES') {
       if (normalizedType === 'SALE') {
-        // Check if it's a refund based on change_description
         const isRefund = group.events[0]?.change_description?.toLowerCase().includes('refund');
         return isRefund ? 'Sale Refund' : 'Store Sale';
       }
     }
 
-    // For PURCHASE_ORDER_SERVICE - show as "Online Order"
     if (group.service === 'PURCHASE_ORDER_SERVICE' && normalizedType === 'PURCHASEORDER') {
       return 'Online Order';
     }
@@ -582,35 +554,19 @@ function BlockchainActivityLogs() {
   };
 
   const getTransactionTitle = (group) => {
-    // Check if any event mentions "Received an Online Order"
     const hasOnlineOrder = group.events.some(e =>
       e.change_description?.includes('Received an Online Order:')
     );
 
-    if (hasOnlineOrder) {
-      return 'Online Order';
-    }
-
-    // FIX: Added explicit check for CASH_TALLY title
-    if (group.service === 'CASH_TALLY') {
-      return 'Cash Tally';
-    }
-
-    if (group.service === 'CASHIER_SESSION') {
-      return 'Cashier Session';
-    }
+    if (hasOnlineOrder) return 'Online Order';
+    if (group.service === 'CASH_TALLY') return 'Cash Tally';
+    if (group.service === 'CASHIER_SESSION') return 'Cashier Session';
 
     const event = group.events[0];
     const description = event.change_description || '';
 
-    if (description.includes('Refund')) {
-      return 'Sale Refund';
-    }
-
-    if (description.includes('New sale created')) {
-      return 'Store Sale';
-    }
-
+    if (description.includes('Refund')) return 'Sale Refund';
+    if (description.includes('New sale created')) return 'Store Sale';
     if (description.includes('cancelled')) {
       return description.includes('auto-cancelled') ? 'Auto-Cancelled Order' : 'Cancelled Order';
     }
@@ -627,7 +583,6 @@ function BlockchainActivityLogs() {
       ? getTransactionTitle(group).toLowerCase()
       : getEntityTitle(group).toLowerCase();
 
-    // Search by full name as well
     const actorNames = group.events
       .map(e => (actorNameMap[e.actor_username] || e.actor_username).toLowerCase())
       .join(' ');
@@ -643,201 +598,71 @@ function BlockchainActivityLogs() {
     );
   });
 
-  const renderContent = () => {
-    if (activeTab === "activity") {
-      return (
-        <>
-          {/* Loading State */}
-          {isLoading ? (
-            <div className="loading-container">
-              <div className="loading-bg">
-                <Lottie
-                  animationData={loadingAnimation}
-                  loop={true}
-                  className="loading-animation"
-                />
-              </div>
+  const renderTimeline = (groups) => (
+    <div className="activityLogs-timeline">
+      <div className="activityLogs-timeline-line"></div>
+
+      {groups.map((group) => (
+        <div key={group.id} className="activityLogs-activity-item">
+          <div className="activityLogs-activity-header">
+            <div
+              className="activityLogs-icon-circle"
+              style={{
+                backgroundColor: getServiceColor(group.service),
+              }}
+            >
+              {getServiceIcon(group.service)}
             </div>
-          ) : (
-            /* Timeline */
-            <div className="activityLogs-timeline">
-              {/* Error State */}
-              {error ? (
-                <div className="activityLogs-error">
-                  <p>{error}</p>
-                  <button onClick={fetchLogs}>Retry</button>
-                </div>
-              ) : filteredGroups.length === 0 ? (
-                <div className="activityLogs-empty-inline">
-                  <p>No activity logs found</p>
-                </div>
-              ) : (
-                <>
-                  <div className="activityLogs-timeline-line"></div>
 
-                  {filteredGroups.map((group) => (
-                    <div key={group.id} className="activityLogs-activity-item">
-                      {/* Main Activity Header */}
-                      <div className="activityLogs-activity-header">
-                        {/* Icon Circle */}
-                        <div
-                          className="activityLogs-icon-circle"
-                          style={{
-                            backgroundColor: getServiceColor(group.service),
-                          }}
-                        >
-                          {getServiceIcon(group.service)}
-                        </div>
+            <div className="activityLogs-activity-content">
+              <div className="activityLogs-activity-title-row">
+                <span className="activityLogs-timestamp">
+                  {formatTimestamp(group.firstTimestamp)}
+                </span>
+                <h3 className="activityLogs-activity-title">
+                  {activeTab === "transaction"
+                    ? getTransactionTitle(group)
+                    : getEntityTitle(group)}
+                </h3>
+              </div>
 
-                        {/* Content */}
-                        <div className="activityLogs-activity-content">
-                          <div className="activityLogs-activity-title-row">
-                            <span className="activityLogs-timestamp">
-                              {formatTimestamp(group.firstTimestamp)}
-                            </span>
-                            <h3 className="activityLogs-activity-title">
-                              {getEntityTitle(group)}
-                            </h3>
-                          </div>
-
-                          {/* Chain of Events */}
-                          {group.events.map((event, eventIndex) => (
-                            <div key={eventIndex} className="activityLogs-event-item">
-                              <div className="activityLogs-event-dot"></div>
-                              <div className="activityLogs-event-content">
-                                <div className="activityLogs-event-timestamp">
-                                  {formatTimestamp(event.created_at)}
-                                </div>
-                                <div
-                                  className={`activityLogs-event-message ${getActionClass(
-                                    event.action
-                                  )}`}
-                                >
-                                  {getActionIcon(event.action)}
-                                  <div className="activityLogs-event-text">
-                                    <strong>
-                                      {actorNameMap[event.actor_username] ||
-                                        event.actor_username}
-                                    </strong>{" "}
-                                    {getActionText(event.action)}:{" "}
-                                    {event.change_description}
-                                  </div>
-                                </div>
-                              </div>
-                            </div>
-                          ))}
-                        </div>
+              {group.events.map((event, eventIndex) => (
+                <div key={eventIndex} className="activityLogs-event-item">
+                  <div className="activityLogs-event-dot"></div>
+                  <div className="activityLogs-event-content">
+                    <div className="activityLogs-event-timestamp">
+                      {formatTimestamp(event.created_at)}
+                    </div>
+                    <div
+                      className={`activityLogs-event-message ${getActionClass(
+                        event.action
+                      )}`}
+                    >
+                      {getActionIcon(event.action)}
+                      <div className="activityLogs-event-text">
+                        <strong>
+                          {actorNameMap[event.actor_username] ||
+                            event.actor_username}
+                        </strong>{" "}
+                        {getActionText(event.action)}:{" "}
+                        {event.change_description}
                       </div>
                     </div>
-                  ))}
-                </>
-              )}
-            </div>
-          )}
-        </>
-      );
-    } else if (activeTab === "transaction") {
-      return (
-        <>
-          {/* Loading State */}
-          {isLoading ? (
-            <div className="loading-container">
-              <div className="loading-bg">
-                <Lottie
-                  animationData={loadingAnimation}
-                  loop={true}
-                  className="loading-animation"
-                />
-              </div>
-            </div>
-          ) : (
-            /* Timeline */
-            <div className="activityLogs-timeline">
-              {/* Error State */}
-              {error ? (
-                <div className="activityLogs-error">
-                  <p>{error}</p>
-                  <button onClick={fetchTransactionLogs}>Retry</button>
+                  </div>
                 </div>
-              ) : filteredGroups.length === 0 ? (
-                <div className="activityLogs-empty-inline">
-                  <p>No transaction logs found</p>
-                </div>
-              ) : (
-                <>
-                  <div className="activityLogs-timeline-line"></div>
-
-                  {filteredGroups.map((group) => {
-                    return (
-                      <div key={group.id} className="activityLogs-activity-item">
-                        {/* Main Transaction Header */}
-                        <div className="activityLogs-activity-header">
-                          {/* Icon Circle */}
-                          <div
-                            className="activityLogs-icon-circle"
-                            style={{
-                              backgroundColor: getServiceColor(group.service),
-                            }}
-                          >
-                            {getServiceIcon(group.service)}
-                          </div>
-
-                          {/* Content */}
-                          <div className="activityLogs-activity-content">
-                            <div className="activityLogs-activity-title-row">
-                              <span className="activityLogs-timestamp">
-                                {formatTimestamp(group.firstTimestamp)}
-                              </span>
-                              <h3 className="activityLogs-activity-title">
-                                {getTransactionTitle(group)}
-                              </h3>
-                            </div>
-
-                            {/* Chain of Transaction Events */}
-                            {group.events.map((event, eventIndex) => (
-                              <div key={eventIndex} className="activityLogs-event-item">
-                                <div className="activityLogs-event-dot"></div>
-                                <div className="activityLogs-event-content">
-                                  <div className="activityLogs-event-timestamp">
-                                    {formatTimestamp(event.created_at)}
-                                  </div>
-                                  <div
-                                    className={`activityLogs-event-message ${getActionClass(
-                                      event.action
-                                    )}`}
-                                  >
-                                    {getActionIcon(event.action)}
-                                    <div className="activityLogs-event-text">
-                                      <strong>
-                                        {actorNameMap[event.actor_username] ||
-                                          event.actor_username}
-                                      </strong>{" "}
-                                      {getActionText(event.action)}:{" "}
-                                      {event.change_description}
-                                    </div>
-                                  </div>
-                                </div>
-                              </div>
-                            ))}
-                          </div>
-                        </div>
-                      </div>
-                    );
-                  })}
-                </>
-              )}
+              ))}
             </div>
-          )}
-        </>
-      );
-    }
-  };
+          </div>
+        </div>
+      ))}
+    </div>
+  );
 
   return (
     <div className="activityLogs">
       <Sidebar />
       <div className="activityLogs-container">
-        <Header pageTitle="Blockchain Logs" />
+        <Header pageTitle="Logs" />
 
         <div className="activityLogs-content-wrapper">
           <div className="activityLogs-content">
@@ -910,8 +735,6 @@ function BlockchainActivityLogs() {
                     </div>
                   </div>
 
-
-
                   <button
                     className="activityLogs-clearBtn"
                     onClick={handleClearFilters}
@@ -922,8 +745,16 @@ function BlockchainActivityLogs() {
               )}
             </div>
 
-            {/* Render Content Based on Active Tab */}
-            {renderContent()}
+            {/* Main Content with Loading/Error/Empty States */}
+            {isLoading ? (
+              <Loading />
+            ) : error ? (
+              <UnableToLoadData />
+            ) : filteredGroups.length === 0 ? (
+              <NoData />
+            ) : (
+              renderTimeline(filteredGroups)
+            )}
           </div>
         </div>
       </div>

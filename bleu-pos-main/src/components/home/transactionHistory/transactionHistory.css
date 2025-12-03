@@ -384,6 +384,12 @@ body {
     border: 1px solid #90caf9;
 }
 
+.transHis-status-badge.partially-refunded {
+    background-color: #ffe9cc;
+    color: #d35400; 
+    border: 1px solid #ffcc99;
+}
+
 /* === RESPONSIVE DESIGN === */
 @media (max-width: 1400px) {
     .transHis-tabs-filter-wrapper {

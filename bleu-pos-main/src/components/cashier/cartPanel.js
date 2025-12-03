@@ -817,22 +817,24 @@ const CartPanel = ({
                     {item.addons && item.addons.length > 0 && (
                       <div className="addons-summary">
                         {item.addons.map(addon => (
-                          <span key={addon.addonId}>+{addon.quantity * item.quantity} {addon.addonName}</span>
-                        ))}
+                          <span key={addon.addonId}>
+                            +₱{(addon.price * addon.quantity * item.quantity).toFixed(2)} : {addon.addonName} (x{addon.quantity * item.quantity})
+                          </span>
+                            ))}
                       </div>
                     )}
                     {getItemDiscount(index) > 0 && (
-                      <div className="item-discount-applied" style={{fontSize: '11px', color: '#28a745', marginTop: '4px', fontWeight: 600}}>
+                      <div className="promodis-summary">
                         {getCombinedItemDiscounts(index).map((discount, discIdx) => (
                           <div key={discIdx}>
-                            {discount.totalQuantity} {item.name} • {discount.name}: -₱{discount.totalAmount.toFixed(2)}
+                            <span>-₱{discount.totalAmount.toFixed(2)} : {discount.name} (x{discount.totalQuantity})</span>
                           </div>
                         ))}
                       </div>
                     )}
                     {getItemPromotion(index) > 0 && (
-                      <div className="item-promotion-applied" style={{fontSize: '11px', color: '#ff9800', marginTop: '4px', fontWeight: 600}}>
-                        {getItemPromotionQty(index)} {item.name} • {getItemPromotionName(index)}: -₱{getItemPromotion(index).toFixed(2)}
+                      <div className="promodis-summary">
+                        <span>-₱{getItemPromotion(index).toFixed(2)} : {getItemPromotionName(index)} (x{getItemPromotionQty(index)})</span>
                       </div>
                     )}
                     <div className="flex-spacer" />

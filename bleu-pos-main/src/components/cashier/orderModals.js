@@ -155,150 +155,155 @@ const OrderModals = ({
               <div className="orderpanel-receipt-print" id="orderpanel-print-section">
                 <div className="orderpanel-receipt-header">
                   <div className="orderpanel-store-name">BLEU BEAN CAFE</div>
+                  <div className="orderpanel-store-tin">VATREGTIN: XXX-XXX-XXX-XXX</div>
                   <div className="orderpanel-store-address">Don Fabian St., Commonwealth</div>
                   <div className="orderpanel-store-address">Quezon City, Philippines</div>
-                  <div className="orderpanel-store-contact">Phone: +63 961 687 2463</div>
-                  <div className="orderpanel-store-tin">NON-VAT Reg TIN: XXX-XXX-XXX-XXX</div>
-                  <div className="orderpanel-receipt-divider">================================</div>
+                  <div className="orderpanel-store-contact">TEL #: NULL</div>
+                  <div className="orderpanel-receipt-divider">{dayjs(order.date).format("MM/DD/YYYY")} {dayjs(order.date).format("hh:mm A")}</div>
                   <div className="orderpanel-receipt-info">
                     <div className="orderpanel-receipt-info-left">
-                      <div>Order #: {order.id}</div>
-                      <div>Cashier: {order.cashierName || 'Staff'}</div>
-                    </div>
-                    <div className="orderpanel-receipt-info-right">
-                      <div>Date: {dayjs(order.date).format("MM/DD/YYYY")}</div>
-                      <div>Time: {dayjs(order.date).format("hh:mm A")}</div>
+                      <div>INVOICE: #{order.id}</div>
+                      <div>STAFF: {order.cashierName || 'Staff'}</div>
                     </div>
                   </div>    
-                  <div className="orderpanel-receipt-divider">================================</div>
                 </div>
 
                 <div className="orderpanel-receipt-body">
-                  {order.orderItems.map((item, i) => (
-                    <div key={i} className="orderpanel-receipt-item">
-                      <div className="orderpanel-receipt-line">
-                        <span className="orderpanel-receipt-item-name">
-                          {item.name}
-                        </span>
-                      </div>
-                      <div className="orderpanel-receipt-line ord
-                      erpanel-receipt-qty-price">
-                        <span>{item.quantity} x ₱{item.price.toFixed(2)}</span>
-                        <span>₱{(item.price * item.quantity).toFixed(2)}</span>
-                      </div>
-                      {item.addons && item.addons.length > 0 && item.addons.map((addon, addonIdx) => (
-                        <div key={addonIdx}>
-                          <div className="orderpanel-receipt-line orderpanel-receipt-addon">
-                            <span>  + {addon.addon_name || addon.addonName || addon.name}</span>
+                  {(() => {
+                    let totalNetAmt = 0;
+                    let totalScPwdDisc = 0;
+                    
+                    return order.orderItems.map((item, i) => {
+                      const itemTotal = item.price * item.quantity;
+                      const addonsTotal = item.addons?.reduce((sum, addon) => sum + ((addon.price || 0) * (addon.quantity || 1) * (item.quantity || 1)), 0) || 0;
+                      const fullItemTotal = itemTotal + addonsTotal;
+                      
+                      // Per-item discounts and promotions
+                      const itemDiscounts = (item.itemDiscounts || []).map(d => ({ name: d.discountName, quantity: d.quantityDiscounted, amount: d.discountAmount }));
+                      const itemPromotions = (item.itemPromotions || []).map(p => ({ name: p.promotionName, quantity: p.quantityPromoted, amount: p.promotionAmount }));
+                      
+                      // Combine discounts, separating SC/PWD
+                      const combinedDiscounts = {};
+                      const scPwdDiscounts = [];
+                      [...itemDiscounts, ...itemPromotions].forEach(d => {
+                        if (d.name === 'PWD' || d.name === 'Senior') {
+                          scPwdDiscounts.push(d);
+                          totalScPwdDisc += d.amount;
+                        } else {
+                          if (!combinedDiscounts[d.name]) combinedDiscounts[d.name] = { name: d.name, totalQuantity: 0, totalAmount: 0 };
+                          combinedDiscounts[d.name].totalQuantity += d.quantity;
+                          combinedDiscounts[d.name].totalAmount += d.amount;
+                        }
+                      });
+                      
+                      const totalItemDiscount = Object.values(combinedDiscounts).reduce((sum, d) => sum + d.totalAmount, 0) + scPwdDiscounts.reduce((sum, d) => sum + d.amount, 0);
+                      const netAmt = fullItemTotal - totalItemDiscount;
+                      totalNetAmt += netAmt;
+                      
+                      return (
+                        <div key={i} className="orderpanel-receipt-item">
+                          <div className="orderpanel-receipt-line">
+                            <span className="orderpanel-receipt-item-name">{item.name}</span>
                           </div>
-                          <div className="orderpanel-receipt-line orderpanel-receipt-addon orderpanel-receipt-qty-price">
-                            <span>  ₱{(addon.price || 0).toFixed(2)}</span>
-                            <span>₱{(addon.price || 0).toFixed(2)}</span>
+                          <div className="orderpanel-receipt-line orderpanel-receipt-qty-price">
+                            <span>{item.price.toFixed(2)} x {item.quantity}</span>
+                            <span>{itemTotal.toFixed(2)}</span>
+                          </div>
+                          {item.addons?.length > 0 && item.addons.map((addon, idx) => (
+                            <div key={idx} className="orderpanel-receipt-line orderpanel-receipt-qty-price">
+                              <span>{addon.addon_name || addon.addonName || addon.name} {addon.price.toFixed(2)} x {(addon.quantity || 1) * (item.quantity || 1)}</span>
+                              <span>{((addon.price || 0) * (addon.quantity || 1) * (item.quantity || 1)).toFixed(2)}</span>
+                            </div>
+                          ))}
+                          {/* Show non-SC/PWD discounts above NET AMT, with qty only if >1 */}
+                          {Object.values(combinedDiscounts).map((discount, discIdx) => (
+                            <div key={discIdx} className="orderpanel-receipt-line orderpanel-receipt-qty-price">
+                              <span>{discount.name}{discount.totalQuantity > 1 ? ` (x${discount.totalQuantity})` : ''}</span>
+                              <span>-{discount.totalAmount.toFixed(2)}</span>
+                            </div>
+                          ))}
+                          <div className="orderpanel-receipt-line orderpanel-receipt-net-amt">
+                            <span>NET AMT:</span>
+                            <span>{netAmt.toFixed(2)}</span>
                           </div>
                         </div>
-                      ))}
-                    </div>
-                  ))}
+                      );
+                    });
+                  })()}
                 </div>
-
-                <div className="orderpanel-receipt-divider">================================</div>
+                <div className="orderpanel-receipt-divider">------------------------------------------</div>
 
                 <div className="orderpanel-receipt-summary">
-                  {isStore && (
-                    <>
-                      <div className="orderpanel-receipt-line">
-                        <span>SUBTOTAL:</span>
-                        <span>₱{subtotal.toFixed(2)}</span>
-                      </div>
-                      {addOnsCost > 0 && (
-                        <div className="orderpanel-receipt-line">
-                          <span>ADD-ONS:</span>
-                          <span>₱{addOnsCost.toFixed(2)}</span>
+                  {(() => {
+                    // Recalculate totals here for summary (since we can't access from map)
+                    let totalNetAmt = 0;
+                    let totalScPwdDisc = 0;
+                    order.orderItems.forEach(item => {
+                      const itemTotal = item.price * item.quantity;
+                      const addonsTotal = item.addons?.reduce((sum, addon) => sum + ((addon.price || 0) * (addon.quantity || 1) * (item.quantity || 1)), 0) || 0;
+                      const fullItemTotal = itemTotal + addonsTotal;
+                      
+                      const itemDiscounts = (item.itemDiscounts || []).map(d => ({ name: d.discountName, amount: d.discountAmount }));
+                      const itemPromotions = (item.itemPromotions || []).map(p => ({ name: p.promotionName, amount: p.promotionAmount }));
+                      
+                      const totalItemDiscount = [...itemDiscounts, ...itemPromotions].reduce((sum, d) => {
+                        if (d.name === 'PWD' || d.name === 'Senior Citizen') {
+                          totalScPwdDisc += d.amount;
+                        }
+                        return sum + d.amount;
+                      }, 0);
+                      
+                      const netAmt = fullItemTotal - totalItemDiscount;
+                      totalNetAmt += netAmt;
+                    });
+                    
+                    return (
+                      <>
+                        <div className="orderpanel-receipt-line orderpanel-receipt-total">
+                          <span>TOTAL:</span>
+                          <span>{totalNetAmt.toFixed(2)}</span>
                         </div>
-                      )}
-                    </>
-                  )}
 
-                  {!isStore && (
-                    <>
-                      <div className="orderpanel-receipt-line">
-                        <span>SUBTOTAL:</span>
-                        <span>₱{onlineBaseSubtotal.toFixed(2)}</span>
-                      </div>
-                      {onlineAddOnsTotal > 0 && (
-                        <div className="orderpanel-receipt-line">
-                          <span>ADD-ONS:</span>
-                          <span>₱{onlineAddOnsTotal.toFixed(2)}</span>
+                        {hasRefunds && (
+                          <div className="orderpanel-receipt-line">
+                            <span>REFUND:</span>
+                            <span>-₱{getTotalRefundAmount().toFixed(2)}</span>
+                          </div>
+                        )}            
+
+                        <div className="orderpanel-receipt-qty-price">
+                          <div className="orderpanel-receipt-line">
+                            <span>Vatable:</span>
+                            <span>0.00</span>
+                          </div>
+                          <div className="orderpanel-receipt-line">
+                            <span>VAT_Amt:</span>
+                            <span>0.00</span>
+                          </div>
+                          <div className="orderpanel-receipt-line">
+                            <span>Zero-Rated Sales:</span>
+                            <span>0.00</span>
+                          </div>
+                          <div className="orderpanel-receipt-line">
+                            <span>VAT Exempt Sales:</span>
+                            <span>{(totalNetAmt - getTotalRefundAmount()).toFixed(2)}</span>
+                          </div>
+                          {totalScPwdDisc > 0 && (
+                            <div className="orderpanel-receipt-line">
+                              <span>TOTAL SC/PWD DISC:</span>
+                              <span>{totalScPwdDisc.toFixed(2)}</span>
+                            </div>
+                          )}
                         </div>
-                      )}
-                    </>
-                  )}
-
-                  {hasRefunds && (
-                    <div className="orderpanel-receipt-line">
-                      <span>REFUND:</span>
-                      <span>-₱{getTotalRefundAmount().toFixed(2)}</span>
-                    </div>
-                  )}
-
-                  {promotionalDiscount > 0 && (
-                    <div className="orderpanel-receipt-line">
-                      <span>LESS: DISCOUNT</span>
-                      <span>-₱{promotionalDiscount.toFixed(2)}</span>
-                    </div>
-                  )}
-
-                  {manualDiscount > 0 && (
-                    <div className="orderpanel-receipt-line">
-                      <span>LESS: DISCOUNT</span>
-                      <span>-₱{manualDiscount.toFixed(2)}</span>
-                    </div>
-                  )}
-                  
-                  <div className="orderpanel-receipt-divider">================================</div>
-                  
-                  <div className="orderpanel-receipt-line orderpanel-receipt-total">
-                    <strong>TOTAL AMOUNT DUE:</strong>
-                    <strong>₱{isStore 
-                      ? (order.total - getTotalRefundAmount()).toFixed(2)
-                      : (onlineBaseSubtotal + onlineAddOnsTotal).toFixed(2)
-                    }</strong>
-                  </div>
-                  
-                  <div className="orderpanel-receipt-divider">================================</div>
-                  
-                  <div className="orderpanel-receipt-vat-section">
-                    <div className="orderpanel-receipt-line">
-                      <span>VATable Sales:</span>
-                      <span>₱0.00</span>
-                    </div>
-                    <div className="orderpanel-receipt-line">
-                      <span>VAT Amount (12%):</span>
-                      <span>₱0.00</span>
-                    </div>
-                    <div className="orderpanel-receipt-line">
-                      <span>VAT-Exempt Sales:</span>
-                      <span>₱{isStore 
-                        ? (order.total - getTotalRefundAmount()).toFixed(2)
-                        : (onlineBaseSubtotal + onlineAddOnsTotal).toFixed(2)
-                      }</span>
-                    </div>
-                    <div className="orderpanel-receipt-line">
-                      <span>Zero-Rated Sales:</span>
-                      <span>₱0.00</span>
-                    </div>
-                  </div>
-                  <div className="orderpanel-receipt-divider">================================</div>
+                      </>
+                    );
+                  })()}
                 </div>
-
+                <div className="orderpanel-receipt-divider">------------------------------------------</div>
                 <div className="orderpanel-receipt-footer">
-                  <div className="orderpanel-thankyou">THANK YOU FOR YOUR PURCHASE!</div>
-                  <div className="orderpanel-thankyou">PLEASE COME AGAIN</div>
-                  <div className="orderpanel-receipt-divider">================================</div>
                   <div className="orderpanel-qr-section">
                     <img src={qr} alt="QR Code" className="orderpanel-qr-code" />
                     <div className="orderpanel-qr-text">Scan to learn more about us!</div>
-                    <div className="orderpanel-qr-subtext">Follow us for updates & promos</div>
                   </div>
                 </div>
               </div>

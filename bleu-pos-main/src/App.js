@@ -22,6 +22,7 @@ import Menu from './components/cashier/menu';
 import Orders from './components/cashier/orders';
 import OrderPanel from './components/cashier/orderPanel';
 import CashierSales from './components/cashier/cashierSales';
+import ClosedSessionSummary from './components/cashier/ClosedSessionSummary'; // <--- IMPORT ADDED HERE
 // import CashierSpillage from './components/cashier/cashierSpillage';
 
 import ActivityLogs from './components/home/activityLogs/activityLogs';
@@ -207,6 +208,7 @@ function App() {
 
           {/*Cashier*/}
           <Route path="/cashier/menu" element={<Menu />} />
+          <Route path="/cashier-session-summary" element={<ClosedSessionSummary />} /> {/* <--- ROUTE ADDED HERE */}
           <Route path="/cashier/orders" element={<Orders />} />
           <Route path="/cashier/orderPanel" element={<OrderPanel />} />
           <Route path="/cashier/cashierSales" element={<CashierSales />} />

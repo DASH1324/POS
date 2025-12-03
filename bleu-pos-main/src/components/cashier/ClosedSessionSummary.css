@@ -1,0 +1,318 @@
+/* Closed Session Summary Styles */
+
+.closed-session-container {
+  max-width: 800px;
+  max-height: 90vh;
+  overflow-y: auto;
+  background-color: white;
+  border-radius: 12px;
+  padding: 30px;
+  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.15);
+}
+
+/* Header Section */
+.closed-session-header {
+  text-align: center;
+  margin-bottom: 30px;
+  border-bottom: 2px solid #e0e0e0;
+  padding-bottom: 20px;
+}
+
+.closed-session-title {
+  color: #FF6B6B;
+  font-size: 28px;
+  margin-bottom: 10px;
+  font-weight: bold;
+}
+
+.closed-session-cashier {
+  font-size: 16px;
+  color: #666;
+  margin-bottom: 5px;
+}
+
+.closed-session-date {
+  font-size: 14px;
+  color: #999;
+}
+
+/* Cash Drawer Summary */
+.cash-drawer-summary {
+  background-color: #f8f9fa;
+  border-radius: 8px;
+  padding: 20px;
+  margin-bottom: 25px;
+}
+
+.cash-drawer-title {
+  font-size: 20px;
+  margin-bottom: 15px;
+  color: #333;
+  font-weight: 600;
+}
+
+.cash-drawer-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 15px;
+}
+
+.cash-drawer-item {
+  padding: 10px;
+}
+
+.cash-drawer-label {
+  color: #666;
+  font-size: 14px;
+  margin-bottom: 5px;
+}
+
+.cash-drawer-value {
+  font-size: 24px;
+  font-weight: bold;
+  color: #333;
+}
+
+.cash-drawer-value.cash-sales {
+  color: #4CAF50;
+}
+
+.cash-drawer-value.expected-total {
+  color: #2196F3;
+}
+
+.cash-drawer-value.counted-total {
+  color: #FF9800;
+}
+
+/* Variance Box */
+.variance-box {
+  margin-top: 15px;
+  padding: 10px;
+  border-radius: 6px;
+  text-align: center;
+}
+
+.variance-box.positive {
+  background-color: #e8f5e9;
+}
+
+.variance-box.negative {
+  background-color: #ffebee;
+}
+
+.variance-label {
+  font-size: 14px;
+  color: #666;
+  margin-bottom: 5px;
+}
+
+.variance-value {
+  font-size: 20px;
+  font-weight: bold;
+}
+
+.variance-box.positive .variance-value {
+  color: #4CAF50;
+}
+
+.variance-box.negative .variance-value {
+  color: #f44336;
+}
+
+/* Transactions Section */
+.transactions-section {
+  margin-bottom: 25px;
+}
+
+.transactions-title {
+  font-size: 20px;
+  margin-bottom: 15px;
+  color: #333;
+  font-weight: 600;
+}
+
+.transactions-table-wrapper {
+  max-height: 300px;
+  overflow-y: auto;
+  border: 1px solid #e0e0e0;
+  border-radius: 8px;
+}
+
+/* Transactions Table */
+.transactions-table {
+  width: 100%;
+  border-collapse: collapse;
+}
+
+.transactions-table thead {
+  background-color: #f5f5f5;
+  position: sticky;
+  top: 0;
+}
+
+.transactions-table th {
+  padding: 12px;
+  text-align: left;
+  border-bottom: 2px solid #ddd;
+  font-size: 14px;
+  color: #666;
+  font-weight: 600;
+}
+
+.transactions-table th.text-center {
+  text-align: center;
+}
+
+.transactions-table th.text-right {
+  text-align: right;
+}
+
+.transactions-table tbody tr {
+  border-bottom: 1px solid #f0f0f0;
+  transition: background-color 0.2s;
+}
+
+.transactions-table tbody tr:hover {
+  background-color: #fafafa;
+}
+
+.transactions-table td {
+  padding: 12px;
+  font-size: 14px;
+}
+
+.transactions-table td.text-center {
+  text-align: center;
+}
+
+.transactions-table td.text-right {
+  text-align: right;
+}
+
+.transaction-time {
+  color: #666;
+}
+
+.transaction-amount {
+  font-size: 16px;
+  font-weight: 500;
+}
+
+/* Payment Badge */
+.payment-badge {
+  padding: 4px 8px;
+  border-radius: 4px;
+  font-size: 12px;
+  display: inline-block;
+  font-weight: 500;
+}
+
+.payment-badge.cash {
+  background-color: #e3f2fd;
+  color: #1976d2;
+}
+
+.payment-badge.gcash {
+  background-color: #f3e5f5;
+  color: #7b1fa2;
+}
+
+/* No Transactions */
+.no-transactions {
+  padding: 40px;
+  text-align: center;
+  color: #999;
+  font-size: 14px;
+}
+
+/* Warning Box */
+.closed-session-warning {
+  text-align: center;
+  padding: 20px;
+  background-color: #fff3cd;
+  border-radius: 8px;
+  margin-bottom: 20px;
+}
+
+.closed-session-warning p {
+  color: #856404;
+  font-size: 14px;
+  line-height: 1.6;
+  margin: 0;
+}
+
+/* Return Button */
+.closed-session-return-btn {
+  width: 100%;
+  padding: 15px;
+  background-color: #FF6B6B;
+  color: white;
+  border: none;
+  border-radius: 8px;
+  font-size: 16px;
+  font-weight: bold;
+  cursor: pointer;
+  transition: background-color 0.3s;
+}
+
+.closed-session-return-btn:hover {
+  background-color: #ff5252;
+}
+
+.closed-session-return-btn:active {
+  background-color: #ff4444;
+}
+
+/* Scrollbar Styling */
+.closed-session-container::-webkit-scrollbar,
+.transactions-table-wrapper::-webkit-scrollbar {
+  width: 8px;
+}
+
+.closed-session-container::-webkit-scrollbar-track,
+.transactions-table-wrapper::-webkit-scrollbar-track {
+  background: #f1f1f1;
+  border-radius: 4px;
+}
+
+.closed-session-container::-webkit-scrollbar-thumb,
+.transactions-table-wrapper::-webkit-scrollbar-thumb {
+  background: #888;
+  border-radius: 4px;
+}
+
+.closed-session-container::-webkit-scrollbar-thumb:hover,
+.transactions-table-wrapper::-webkit-scrollbar-thumb:hover {
+  background: #555;
+}
+
+/* Responsive Design */
+@media (max-width: 768px) {
+  .closed-session-container {
+    padding: 20px;
+    max-width: 95%;
+  }
+
+  .closed-session-title {
+    font-size: 22px;
+  }
+
+  .cash-drawer-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .cash-drawer-value {
+    font-size: 20px;
+  }
+
+  .transactions-table th,
+  .transactions-table td {
+    padding: 8px;
+    font-size: 12px;
+  }
+
+  .transaction-amount {
+    font-size: 14px;
+  }
+}

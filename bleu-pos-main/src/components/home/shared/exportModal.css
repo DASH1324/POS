@@ -1,5 +1,5 @@
 /* ==================== EXPORT MODAL ==================== */
-.salesMon-export-overlay {
+.infoModal-overlay {
   position: fixed;
   top: 0;
   left: 0;
@@ -12,7 +12,7 @@
   justify-content: center;
 }
 
-.salesMon-export-modal {
+.infoModal-content {
   background: #fff;
   border-radius: 10px;
   padding: 40px;
@@ -23,7 +23,7 @@
   overflow: hidden;
 }
 
-.salesMon-export-close {
+.infoModal-close {
   position: absolute;
   top: 16px;
   right: 16px;
@@ -31,13 +31,19 @@
   cursor: pointer;
   color: #999;
   transition: color 0.2s ease;
+  width: 32px;
+  height: 32px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  line-height: 1;
 }
 
-.salesMon-export-close:hover {
+.infoModal-close:hover {
   color: #333;
 }
 
-.salesMon-export-icon {
+.infoModal-icon {
   width: 64px;
   height: 64px;
   margin: 0 auto 20px auto;
@@ -49,25 +55,25 @@
   color: #2196f3;
 }
 
-.salesMon-export-icon svg {
+.infoModal-icon svg {
   width: 40px;
   height: 40px;
 }
 
-.salesMon-export-modal h1 {
+.infoModal-content h1 {
   font-size: 22px;
   font-weight: 700;
   color: #1a1a1a;
   margin-bottom: 8px;
 }
 
-.salesMon-export-modal p {
+.infoModal-content p {
   font-size: 16px;
   color: #666;
   margin-bottom: 28px;
 }
 
-.salesMon-export-button-group {
+.infoModal-button-group {
   display: flex;
   justify-content: center;
   align-items: center;
@@ -75,7 +81,7 @@
   flex-wrap: wrap;
 }
 
-.salesMon-export-modal-btn {
+.infoModal-btn {
   flex: 1;
   min-width: 150px;
   padding: 12px 20px;
@@ -92,67 +98,258 @@
   box-shadow: 0 3px 6px rgba(0, 0, 0, 0.08);
 }
 
-.salesMon-export-modal-btn svg {
+.infoModal-btn svg {
   width: 20px;
   height: 20px;
 }
 
-.salesMon-export-pdf {
+.infoModal-pdf {
   background-color: #2196f3;
   color: white;
 }
 
-.salesMon-export-pdf:hover {
+.infoModal-pdf:hover {
   background-color: #1976d2;
 }
 
-.salesMon-export-csv {
+.infoModal-csv {
   background-color: #42a5f5;
   color: white;
 }
 
-.salesMon-export-csv:hover {
+.infoModal-csv:hover {
   background-color: #1e88e5;
 }
 
 /* No Data Modal */
-.salesMon-export-nodata {
+.infoModal-nodata {
   width: 440px;
   padding: 40px;
 }
 
-.salesMon-export-nodata h1 {
+.infoModal-nodata h1 {
   font-size: 22px;
   font-weight: 700;
   color: #1a1a1a;
   margin-bottom: 8px;
 }
 
-.salesMon-export-nodata p {
+.infoModal-nodata p {
   font-size: 16px;
   color: #666;
   margin-bottom: 10px;
 }
 
-.salesMon-export-warning {
+.infoModal-warning {
   background: linear-gradient(135deg, #fff3cd 0%, #ffe69c 100%);
   color: #ffc107;
 }
 
+/* ==================== REFUND REASON MODAL ==================== */
+.infoModal-refund {
+  width: 520px;
+  max-width: 90%;
+  max-height: 90vh;
+  overflow-y: auto;
+  padding: 40px;
+}
+
+.infoModal-refund h1 {
+  font-size: 22px;
+  font-weight: 700;
+  color: #1a1a1a;
+  margin-bottom: 8px;
+}
+
+.infoModal-refund > p {
+  font-size: 15px;
+  color: #666;
+  margin-bottom: 24px;
+  line-height: 1.5;
+}
+
+/* Refund Items Summary */
+.infoModal-refund-items {
+  background-color: #f8f9fa;
+  border-radius: 8px;
+  padding: 16px;
+  margin-bottom: 24px;
+  text-align: left;
+}
+
+.infoModal-refund-items h4 {
+  font-size: 14px;
+  font-weight: 600;
+  color: #1a1a1a;
+  margin: 0 0 10px 0;
+}
+
+.infoModal-refund-items ul {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+}
+
+.infoModal-refund-items li {
+  font-size: 14px;
+  color: #555;
+  padding: 6px 0;
+  border-bottom: 1px solid #e9ecef;
+}
+
+.infoModal-refund-items li:last-child {
+  border-bottom: none;
+}
+
+/* Refund Reason Section */
+.infoModal-refund-reason {
+  margin-bottom: 28px;
+  text-align: left;
+}
+
+.infoModal-refund-reason h3 {
+  font-size: 16px;
+  font-weight: 600;
+  color: #1a1a1a;
+  margin-bottom: 16px;
+  text-align: center;
+}
+
+.infoModal-reason-dropdown {
+  width: 100%;
+  padding: 12px 16px;
+  font-size: 14px;
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto', sans-serif;
+  color: #1a1a1a;
+  background-color: #f8f9fa;
+  border: 2px solid #e9ecef;
+  border-radius: 8px;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  appearance: none;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 12 12'%3E%3Cpath fill='%23666' d='M6 9L1 4h10z'/%3E%3C/svg%3E");
+  background-repeat: no-repeat;
+  background-position: right 12px center;
+  padding-right: 40px;
+}
+
+.infoModal-reason-dropdown:hover {
+  background-color: #e9ecef;
+  border-color: #dee2e6;
+}
+
+.infoModal-reason-dropdown:focus {
+  outline: none;
+  border-color: #ffe69c;
+  background-color: #fff;
+}
+
+.infoModal-reason-dropdown option {
+  padding: 8px;
+  background-color: #fff;
+  color: #1a1a1a;
+}
+
+/* Custom Reason Input */
+.infoModal-custom-reason {
+  margin-top: 16px;
+  animation: slideDown 0.2s ease-out;
+}
+
+.infoModal-custom-reason textarea {
+  width: 100%;
+  padding: 12px;
+  border: 2px solid #e9ecef;
+  border-radius: 8px;
+  font-size: 14px;
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto', sans-serif;
+  color: #1a1a1a;
+  resize: vertical;
+  transition: border-color 0.2s ease;
+  box-sizing: border-box;
+}
+
+.infoModal-custom-reason textarea:focus {
+  outline: none;
+  border-color: #ffe69c;
+}
+
+.infoModal-custom-reason textarea::placeholder {
+  color: #adb5bd;
+}
+
+.infoModal-char-count {
+  text-align: right;
+  font-size: 12px;
+  color: #999;
+  margin-top: 6px;
+}
+
+/* Error Message */
+.infoModal-error-message {
+  display: flex;
+  align-items: center;
+  gap: 8px; 
+  color: #c62828;
+  font-size: 13px;
+  font-weight: 500;
+  margin-top: 12px;
+  animation: shake 0.3s ease-out;
+}
+
+.infoModal-error-message svg {
+  width: 16px;
+  height: 16px;
+  flex-shrink: 0;
+}
+
+/* Refund Actions */
+.infoModal-refund-actions {
+  margin-top: 28px;
+  gap: 12px;
+}
+
+.infoModal-cancel {
+  background-color: #f1f3f5;
+  color: #495057;
+  border: 1px solid #dee2e6;
+  box-shadow: none;
+}
+
+.infoModal-cancel:hover {
+  background-color: #e9ecef;
+  border-color: #ced4da;
+}
+
+.infoModal-confirm {
+  background-color: #e74c3c;
+  color: white;
+  box-shadow: 0 4px 8px rgba(231, 76, 60, 0.2);
+}
+
+.infoModal-confirm:hover {
+  background-color: #c0392b;
+  box-shadow: 0 6px 12px rgba(231, 76, 60, 0.3);
+}
+
+.infoModal-confirm:active {
+  transform: translateY(1px);
+}
+
 /* ==================== DATA STATE COMPONENTS (INLINE) ==================== */
-.salesMon-state-container {
+.infoModal-state-container {
   background: #fff;
   border-radius: 10px;
   text-align: center;
   padding: 40px 40px;
   margin: 0 auto;
   position: relative;
-  max-width: 700px;
+  width: 100%;
   box-shadow: 0 8px 24px rgba(0, 0, 0, 0.12);
   overflow: hidden;
 }
 
-.salesMon-state-icon {
+.infoModal-state-icon {
   width: 70px;
   height: 70px;
   margin: auto;
@@ -162,129 +359,185 @@
   justify-content: center;
 }
 
-.salesMon-state-icon svg {
+.infoModal-state-icon svg {
   width: 48px;
   height: 48px;
 }
 
-.salesMon-state-error {
+.infoModal-state-error {
   background: linear-gradient(135deg, #ffebee 0%, #ffcdd2 100%);
   color: #f44336;
 }
 
-.salesMon-state-warning {
+.infoModal-state-warning {
   background: linear-gradient(135deg, #fff3cd 0%, #ffe69c 100%);
   color: #ffc107;
 }
 
-.salesMon-state-container h2 {
+.infoModal-state-container h2 {
   font-size: 24px;
   font-weight: 700;
   color: #1a1a1a;
   margin-bottom: 12px;
 }
 
-.salesMon-state-container p {
+.infoModal-state-container p {
   font-size: 16px;
   color: #666;
   line-height: 1.6;
   margin: 0;
 }
 
+/* ==================== ANIMATIONS ==================== */
+@keyframes slideDown {
+  from {
+    opacity: 0;
+    max-height: 0;
+  }
+  to {
+    opacity: 1;
+    max-height: 200px;
+  }
+}
+
+@keyframes shake {
+  0%, 100% { transform: translateX(0); }
+  25% { transform: translateX(-5px); }
+  75% { transform: translateX(5px); }
+}
+
 /* ==================== RESPONSIVE DESIGN ==================== */
 
 /* Responsive Design for Modals */
 @media (max-width: 768px) {
-  .salesMon-export-modal {
+  .infoModal-content {
     width: 90%;
     max-width: 440px;
     padding: 30px 20px;
   }
 
-  .salesMon-export-modal h1 {
+  .infoModal-content h1 {
     font-size: 20px;
   }
 
-  .salesMon-export-modal p {
+  .infoModal-content p {
     font-size: 14px;
   }
 
-  .salesMon-export-button-group {
+  .infoModal-button-group {
     flex-direction: column;
     gap: 10px;
   }
 
-  .salesMon-export-modal-btn {
+  .infoModal-btn {
     width: 100%;
     min-width: unset;
   }
 
+  /* Refund Modal */
+  .infoModal-refund {
+    width: 95%;
+    padding: 30px 24px;
+  }
+
+  .infoModal-refund h1 {
+    font-size: 20px;
+  }
+
+  .infoModal-refund-actions {
+    flex-direction: column;
+  }
+
   /* Inline State Components */
-  .salesMon-state-container {
+  .infoModal-state-container {
     padding: 40px 20px;
   }
 
-  .salesMon-state-icon {
+  .infoModal-state-icon {
     width: 64px;
     height: 64px;
   }
 
-  .salesMon-state-icon svg {
+  .infoModal-state-icon svg {
     width: 40px;
     height: 40px;
   }
 
-  .salesMon-state-container h2 {
+  .infoModal-state-container h2 {
     font-size: 20px;
   }
 
-  .salesMon-state-container p {
+  .infoModal-state-container p {
     font-size: 14px;
   }
 }
 
 @media (max-width: 480px) {
-  .salesMon-export-icon {
+  .infoModal-icon {
     width: 56px;
     height: 56px;
   }
 
-  .salesMon-export-icon svg {
+  .infoModal-icon svg {
     width: 32px;
     height: 32px;
   }
 
-  .salesMon-export-modal h1 {
+  .infoModal-content h1 {
     font-size: 18px;
   }
 
-  .salesMon-export-modal p {
+  .infoModal-content p {
     font-size: 13px;
     margin-bottom: 20px;
   }
 
+  /* Refund Modal */
+  .infoModal-refund {
+    padding: 30px 20px;
+  }
+
   /* Inline State Components */
-  .salesMon-state-container {
+  .infoModal-state-container {
     padding: 30px 15px;
   }
 
-  .salesMon-state-icon {
+  .infoModal-state-icon {
     width: 56px;
     height: 56px;
     margin-bottom: 20px;
   }
 
-  .salesMon-state-icon svg {
+  .infoModal-state-icon svg {
     width: 32px;
     height: 32px;
   }
 
-  .salesMon-state-container h2 {
+  .infoModal-state-container h2 {
     font-size: 18px;
     margin-bottom: 10px;
   }
 
-  .salesMon-state-container p {
+  .infoModal-state-container p {
     font-size: 13px;
   }
+}
+
+/* Scrollbar Styling for Refund Modal */
+.infoModal-refund::-webkit-scrollbar {
+  width: 6px;
+}
+
+.infoModal-refund::-webkit-scrollbar-track {
+  background: #f0f0f0;
+  border-radius: 3px;
+}
+
+.infoModal-refund::-webkit-scrollbar-thumb {
+  background: #ccc;
+  border-radius: 3px;
+}
+
+.infoModal-refund::-webkit-scrollbar-thumb:hover {
+  background: #aaa;
 }

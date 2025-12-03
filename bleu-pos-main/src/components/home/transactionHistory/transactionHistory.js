@@ -20,7 +20,7 @@ import { RiSmartphoneFill } from "react-icons/ri";
 import { HiReceiptRefund } from "react-icons/hi2";
 import { MdPayments } from "react-icons/md";
 import { generatePDFReport, generateCSVReport } from "./transactionHistoryExport";
-import { ExportModal, NoDataModal } from "../shared/exportModal";
+import { ExportModal, NoDataModal, UnableToLoadData, NoData, RefundReasonModal } from "../shared/exportModal";
 import Loading from "../shared/loading";
 import '../../confirmAlertCustom.css';
 
@@ -85,6 +85,19 @@ const getPeriodText = (dateRange, customStart, customEnd) => {
   }
 };
 
+// Helper function to determine display status
+const getDisplayStatus = (transaction) => {
+  const hasRefundedItems = transaction.items?.some(item => 
+    item.refundedQuantity && item.refundedQuantity > 0
+  );
+  
+  if (hasRefundedItems && transaction.status.toLowerCase() !== 'refunded') {
+    return 'Part-Refund';
+  }
+  
+  return transaction.status;
+};
+
 // Transform API data to normalize payment methods and include promotional discount
 const transformApiData = (apiTransaction) => {
   let transactionType = apiTransaction.type;
@@ -147,6 +160,9 @@ function TransactionHistory() {
   const [loadingOrderDetails, setLoadingOrderDetails] = useState(false);
   const [isExportModalOpen, setIsExportModalOpen] = useState(false);
   const [isNoDataModalOpen, setIsNoDataModalOpen] = useState(false);
+  const [isRefundReasonModalOpen, setIsRefundReasonModalOpen] = useState(false);
+  const [refundType, setRefundType] = useState(null); // 'full' or 'partial'
+  const [pendingRefundData, setPendingRefundData] = useState(null);
   
   // New state for statistics from backend
   const [statistics, setStatistics] = useState({
@@ -353,7 +369,15 @@ function TransactionHistory() {
   };
 
   // Handle full refund
+  // Handle full refund
   const handleFullRefund = async (transaction) => {
+    setRefundType('full');
+    setPendingRefundData({ transaction });
+    setIsRefundReasonModalOpen(true);
+  };
+
+  // Process full refund with reason
+  const processFullRefund = async (refundReason) => {
     try {
       const token = localStorage.getItem("authToken");
       const managerUsername = localStorage.getItem("username");
@@ -363,7 +387,7 @@ function TransactionHistory() {
         return;
       }
       
-      const refundReason = prompt("Enter refund reason (optional):") || "Customer requested refund";
+      const { transaction } = pendingRefundData;
       const orderId = transaction.id;
       
       const response = await fetch(
@@ -406,6 +430,13 @@ function TransactionHistory() {
 
   // Handle partial refund
   const handlePartialRefund = async (transaction, itemsToRefund) => {
+    setRefundType('partial');
+    setPendingRefundData({ transaction, itemsToRefund });
+    setIsRefundReasonModalOpen(true);
+  };
+
+  // Process partial refund with reason
+  const processPartialRefund = async (refundReason) => {
     try {
       const token = localStorage.getItem("authToken");
       const managerUsername = localStorage.getItem("username");
@@ -415,7 +446,7 @@ function TransactionHistory() {
         return;
       }
       
-      const refundReason = prompt("Enter refund reason (optional):") || "Customer requested partial refund";
+      const { transaction, itemsToRefund } = pendingRefundData;
       
       const refundItems = itemsToRefund.map(item => ({
         saleItemId: parseInt(item.saleItemId),
@@ -677,10 +708,7 @@ function TransactionHistory() {
 
         return (
           <div style={{ textAlign: "left", lineHeight: "1.3" }}>
-            {/* TOTAL on top */}
             <div style={{ fontWeight: "700" }}>₱{totalAmount}</div>
-
-            {/* PAYMENT TYPE below */}
             <div style={{ fontSize: "13px", color: "#555", marginTop: "4px" }}>
               {row.paymentMethod || "N/A"}
             </div>
@@ -689,36 +717,21 @@ function TransactionHistory() {
       },
       sortable: true,
       width: "10%",
-      center: true,
+      center: false,
     },
     {
-      name: "STATUS", selector: (row) => row.status,
-      cell: (row) => <span className={`transHis-status-badge ${row.status.toLowerCase()}`}>{row.status.toUpperCase()}</span>,
-      sortable: true, width: "10%", center: true,
+      name: "STATUS", 
+      selector: (row) => row.status,
+      cell: (row) => {
+        const displayStatus = getDisplayStatus(row);
+        const statusClass = displayStatus === 'Part-Refund' ? 'partially-refunded' : row.status.toLowerCase();
+        return <span className={`transHis-status-badge ${statusClass}`}>{displayStatus.toUpperCase()}</span>;
+      },
+      sortable: true, 
+      width: "10%", 
+      center: true,
     },
   ];
-
-  if (authError) {
-    return (
-      <div className="transHis-page">
-        <Sidebar /><div className="transHis"><Header pageTitle="Transaction History" /><div className="transHis-content">
-            <div style={{ padding: "20px", textAlign: "center", color: "red" }}>Authentication failed. Please login again.<br /><button onClick={() => navigate("/")}>Go to Login</button></div>
-        </div></div>
-      </div>
-    );
-  }
-
-  if (error) {
-    return (
-      <div className="transHis-page">
-        <Sidebar /><div className="transHis"><Header pageTitle="Transaction History" /><div className="transHis-content">
-            <div style={{ padding: "20px", textAlign: "center" }}><div style={{ color: "red", marginBottom: "10px" }}>Error loading transactions: {error}</div>
-              <button onClick={handleRefresh} style={{ marginRight: "10px" }}>Retry</button><button onClick={() => navigate("/")}>Back to Login</button>
-            </div>
-        </div></div>
-      </div>
-    );
-  }
 
   const handleExportClick = () => {
     if (!filteredTransactions || filteredTransactions.length === 0) {
@@ -807,54 +820,66 @@ function TransactionHistory() {
             )}
           </div>
           {loading ? (
-            <Loading/>
+            <Loading />
+          ) : error || authError ? (
+            <UnableToLoadData />
+          ) : filteredTransactions.length === 0 ? (
+            <NoData />
           ) : (
             <>
-              {filteredTransactions.length > 0 && (
-                <div className="transHis-cards-container">
-                  <div className="transHis-stat-card"><div className="transHis-card-icon transHis-icon-teal"><FaCashRegister /></div><div className="transHis-card-content"><div className="transHis-card-label">TOTAL SALES</div><div className="transHis-card-value">{formatCurrency(summary.totalSales)}</div></div></div>
-                  <div className="transHis-stat-card"><div className="transHis-card-icon transHis-icon-blue"><FaCheckCircle /></div><div className="transHis-card-content"><div className="transHis-card-label">TOTAL TRANSACTIONS</div><div className="transHis-card-value">{summary.totalTransactions}</div></div></div>
-                  <div className="transHis-stat-card"><div className="transHis-card-icon transHis-icon-red"><HiReceiptRefund /></div><div className="transHis-card-content"><div className="transHis-card-label">TOTAL REFUNDS</div><div className="transHis-card-value">{formatCurrency(summary.totalRefunds)}</div></div></div>
-                  <div className="transHis-stat-card"><div className="transHis-card-icon transHis-icon-green"><MdPayments /></div><div className="transHis-card-content"><div className="transHis-card-label">CASH SALES</div><div className="transHis-card-value">{formatCurrency(summary.cashSales)}</div></div></div>
-                  <div className="transHis-stat-card"><div className="transHis-card-icon transHis-icon-cyan"><RiSmartphoneFill /></div><div className="transHis-card-content"><div className="transHis-card-label">GCASH</div><div className="transHis-card-value">{formatCurrency(summary.digitalSales)}</div></div></div>
-                </div>
-              )}
+              <div className="transHis-cards-container">
+                <div className="transHis-stat-card"><div className="transHis-card-icon transHis-icon-teal"><FaCashRegister /></div><div className="transHis-card-content"><div className="transHis-card-label">TOTAL SALES</div><div className="transHis-card-value">{formatCurrency(summary.totalSales)}</div></div></div>
+                <div className="transHis-stat-card"><div className="transHis-card-icon transHis-icon-blue"><FaCheckCircle /></div><div className="transHis-card-content"><div className="transHis-card-label">TOTAL TRANSACTIONS</div><div className="transHis-card-value">{summary.totalTransactions}</div></div></div>
+                <div className="transHis-stat-card"><div className="transHis-card-icon transHis-icon-red"><HiReceiptRefund /></div><div className="transHis-card-content"><div className="transHis-card-label">TOTAL REFUNDS</div><div className="transHis-card-value">{formatCurrency(summary.totalRefunds)}</div></div></div>
+                <div className="transHis-stat-card"><div className="transHis-card-icon transHis-icon-green"><MdPayments /></div><div className="transHis-card-content"><div className="transHis-card-label">CASH SALES</div><div className="transHis-card-value">{formatCurrency(summary.cashSales)}</div></div></div>
+                <div className="transHis-stat-card"><div className="transHis-card-icon transHis-icon-cyan"><RiSmartphoneFill /></div><div className="transHis-card-content"><div className="transHis-card-label">GCASH</div><div className="transHis-card-value">{formatCurrency(summary.digitalSales)}</div></div></div>
+              </div>
               <div className="transHis-table-container">
                 {loadingOrderDetails && (
-                <div
-                  style={{
-                    position: "fixed",
-                    top: 0,
-                    left: 0,
-                    width: "100vw",
-                    height: "100vh",
-                    background: "rgba(0,0,0,0.25)",
-                    display: "flex",
-                    justifyContent: "center",
-                    alignItems: "center",
-                    zIndex: 9999
-                  }}
-                >
-                  <div style={{ display: "flex", gap: "10px" }}>
-                    <div style={dotStyle}></div>
-                    <div style={{ ...dotStyle, animationDelay: "0.2s" }}></div>
-                    <div style={{ ...dotStyle, animationDelay: "0.4s" }}></div>
-                  </div>
+                  <div
+                    style={{
+                      position: "fixed",
+                      top: 0,
+                      left: 0,
+                      width: "100vw",
+                      height: "100vh",
+                      background: "rgba(0,0,0,0.25)",
+                      display: "flex",
+                      justifyContent: "center",
+                      alignItems: "center",
+                      zIndex: 9999
+                    }}
+                  >
+                    <div style={{ display: "flex", gap: "10px" }}>
+                      <div style={dotStyle}></div>
+                      <div style={{ ...dotStyle, animationDelay: "0.2s" }}></div>
+                      <div style={{ ...dotStyle, animationDelay: "0.4s" }}></div>
+                    </div>
 
-                  <style>
-                    {`
-                      @keyframes bounce {
-                        0% { transform: translateY(0); opacity: 0.4; }
-                        50% { transform: translateY(-8px); opacity: 1; }
-                        100% { transform: translateY(0); opacity: 0.4; }
-                      }
-                    `}
-                  </style>
-                </div>
-              )}
+                    <style>
+                      {`
+                        @keyframes bounce {
+                          0% { transform: translateY(0); opacity: 0.4; }
+                          50% { transform: translateY(-8px); opacity: 1; }
+                          100% { transform: translateY(0); opacity: 0.4; }
+                        }
+                      `}
+                    </style>
+                  </div>
+                )}
                 <DataTable
-                  columns={columns} data={filteredTransactions} striped highlightOnHover responsive pagination paginationPerPage={7} paginationRowsPerPageOptions={[7]}
-                  fixedHeader fixedHeaderScrollHeight="60vh" onRowClicked={handleRowClick} pointerOnHover noDataComponent={<div style={{ padding: "24px" }}>No {activeTab.toLowerCase()} transactions found.</div>}
+                  columns={columns} 
+                  data={filteredTransactions} 
+                  striped 
+                  highlightOnHover 
+                  responsive 
+                  pagination 
+                  paginationPerPage={7} 
+                  paginationRowsPerPageOptions={[7]}
+                  fixedHeader 
+                  fixedHeaderScrollHeight="60vh" 
+                  onRowClicked={handleRowClick} 
+                  pointerOnHover 
                   customStyles={{
                     headCells: { style: { backgroundColor: "#4B929D", color: "#fff", fontWeight: "600", fontSize: "14px", padding: "12px", textTransform: "uppercase", textAlign: "center", letterSpacing: "1px"}},
                     rows: { style: { minHeight: "55px", padding: "5px"}},
@@ -886,6 +911,26 @@ function TransactionHistory() {
 
       {isNoDataModalOpen && (
         <NoDataModal onClose={() => setIsNoDataModalOpen(false)} />
+      )}
+
+      {isRefundReasonModalOpen && (
+        <RefundReasonModal
+          onClose={() => {
+            setIsRefundReasonModalOpen(false);
+            setPendingRefundData(null);
+            setRefundType(null);
+          }}
+          onSubmit={(reason) => {
+            setIsRefundReasonModalOpen(false);
+            if (refundType === 'full') {
+              processFullRefund(reason);
+            } else if (refundType === 'partial') {
+              processPartialRefund(reason);
+            }
+            setPendingRefundData(null);
+            setRefundType(null);
+          }}
+        />
       )}
     </div>
   );

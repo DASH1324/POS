@@ -24,8 +24,8 @@ body, html {
 }
 
 .orders-content-container.orders-panel-open {
-  width: calc(98% - 400px);
-  margin-right: 400px;
+  width: calc(98% - 450px);
+  margin-right: 450px;
 }
 
 .orders-table-container {

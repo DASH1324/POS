@@ -266,3 +266,110 @@ async def check_closed_session_today(
     finally:
         if cursor: await cursor.close()
         if conn: await conn.close()
+
+
+@router.get('/summary')
+async def get_session_summary(
+    token: str = Depends(oauth2_scheme),
+    cashier_name: str = Query(..., description="The name of the cashier")
+):
+    """
+    Retrieves the summary of the most recent closed session for the cashier today.
+    """
+    await validate_token_and_roles(token, allowed_roles=["manager", "admin", "cashier"])
+
+    conn, cursor = None, None
+    try:
+        conn = await get_db_connection()
+        cursor = await conn.cursor()
+
+        # 1. Fetch the session details
+        await cursor.execute(
+            """
+            SELECT TOP 1 
+                SessionID, 
+                InitialCash, 
+                SessionStart, 
+                SessionEnd, 
+                ClosingCash,
+                CashSalesAtClose
+            FROM CashierSessions 
+            WHERE CashierName = ? 
+              AND Status = 'Closed'
+              AND CAST(SessionEnd AS DATE) = CAST(GETDATE() AS DATE)
+            ORDER BY SessionEnd DESC
+            """,
+            (cashier_name,)
+        )
+        session_row = await cursor.fetchone()
+
+        if not session_row:
+            raise HTTPException(status_code=404, detail="No closed session found for today.")
+
+        session_id, initial_cash, start_time, end_time, closing_cash, cash_sales_at_close = session_row
+
+        # 2. Fetch transaction counts linked to this session
+        await cursor.execute(
+            """
+            SELECT 
+                COUNT(*) as Total,
+                SUM(CASE WHEN PaymentMethod = 'Cash' THEN 1 ELSE 0 END) as CashTx,
+                SUM(CASE WHEN PaymentMethod != 'Cash' THEN 1 ELSE 0 END) as NonCashTx,
+                SUM(CASE WHEN Status = 'void' THEN 1 ELSE 0 END) as VoidTx
+            FROM Sales
+            WHERE SessionID = ?
+            """,
+            (session_id,)
+        )
+        tx_stats = await cursor.fetchone()
+        
+        total_tx = tx_stats[0] or 0
+        cash_tx = tx_stats[1] or 0
+        card_tx = tx_stats[2] or 0
+        void_tx = tx_stats[3] or 0
+
+        # 3. Calculate Total Sales Amount (Gross - Discounts)
+        # Note: We use CashSalesAtClose from session for cash part, but for Total Sales display
+        # we calculate based on completed sales.
+        await cursor.execute(
+            """
+            SELECT SUM(FinalAmount) FROM (
+                SELECT (SUM(si.Quantity * si.UnitPrice) - MIN(s.TotalDiscountAmount) - MIN(s.PromotionalDiscountAmount)) as FinalAmount
+                FROM Sales s
+                JOIN SaleItems si ON s.SaleID = si.SaleID
+                WHERE s.SessionID = ? AND s.Status = 'completed'
+                GROUP BY s.SaleID
+            ) as SessionSales
+            """, 
+            (session_id,)
+        )
+        total_sales_row = await cursor.fetchone()
+        total_sales_calculated = total_sales_row[0] if total_sales_row and total_sales_row[0] else 0.0
+
+        # 4. Calculate Expected Cash
+        # Expected = Initial + Cash Sales
+        expected_cash = float(initial_cash) + float(cash_sales_at_close or 0)
+
+        return {
+            "cashier_name": cashier_name,
+            "date": start_time.strftime("%Y-%m-%d"),
+            "start_time": start_time.strftime("%I:%M %p"),
+            "end_time": end_time.strftime("%I:%M %p") if end_time else "N/A",
+            "initial_cash": float(initial_cash),
+            "total_sales": float(total_sales_calculated),
+            "cash_in_drawer": float(closing_cash) if closing_cash is not None else 0.0,
+            "expected_cash": float(expected_cash),
+            "total_transactions": total_tx,
+            "cash_transactions": cash_tx,
+            "card_transactions": card_tx,
+            "void_transactions": void_tx
+        }
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        print(f"Error getting session summary: {e}")
+        raise HTTPException(status_code=500, detail="Failed to retrieve session summary.")
+    finally:
+        if cursor: await cursor.close()
+        if conn: await conn.close()

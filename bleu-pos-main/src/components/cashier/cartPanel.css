@@ -382,3 +382,19 @@
     border-radius: 4px;
     font-weight: 500;
   }
+
+  .promodis-summary {
+    font-size: 11px;
+    color: #28a745;
+    margin: 2px 0 8px 0;
+    display: flex;
+    flex-wrap: wrap;
+    gap: 4px;
+  }
+
+  .promodis-summary span {
+    background-color: #d4edda;
+    padding: 2px 6px;
+    border-radius: 4px;
+    font-weight: 500;
+  }

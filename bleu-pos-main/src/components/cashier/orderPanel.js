@@ -467,20 +467,29 @@ function OrderPanel({ order, onClose, isOpen, isStore, onUpdateStatus, onFullRef
               <div className="orderpanel-item-details">
                 <div className="orderpanel-item-name">
                   {item.name}
+                  <span>
                   {item.addons && item.addons.length > 0 && (
                     <div className="orderpanel-item-addons">
                       {item.addons.map((addon, addonIdx) => (
                         <div key={addonIdx} className="orderpanel-addon">
-                          + {addon.addon_name || addon.addonName || addon.name}
-                          {addon.quantity && addon.quantity > 1 && ` (x${addon.quantity})`}
-                          - ₱{((addon.price || 0) * (addon.quantity || 1)).toFixed(2)}
+                          + ₱{(
+                            (addon.price || 0) *
+                            (addon.quantity || 1) *
+                            (item.quantity || 1)
+                          ).toFixed(2)} 
+                          : {addon.addon_name || addon.addonName || addon.name}
+
+                          {/* Show total qty (addon quantity × item quantity) */}
+                          {(addon.quantity || 1) > 0 && (
+                            <> (x{(addon.quantity || 1) * (item.quantity || 1)})</>
+                          )}
                         </div>
                       ))}
                     </div>
                   )}
-                  {refundedCount > 0 && !refundMode && ( <div className="orderpanel-item-refunded-info">Refunded: {refundedCount}</div> )}
+                  {refundedCount > 0 && !refundMode && ( <div className="orderpanel-item-refunded-info">{refundedCount} Refunded</div> )}
                   {itemDiscounts.length > 0 && (
-                    <div className="orderpanel-item-discount-applied">
+                    <div className="orderpanel-item-promodis-applied">
                       {(() => {
                         const combinedDiscounts = {};
                         itemDiscounts.forEach(discount => {
@@ -488,12 +497,12 @@ function OrderPanel({ order, onClose, isOpen, isStore, onUpdateStatus, onFullRef
                           combinedDiscounts[discount.name].totalQuantity += discount.quantity;
                           combinedDiscounts[discount.name].totalAmount += discount.amount;
                         });
-                        return Object.values(combinedDiscounts).map((discount, discIdx) => ( <div key={discIdx} className="orderpanel-discount-info">{discount.totalQuantity} {item.name} • {discount.name}: -₱{discount.totalAmount.toFixed(2)}</div> ));
+                        return Object.values(combinedDiscounts).map((discount, discIdx) => ( <div key={discIdx} className="orderpanel-discount-info">-₱{discount.totalAmount.toFixed(2)} : {discount.name} (x{discount.totalQuantity})</div> ));
                       })()}
                     </div>
                   )}
                   {itemPromotions.length > 0 && (
-                    <div className="orderpanel-item-promotion-applied">
+                    <div className="orderpanel-item-promodis-applied">
                       {(() => {
                         const combinedPromotions = {};
                         itemPromotions.forEach(promo => {
@@ -501,10 +510,11 @@ function OrderPanel({ order, onClose, isOpen, isStore, onUpdateStatus, onFullRef
                           combinedPromotions[promo.name].totalQuantity += promo.quantity;
                           combinedPromotions[promo.name].totalAmount += promo.amount;
                         });
-                        return Object.values(combinedPromotions).map((promo, promoIdx) => ( <div key={promoIdx} className="orderpanel-promotion-info">{promo.totalQuantity} {item.name} • {promo.name}: -₱{promo.totalAmount.toFixed(2)}</div> ));
+                        return Object.values(combinedPromotions).map((promo, promoIdx) => ( <div key={promoIdx} className="orderpanel-promotion-info">-₱{promo.totalAmount.toFixed(2)} : {promo.name} ({promo.totalQuantity})</div> ));
                       })()}
                     </div>
                   )}
+                  </span>
                 </div>
               </div>
               {refundMode ? (
@@ -533,20 +543,20 @@ function OrderPanel({ order, onClose, isOpen, isStore, onUpdateStatus, onFullRef
       </div>
       <div className="orderpanel-summary">
         <div className="orderpanel-calculation">
-                {isStore && ( <div className="orderpanel-calc-row"><span className="orderpanel-calc-label">Subtotal:</span><span className="orderpanel-calc-value">₱{subtotal.toFixed(2)}</span></div> )}
-                {(hasRefunds || (refundMode && hasSelectedItems)) && ( <div className="orderpanel-calc-row orderpanel-refund-row"><span className="orderpanel-calc-label">{refundMode ? "Est. Refund Amount:" : "Refunded Amount:"}</span><span className="orderpanel-calc-value orderpanel-refund-amount">-₱{refundMode ? estimatedPendingRefund.toFixed(2) : netHistoricalRefund.toFixed(2)}</span></div> )}
-                {(order.promotionalDiscount > 0) && ( <div className="orderpanel-calc-row"><span className="orderpanel-calc-label">Promotional Discount:</span><span className="orderpanel-calc-value">{removedPromo > 0 && (<span style={{textDecoration: 'line-through', marginRight: '6px', opacity: 0.7, fontSize: '0.9em'}}>-₱{order.promotionalDiscount.toFixed(2)}</span>)}- ₱{displayedPromoDiscount.toFixed(2)}</span></div> )}
-                {(order.manualDiscount > 0) && ( <div className="orderpanel-calc-row"><span className="orderpanel-calc-label">Discount:</span><span className="orderpanel-calc-value">{removedDiscount > 0 && (<span style={{textDecoration: 'line-through', marginRight: '6px', opacity: 0.7, fontSize: '0.9em'}}>-₱{order.manualDiscount.toFixed(2)}</span>)}- ₱{displayedManualDiscount.toFixed(2)}</span></div> )}
-                <div className="orderpanel-calc-row orderpanel-total-row">
-                    <span className="orderpanel-calc-label">Total:</span>
-                    <span className="orderpanel-calc-value">
-                      ₱{isStore 
-                        ? Math.max(0, (order.total || 0) - netHistoricalRefund - estimatedPendingRefund).toFixed(2)
-                        : (onlineBaseSubtotal + onlineAddOnsTotal).toFixed(2)
-                      }
-                    </span>
-                </div>
-            </div>
+          {isStore && ( <div className="orderpanel-calc-row"><span className="orderpanel-calc-label">Subtotal:</span><span className="orderpanel-calc-value">₱{subtotal.toFixed(2)}</span></div> )}
+          {(hasRefunds || (refundMode && hasSelectedItems)) && ( <div className="orderpanel-calc-row orderpanel-refund-row"><span className="orderpanel-calc-value orderpanel-refund-amount">{refundMode ? "Est. Refund Amount:" : "Refunded Amount:"}</span><span className="orderpanel-calc-value orderpanel-refund-amount">-₱{refundMode ? estimatedPendingRefund.toFixed(2) : netHistoricalRefund.toFixed(2)}</span></div> )}
+          {(order.promotionalDiscount > 0) && ( <div className="orderpanel-calc-row"><span className="orderpanel-calc-label">Promotion:</span><span className="orderpanel-calc-value">{removedPromo > 0 && (<span style={{textDecoration: 'line-through', marginRight: '6px', opacity: 0.7, fontSize: '0.9em'}}>-₱{order.promotionalDiscount.toFixed(2)}</span>)}- ₱{displayedPromoDiscount.toFixed(2)}</span></div> )}
+          {(order.manualDiscount > 0) && ( <div className="orderpanel-calc-row"><span className="orderpanel-calc-label">Discount:</span><span className="orderpanel-calc-value">{removedDiscount > 0 && (<span style={{textDecoration: 'line-through', marginRight: '6px', opacity: 0.7, fontSize: '0.9em'}}>-₱{order.manualDiscount.toFixed(2)}</span>)}- ₱{displayedManualDiscount.toFixed(2)}</span></div> )}
+          <div className="orderpanel-calc-row orderpanel-total-row">
+            <span className="orderpanel-calc-label">Total:</span>
+            <span className="orderpanel-calc-value">
+              ₱{isStore 
+                ? Math.max(0, (order.total || 0) - netHistoricalRefund - estimatedPendingRefund).toFixed(2)
+                : (onlineBaseSubtotal + onlineAddOnsTotal).toFixed(2)
+              }
+            </span>
+          </div>
+        </div>
       </div>
       <div className="orderpanel-actions">
             {renderActionButtons()}

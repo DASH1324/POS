@@ -113,7 +113,7 @@ function SidebarComponent() {
                   component={<Link to="/home/activityLogs" />}
                   active={location.pathname === '/home/activityLogs'}
                 >
-                  Activity Logs
+                  Logs
                 </MenuItem>
               )}
             </Menu>

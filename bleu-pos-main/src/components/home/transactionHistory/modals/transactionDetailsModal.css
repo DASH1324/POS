@@ -27,8 +27,8 @@
 /* Modal Container */
 .transHis-modal {
   background: #fff;
-  width: 90%;
-  max-width: 700px;
+  width: 100%;
+  max-width: 900px;
   max-height: 90%;
   border-radius: 10px;
   position: relative;
@@ -113,9 +113,9 @@
 }
 
 .transHis-modal-label {
-  font-weight: 600;
+  font-weight: 500;
   font-size: 11px;
-  color: #999;
+  color: #666;
   text-transform: uppercase;
   letter-spacing: 0.05em;
   display: flex;
@@ -135,7 +135,7 @@
 }
 
 .transHis-modal-time {
-  font-size: 14px;
+  font-size: 12px;
   color: #666;
   font-weight: 400;
 }
@@ -163,10 +163,10 @@
   display: inline-block;
   width: fit-content;
   padding: 4px 8px;
-  border-radius: 6px;
+  border-radius: 12px;
   font-size: 13px;
   font-weight: 600;
-  text-transform: capitalize;
+  text-transform: uppercase;
   white-space: nowrap;
 }
 
@@ -206,6 +206,18 @@
   background-color: #e3f2fd;
   color: #0d6efd;
   border: 1px solid #90caf9;
+}
+
+.transHis-modal-status.partially-refunded {
+  background-color: #ffe9cc;
+  color: #d35400; 
+  border: 1px solid #ffcc99;
+}
+
+.transHis-modal-status.refunded {
+  background-color: #f8d7da;
+  color: #721c24; 
+  border: 1px solid #f5c6cb;
 }
 
 /* Applied Discounts */
@@ -281,7 +293,7 @@
   margin-bottom: 5px;
   padding: 16px;
   border-radius: 8px;
-  background-color: #f8feff;
+  background-color: #fafafa;
 }
 
 .transHis-modal-item:last-child {
@@ -312,16 +324,33 @@
   color: #1a1a1a;
 }
 
+.gcash-ref {
+  font-weight: 500;
+  font-size: 13 px;
+  color: #1a1a1a;
+}
+
 .transHis-modal-quantity {
   color: #666;
   font-size: 13px;
   font-weight: 500;
 }
 
+.transHis-modal-discount-info {
+  color: #666;
+  font-size: 13px;
+  font-weight: 500;
+  font-style: italic;
+  margin-left: 8px;
+}
+
 .transHis-modal-item-addons {
-  font-size: 12px;
-  color: #999;
+  font-size: 13px;
+  color: #666;
   margin-top: 2px;
+  font-weight: 500;
+  font-style: italic;
+  margin-left: 8px;
 }
 
 .transHis-modal-item-right {
@@ -339,7 +368,7 @@
 
 .transHis-modal-item-total-price {
   font-size: 18px;
-  color: #4197a2;
+  color: #000000;
   font-weight: 700;
 }
 
@@ -437,7 +466,7 @@
 }
 
 .transHis-modal-breakdown-row.transHis-modal-discount {
-  color: #e74c3c;
+  color: #ff6b6b;
 }
 
 .transHis-modal-breakdown-row.transHis-modal-total {
@@ -455,11 +484,9 @@
 
 .transHis-modal-breakdown-row.transHis-modal-refund-total {
   color: #e74c3c;
-  font-weight: 600;
-  font-size: 16px;
+  font-weight: 500;
+  font-size: 14px;
   margin-top: 8px;
-  padding-top: 8px;
-  border-top: 1px solid #f0f0f0;
 }
 
 /* Issue Section */
@@ -594,7 +621,13 @@
 /* Refunded item styles */
 .transHis-modal-item.fully-refunded {
   opacity: 0.6;
-  background-color: #f5f5f5;
+  background-color: #fafafa;
+  border-left: 3px solid #ff6b6b;
+}
+
+.transHis-modal-item.partially-refunded {
+  border-left: 3px solid #ff9800;
+  background-color: #fafafa;
 }
 
 .refund-badge {
@@ -620,18 +653,10 @@
   color: #999;
 }
 
-.transHis-modal-refund-amount {
-  display: block;
-  color: #ff6b6b;
-  font-size: 12px;
-  font-weight: 600;
-  margin-top: 2px;
-}
-
 /* Price breakdown refund row */
 .transHis-modal-refund-row {
   color: #ff6b6b;
-  font-weight: 600;
+  font-weight: 500;
 }
 
 .transHis-modal-refund-row span {
@@ -683,16 +708,6 @@
   text-transform: uppercase;
 }
 
-/* Status badge for partially refunded */
-.transHis-modal-status.partially-refunded {
-  background-color: #ff9800;
-  color: white;
-  padding: 6px 12px;
-  border-radius: 20px;
-  font-size: 12px;
-  font-weight: 600;
-}
-
 /* Disable refund buttons when all items are refunded */
 .transHis-modal-action-btn:disabled {
   opacity: 0.5;
@@ -705,25 +720,16 @@
   transform: none;
 }
 
-/* Refund mode qty controls disabled state */
 .transHis-modal-qty-price button:disabled {
   opacity: 0.4;
   cursor: not-allowed;
 }
 
-/* Adjusted subtotal highlight */
 .transHis-modal-breakdown-row:has(span:contains("Adjusted")) {
   font-weight: 600;
   color: #2c3e50;
 }
 
-/* Add these styles to your transactionDetailsModal.css */
-
-/* ===================================
-   REFUND BADGE STYLES
-   =================================== */
-
-/* Inline refund badge next to item name */
 .transHis-modal-item-name-container {
   display: flex;
   align-items: center;
@@ -744,7 +750,6 @@
   line-height: 1;
 }
 
-/* Refunded quantity text */
 .refunded-qty {
   color: #ff6b6b;
   font-style: italic;
@@ -753,11 +758,6 @@
   font-size: 13px;
 }
 
-/* ===================================
-   REFUNDED ITEM STYLES
-   =================================== */
-
-/* Fully refunded items - dimmed */
 .transHis-modal-item.fully-refunded {
   opacity: 0.65;
   background-color: #f8f9fa;
@@ -768,57 +768,20 @@
   color: #6c757d;
 }
 
-/* Strikethrough for refunded prices */
 .struck-through {
   text-decoration: line-through;
   color: #999;
   opacity: 0.7;
 }
 
-/* Refund amount display (red negative amount) */
-.transHis-modal-refund-amount {
-  display: block;
-  color: #ff6b6b;
-  font-size: 13px;
-  font-weight: 700;
-  margin-top: 4px;
-  letter-spacing: 0.3px;
-}
-
-/* ===================================
-   PRICE BREAKDOWN REFUND STYLES
-   =================================== */
-
-/* Refund row in price breakdown */
-.transHis-modal-refund-row {
-  background-color: #fff5f5;
-  padding: 10px 15px;
-  margin: 5px -15px;
-  border-left: 4px solid #ff6b6b;
-}
-
-.transHis-modal-refund-row span {
-  color: #ff6b6b;
-  font-weight: 700;
-}
-
-/* Refund total in refund mode */
 .transHis-modal-refund-total {
-  background-color: #e3f2fd;
-  padding: 12px 15px;
-  margin: 10px -15px 0;
-  border-left: 4px solid #2196f3;
-  font-size: 16px;
-  font-weight: 700;
+  color: #ff6b6b;
+  font-weight: 500;
 }
 
 .transHis-modal-refund-total span {
-  color: #1976d2;
+  color: #ff6b6b;
 }
-
-/* ===================================
-   REFUND INFO SECTION
-   =================================== */
 
 .transHis-modal-refund-info {
   margin-top: 20px;
@@ -862,7 +825,6 @@
   font-weight: 500;
 }
 
-/* Refund type badge */
 .refund-type-badge {
   display: inline-block;
   padding: 5px 14px;
@@ -876,35 +838,6 @@
   box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
 }
 
-/* ===================================
-   STATUS BADGES
-   =================================== */
-
-/* Partially refunded status badge */
-.transHis-modal-status.partially-refunded {
-  background: linear-gradient(135deg, #ff9800 0%, #f57c00 100%);
-  color: white;
-  padding: 8px 16px;
-  border-radius: 20px;
-  font-size: 12px;
-  font-weight: 700;
-  text-transform: uppercase;
-  letter-spacing: 0.5px;
-  box-shadow: 0 2px 6px rgba(255, 152, 0, 0.3);
-}
-
-/* Refunded status badge */
-.transHis-modal-status.refunded {
-  background: linear-gradient(135deg, #f44336 0%, #d32f2f 100%);
-  color: white;
-  box-shadow: 0 2px 6px rgba(244, 67, 54, 0.3);
-}
-
-/* ===================================
-   BUTTON STATES
-   =================================== */
-
-/* Disabled refund buttons */
 .transHis-modal-action-btn:disabled {
   opacity: 0.5;
   cursor: not-allowed;
@@ -920,16 +853,36 @@
   box-shadow: none;
 }
 
-/* Refund mode quantity controls disabled state */
 .transHis-modal-qty-price button:disabled {
   opacity: 0.3;
   cursor: not-allowed;
   background-color: #e0e0e0;
 }
 
-/* ===================================
-   RESPONSIVE ADJUSTMENTS
-   =================================== */
+/* Refund Reason Section */
+.transHis-modal-refund-reason-section {
+  background-color: #fff3cd;
+  border-left: 4px solid #ffc107;
+  border-radius: 8px;
+  padding: 14px 16px;
+  margin-top: -10px;
+}
+
+.transHis-modal-refund-reason-label {
+  font-size: 12px;
+  font-weight: 700;
+  color: #856404;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  margin-bottom: 6px;
+}
+
+.transHis-modal-refund-reason-text {
+  font-size: 14px;  
+  color: #533f03;
+  font-weight: 500;
+  line-height: 1.5;
+}
 
 @media (max-width: 768px) {
   .transHis-modal-item-name-container {
@@ -974,10 +927,6 @@
 .refund-badge-inline {
   animation: fadeIn 0.3s ease-out;
 }
-
-/* ===================================
-   HOVER EFFECTS
-   =================================== */
 
 .transHis-modal-item.fully-refunded:hover {
   background-color: #f1f3f5;
