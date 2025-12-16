@@ -6,24 +6,23 @@ import NotificationModal from './components/NotificationModal';
 import { ToastContainer } from 'react-toastify';
 import 'react-toastify/dist/ReactToastify.css';
 
-//home: admin & manager
+//admin & manager
 import Dashboard from './components/home/dashboard/dashboard';
 import SalesMonitoring from './components/home/salesMonitoring/salesMonitoring';
 import TransactionHistory from './components/home/transactionHistory/transactionHistory';
 import Products from './components/home/products/products';
 import Discounts from './components/home/discounts/discounts';
 import SalesReport from './components/home/salesReport/salesReport'
-// import TransactionReports from './components/home/transactionReport/transactionReport';
 import TransactionHistoryExport from './components/home/transactionHistory/transactionHistoryExport';
 import Spillage from './components/home/spillage/spillage';
+import Receipt from './components/home/receipt/receipt';
 
 //cashier
 import Menu from './components/cashier/menu';
 import Orders from './components/cashier/orders';
 import OrderPanel from './components/cashier/orderPanel';
 import CashierSales from './components/cashier/cashierSales';
-import ClosedSessionSummary from './components/cashier/ClosedSessionSummary'; // <--- IMPORT ADDED HERE
-// import CashierSpillage from './components/cashier/cashierSpillage';
+import ClosedSessionSummary from './components/cashier/ClosedSessionSummary';
 
 import ActivityLogs from './components/home/activityLogs/activityLogs';
 
@@ -203,23 +202,21 @@ function App() {
           <Route path="/home/discounts" element={<Discounts />} />
           <Route path="/home/salesReport" element={<SalesReport />} />
           <Route path="/home/transactionHistory" element={<TransactionHistory />} />
-          {/* <Route path="/home/transactionReport" element={<TransactionReports />} /> */}
           <Route path="/home/spillage" element={<Spillage />} />
+          <Route path="/home/receipt" element={<Receipt />} />
 
           {/*Cashier*/}
           <Route path="/cashier/menu" element={<Menu />} />
-          <Route path="/cashier-session-summary" element={<ClosedSessionSummary />} /> {/* <--- ROUTE ADDED HERE */}
           <Route path="/cashier/orders" element={<Orders />} />
-          <Route path="/cashier/orderPanel" element={<OrderPanel />} />
+          <Route path="/cashier-session-summary" element={<ClosedSessionSummary />} />
           <Route path="/cashier/cashierSales" element={<CashierSales />} />
-          {/* <Route path="/cashier/cashierSpillage" element={<CashierSpillage />} /> */}
           <Route path="/home/activityLogs" element={<ActivityLogs />} />
 
         </Routes>
 
         <ToastContainer
           position="top-right"
-          autoClose={3000}        // 3 seconds
+          autoClose={3000}       
           hideProgressBar={false}
           newestOnTop={true}
           closeOnClick

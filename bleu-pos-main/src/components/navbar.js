@@ -65,7 +65,7 @@ const playNotificationSound = () => {
   }
 };
 
-const Navbar = ({ isCartOpen, isOrderPanelOpen }) => {
+const Navbar = ({ isCartOpen, isOrderPanelOpen, isDisabled = false }) => {
   const [isDropdownOpen, setDropdownOpen] = useState(false);
   const [isNotificationDropdownOpen, setNotificationDropdownOpen] = useState(false);
   const [notifications, setNotifications] = useState([]);
@@ -296,17 +296,29 @@ const Navbar = ({ isCartOpen, isOrderPanelOpen }) => {
         <div className="navbar-logo">
           <img src={logo} alt="Logo" className="logo-nav" />
         </div>
-        <div className="nav-icons">
-          <Link to="/cashier/menu" className={`nav-item ${location.pathname === '/cashier/menu' ? 'active' : ''}`}>
-            <HiOutlineShoppingBag className="icon" /> Menu
-          </Link>
-          <Link to="/cashier/orders" className={`nav-item ${location.pathname === '/cashier/orders' ? 'active' : ''}`}>
-            <HiOutlineClipboardList className="icon" /> Orders
-          </Link>
-          <Link to="/cashier/cashierSales" className={`nav-item ${location.pathname === '/cashier/cashierSales' ? 'active' : ''}`}>
-            <HiOutlineChartBar className="icon" /> Sales
-          </Link>
-        </div>
+        <div className={`nav-icons ${isDisabled ? 'nav-disabled' : ''}`}>
+        <Link 
+          to="/cashier/menu" 
+          className={`nav-item ${location.pathname === '/cashier/menu' ? 'active' : ''} ${isDisabled ? 'disabled' : ''}`}
+          onClick={(e) => isDisabled && e.preventDefault()}
+        >
+          <HiOutlineShoppingBag className="icon" /> Menu
+        </Link>
+        <Link 
+          to="/cashier/orders" 
+          className={`nav-item ${location.pathname === '/cashier/orders' ? 'active' : ''} ${isDisabled ? 'disabled' : ''}`}
+          onClick={(e) => isDisabled && e.preventDefault()}
+        >
+          <HiOutlineClipboardList className="icon" /> Orders
+        </Link>
+        <Link 
+          to="/cashier/cashierSales" 
+          className={`nav-item ${location.pathname === '/cashier/cashierSales' ? 'active' : ''} ${isDisabled ? 'disabled' : ''}`}
+          onClick={(e) => isDisabled && e.preventDefault()}
+        >
+          <HiOutlineChartBar className="icon" /> Sales
+        </Link>
+      </div>
       </div>
       <div className="navbar-right">
         <div className="navbar-date">
@@ -320,10 +332,12 @@ const Navbar = ({ isCartOpen, isOrderPanelOpen }) => {
             <div className="nav-profile-role">Hi! I'm {userRole}</div>
             <div className="nav-profile-name">{userName}</div>
           </div>
-          <div className="nav-dropdown-icon" onClick={toggleDropdown}><FaChevronDown /></div>
-          <div className="nav-bell-icon" onClick={toggleNotificationDropdown} ref={notificationRef}>
+          <div className={`nav-dropdown-icon ${isDisabled ? 'nav-disabled' : ''}`} onClick={isDisabled ? null : toggleDropdown}>
+            <FaChevronDown />
+          </div>
+          <div className={`nav-bell-icon ${isDisabled ? 'nav-disabled' : ''}`} onClick={isDisabled ? null : toggleNotificationDropdown} ref={notificationRef}>
             <FaBell/>
-            {unreadNotificationsCount > 0 && (
+            {!isDisabled && unreadNotificationsCount > 0 && (
               <span className="notification-badge">{unreadNotificationsCount}</span>
             )}
             

@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom'; // IMPORT ADDED
 import Navbar from '../navbar';
 import CartPanel from './cartPanel.js';
 import Loading from "../home/shared/loading";
+import { UnableToLoadData, NoData } from "../home/shared/exportModal";
 import { toast } from 'react-toastify';
 import './menu.css';
 
@@ -779,8 +780,8 @@ function Menu() {
   });
 
   const renderMainContent = () => {
-    if (error && error.includes("Authorization Error")) return <div className="menu-status-container">{error}</div>;
-    if (error && error.includes("session is invalid")) return <div className="menu-status-container">{error}</div>;
+    if (error && error.includes("Authorization Error")) return <div className="menu-status-container"><UnableToLoadData /></div>;
+    if (error && error.includes("session is invalid")) return <div className="menu-status-container"><NoData /></div>;
     if (error) return <div className="menu-status-container">Error: {error}</div>;
     if (showMerchandise) {
       return (

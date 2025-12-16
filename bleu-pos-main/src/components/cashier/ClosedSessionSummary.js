@@ -1,7 +1,19 @@
 import React, { useState, useEffect } from 'react';
-import { useNavigate, useLocation } from 'react-router-dom';
 import Navbar from '../navbar';
 import './ClosedSessionSummary.css';
+import Loading from "../home/shared/loading";
+import { 
+  FaDollarSign, 
+  FaReceipt, 
+  FaCashRegister, 
+  FaBalanceScale,
+  FaUndo,
+  FaLock,
+  FaInfoCircle,
+  FaMoneyBillWave,
+  FaExclamationTriangle,
+  FaFileInvoice
+} from 'react-icons/fa';
 
 const API_BASE_URL = 'http://127.0.0.1:9001/api';
 
@@ -9,8 +21,6 @@ function ClosedSessionSummary() {
   const [sessionSummary, setSessionSummary] = useState(null);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState(null);
-  const navigate = useNavigate();
-  const location = useLocation();
 
   useEffect(() => {
     const fetchSessionSummary = async () => {
@@ -52,120 +62,179 @@ function ClosedSessionSummary() {
     window.location.href = 'http://localhost:4002/';
   };
 
-  if (isLoading) {
-    return (
-      <div className="closed-session-summary-page">
-        <Navbar />
-        <div className="closed-session-summary-container">
-          <div className="loading">Loading session summary...</div>
-        </div>
-      </div>
-    );
-  }
+  const formatCurrency = (value) => {
+    const num = parseFloat(value || 0);
+    return num.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+  };
 
-  if (error) {
-    return (
-      <div className="closed-session-summary-page">
-        <Navbar />
-        <div className="closed-session-summary-container">
-          <div className="error-message">Error: {error}</div>
-          <button onClick={handleReturnToLogin} className="return-btn">
-            Return to Login
-          </button>
-        </div>
-      </div>
-    );
-  }
+  const variance = sessionSummary 
+    ? (sessionSummary.cash_in_drawer || 0) - (sessionSummary.expected_cash || 0)
+    : 0;
 
   return (
-    <div className="closed-session-summary-page">
-      <Navbar />
-      <div className="closed-session-summary-container">
-        <div className="summary-header">
-          <h1>Today's Session Summary</h1>
-          <p>Your session for today has already been closed.</p>
-        </div>
-
-        {sessionSummary && (
-          <div className="summary-content">
-            <div className="summary-section">
-              <h2>Session Details</h2>
-              <div className="summary-grid">
-                <div className="summary-item">
-                  <span className="label">Cashier:</span>
-                  <span className="value">{sessionSummary.cashier_name || 'N/A'}</span>
+    <div className="cSession-page">
+      <Navbar isDisabled={true} />
+      <div className="cSession-report">
+        {isLoading ? (
+          <Loading />
+        ) : (
+          <>
+            {/* Header Banner */}
+            <div className="cSession-header-banner">
+              <div className="cSession-banner-left">
+                <div className="cSession-banner-icon-wrapper">
+                  <FaLock className="cSession-banner-icon" />
                 </div>
-                <div className="summary-item">
-                  <span className="label">Date:</span>
-                  <span className="value">{sessionSummary.date || 'N/A'}</span>
+                <div className="cSession-banner-content">
+                  <h1>Session Closed</h1>
+                  <p>Your cashier session has been recorded and finalized for today.</p>
                 </div>
-                <div className="summary-item">
-                  <span className="label">Start Time:</span>
-                  <span className="value">{sessionSummary.start_time || 'N/A'}</span>
-                </div>
-                <div className="summary-item">
-                  <span className="label">End Time:</span>
-                  <span className="value">{sessionSummary.end_time || 'N/A'}</span>
-                </div>
+              </div>
+              
+              <div className="cSession-banner-right">
+                <button onClick={handleReturnToLogin} className="cSession-return-btn-header">
+                  <FaUndo /> Return to Login
+                </button>
               </div>
             </div>
 
-            <div className="summary-section">
-              <h2>Financial Summary</h2>
-              <div className="summary-grid">
-                <div className="summary-item">
-                  <span className="label">Initial Cash:</span>
-                  <span className="value">₱{sessionSummary.initial_cash ? sessionSummary.initial_cash.toFixed(2) : '0.00'}</span>
+            {/* Scrollable Content */}
+            <div className="cSession-scrollable-content">
+              {error ? (
+                <div className="cSession-error-card">
+                  <div className="cSession-error-icon">⚠️</div>
+                  <h2>Error Loading Summary</h2>
+                  <p>{error}</p>
+                  <button onClick={handleReturnToLogin} className="cSession-return-btn">
+                    Return to Login
+                  </button>
                 </div>
-                <div className="summary-item">
-                  <span className="label">Total Sales:</span>
-                  <span className="value">₱{sessionSummary.total_sales ? sessionSummary.total_sales.toFixed(2) : '0.00'}</span>
-                </div>
-                <div className="summary-item">
-                  <span className="label">Cash in Drawer:</span>
-                  <span className="value">₱{sessionSummary.cash_in_drawer ? sessionSummary.cash_in_drawer.toFixed(2) : '0.00'}</span>
-                </div>
-                <div className="summary-item">
-                  <span className="label">Expected Cash:</span>
-                  <span className="value">₱{sessionSummary.expected_cash ? sessionSummary.expected_cash.toFixed(2) : '0.00'}</span>
-                </div>
-              </div>
-            </div>
+              ) : sessionSummary && (
+                <>
+                  {/* Transaction Breakdown */}
+                  <div className="cSession-info-section cSession-full-width">
+                    <h3 className="cSession-section-title"><FaFileInvoice /> Summary</h3>
+                    <div className="cSession-breakdown-grid">
+                      <div className="cSession-breakdown-item">
+                        <div className="cSession-breakdown-icon cSession-cash-icon">
+                          <FaMoneyBillWave />
+                        </div>
+                        <div className="cSession-breakdown-content">
+                          <div className="cSession-breakdown-label">Total Cash Sales</div>
+                          <div className="cSession-breakdown-value">
+                            ₱{formatCurrency(sessionSummary.total_sales)}
+                          </div>
+                        </div>
+                      </div>
+                      <div className="cSession-breakdown-item">
+                        <div className="cSession-breakdown-icon cSession-card-icon">
+                          <FaExclamationTriangle />
+                        </div>
+                        <div className="cSession-breakdown-content">
+                          <div className="cSession-breakdown-label">Cash Discrepancy</div>
+                          <div className={`cSession-breakdown-value ${variance < 0 ? 'cSession-negative' : ''}`}>
+                            ₱{formatCurrency(Math.abs(variance))} {variance < 0 ? 'Short' : 'Over'}
+                          </div>
+                        </div>
+                      </div>
+                      <div className="cSession-breakdown-item">
+                        <div className="cSession-breakdown-icon cSession-void-icon">
+                          <FaReceipt />
+                        </div>
+                        <div className="cSession-breakdown-content">
+                          <div className="cSession-breakdown-label">Total Transactions</div>
+                          <div className="cSession-breakdown-value">
+                            {sessionSummary.total_transactions || 0}
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
 
-            <div className="summary-section">
-              <h2>Transaction Summary</h2>
-              <div className="summary-grid">
-                <div className="summary-item">
-                  <span className="label">Total Transactions:</span>
-                  <span className="value">{sessionSummary.total_transactions || 0}</span>
-                </div>
-                <div className="summary-item">
-                  <span className="label">Cash Transactions:</span>
-                  <span className="value">{sessionSummary.cash_transactions || 0}</span>
-                </div>
-                <div className="summary-item">
-                  <span className="label">Card Transactions:</span>
-                  <span className="value">{sessionSummary.card_transactions || 0}</span>
-                </div>
-                <div className="summary-item">
-                  <span className="label">Void Transactions:</span>
-                  <span className="value">{sessionSummary.void_transactions || 0}</span>
-                </div>
-              </div>
+                  {/* Side by Side Sections */}
+                  <div className="cSession-side-by-side-container">
+                    {/* Session Details */}
+                    <div className="cSession-info-section">
+                      <h3 className="cSession-section-title">Session Details</h3>
+                      <div className="cSession-details-grid">
+                        <div className="cSession-detail-item">
+                          <span className="cSession-detail-label">Cashier:</span>
+                          <span className="cSession-detail-value">
+                            {sessionSummary.cashier_name || 'N/A'}
+                          </span>
+                        </div>
+                        <div className="cSession-detail-item">
+                          <span className="cSession-detail-label">Manager:</span>
+                          <span className="cSession-detail-value">
+                            {sessionSummary.manager_name || 'N/A'}
+                          </span>
+                        </div>
+                        <div className="cSession-detail-item">
+                          <span className="cSession-detail-label">Date:</span>
+                          <span className="cSession-detail-value">
+                            {sessionSummary.date || 'N/A'}
+                          </span>
+                        </div>
+                        <div className="cSession-detail-item">
+                          <span className="cSession-detail-label">Start Time:</span>
+                          <span className="cSession-detail-value">
+                            {sessionSummary.start_time || 'N/A'}
+                          </span>
+                        </div>
+                        <div className="cSession-detail-item">
+                          <span className="cSession-detail-label">End Time:</span>
+                          <span className="cSession-detail-value">
+                            {sessionSummary.end_time || 'N/A'}
+                          </span>
+                        </div>
+                      </div>
+                    </div>
+
+                    {/* Financial Summary */}
+                    <div className="cSession-info-section">
+                      <h3 className="cSession-section-title">Financial Summary</h3>
+                      <div className="cSession-details-grid">
+                        <div className="cSession-detail-item">
+                          <span className="cSession-detail-label">Initial Cash:</span>
+                          <span className="cSession-detail-value">
+                            ₱{formatCurrency(sessionSummary.initial_cash)}
+                          </span>
+                        </div>
+                        <div className="cSession-detail-item">
+                          <span className="cSession-detail-label">Total Sales:</span>
+                          <span className="cSession-detail-value">
+                            ₱{formatCurrency(sessionSummary.total_sales)}
+                          </span>
+                        </div>
+                        <div className="cSession-detail-item">
+                          <span className="cSession-detail-label">Expected Cash:</span>
+                          <span className="cSession-detail-value">
+                            ₱{formatCurrency(sessionSummary.expected_cash)}
+                          </span>
+                        </div>
+                        <div className="cSession-detail-item cSession-detail-highlight">
+                          <span className="cSession-detail-label">Cash in Drawer:</span>
+                          <span className="cSession-detail-value cSession-detail-bold">
+                            ₱{formatCurrency(sessionSummary.cash_in_drawer)}
+                          </span>
+                        </div>
+                        <div className={`cSession-detail-item ${variance === 0 ? 'cSession-detail-balanced' : 'cSession-detail-discrepancy'}`}>
+                          <span className="cSession-detail-label">Cash Discrepancy:</span>
+                          <span className={`cSession-detail-value cSession-detail-bold ${variance < 0 ? 'cSession-negative' : variance > 0 ? 'cSession-positive' : 'cSession-balanced'}`}>
+                            ₱{formatCurrency(Math.abs(variance))} {variance < 0 ? 'Short' : variance > 0 ? 'Over' : ''}
+                          </span>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                </>
+              )}
             </div>
-          </div>
+          </>
         )}
-
-        <div className="summary-actions">
-          <p>You cannot access the menu until tomorrow's session begins.</p>
-          <p>Please contact your manager if you need assistance.</p>
-          <button onClick={handleReturnToLogin} className="return-btn">
-            Return to Login
-          </button>
-        </div>
       </div>
     </div>
   );
 }
 
-export default ClosedSessionSummary;
+export default ClosedSessionSummary;  

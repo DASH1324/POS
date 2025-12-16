@@ -9,6 +9,7 @@ import {
   faBars, faHome, faChartBar, faFileAlt, faTags, faBoxes,
   faReceipt, faWarning, faClockRotateLeft
 } from '@fortawesome/free-solid-svg-icons';
+import { IoReceiptSharp } from "react-icons/io5";
 
 function SidebarComponent() {
   const [collapsed, setCollapsed] = useState(() => {
@@ -106,15 +107,24 @@ function SidebarComponent() {
               >
                 Sales Report
               </MenuItem>
-
               {userRole === 'admin' && (
-                <MenuItem
-                  icon={<FontAwesomeIcon icon={faClockRotateLeft} />}
-                  component={<Link to="/home/activityLogs" />}
-                  active={location.pathname === '/home/activityLogs'}
-                >
-                  Logs
-                </MenuItem>
+                <>
+                  <MenuItem
+                    icon={<IoReceiptSharp />}
+                    component={<Link to="/home/receipt" />}
+                    active={location.pathname === '/home/receipt'}
+                  >
+                    Receipt
+                  </MenuItem>
+
+                  <MenuItem
+                    icon={<FontAwesomeIcon icon={faClockRotateLeft} />}
+                    component={<Link to="/home/activityLogs" />}
+                    active={location.pathname === '/home/activityLogs'}
+                  >
+                    Logs
+                  </MenuItem>
+                </>
               )}
             </Menu>
           </div>

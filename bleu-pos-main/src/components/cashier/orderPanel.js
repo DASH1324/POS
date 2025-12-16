@@ -436,12 +436,15 @@ function OrderPanel({ order, onClose, isOpen, isStore, onUpdateStatus, onFullRef
       </div>
       <div className="orderpanel-content">
         <div className="orderpanel-info">
-            <p className="orderpanel-info-item"><span className="orderpanel-label">Order Type:</span> {order.orderType || (isStore ? "Store" : "Online")}</p>
             <p className="orderpanel-info-item"><span className="orderpanel-label">Date:</span> {dayjs(order.date).format("MMMM D, YYYY - h:mm A")}</p>
-            <p className="orderpanel-info-item"><span className="orderpanel-label">Payment Method:</span> {order.paymentMethod}</p>
-            {(order.paymentMethod === 'GCash' || order.paymentMethod === 'E-Wallet') && order.reference_number && (
-              <p className="orderpanel-info-item"><span className="orderpanel-label">Reference Number:</span> {order.reference_number}</p>
-            )}
+            <p className="orderpanel-info-item"><span className="orderpanel-label">Order Type:</span> {order.orderType || (isStore ? "Store" : "Online")}</p>
+            <p className="orderpanel-info-item">
+              <span className="orderpanel-label">Payment Method:</span> {order.paymentMethod}
+
+              {(order.paymentMethod === 'GCash' || order.paymentMethod === 'E-Wallet') && order.reference_number && (
+                <> - {order.reference_number}</>
+              )}
+            </p>
             {refundMode && (
               <div className="orderpanel-refund-mode-banner">
                 <span className="orderpanel-refund-mode-indicator">Select items to refund</span>

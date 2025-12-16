@@ -1,318 +1,680 @@
-/* Closed Session Summary Styles */
+/* Closed Session Summary Styles - Redesigned Header */
 
-.closed-session-container {
-  max-width: 800px;
-  max-height: 90vh;
-  overflow-y: auto;
-  background-color: white;
-  border-radius: 12px;
-  padding: 30px;
-  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.15);
+body {
+  background: #eaf6f8;
+  margin: 0;
+  font-family: 'Poppins', 'Segoe UI', sans-serif;
 }
 
-/* Header Section */
-.closed-session-header {
-  text-align: center;
-  margin-bottom: 30px;
-  border-bottom: 2px solid #e0e0e0;
-  padding-bottom: 20px;
+.cSession-page {
+  display: flex;
+  flex-direction: column;
+  min-height: 100vh;
+  background: #eaf6f8;
 }
 
-.closed-session-title {
-  color: #FF6B6B;
-  font-size: 28px;
-  margin-bottom: 10px;
-  font-weight: bold;
+.cSession-container {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 40px 20px;
 }
 
-.closed-session-cashier {
-  font-size: 16px;
-  color: #666;
-  margin-bottom: 5px;
-}
-
-.closed-session-date {
-  font-size: 14px;
-  color: #999;
-}
-
-/* Cash Drawer Summary */
-.cash-drawer-summary {
-  background-color: #f8f9fa;
-  border-radius: 8px;
-  padding: 20px;
-  margin-bottom: 25px;
-}
-
-.cash-drawer-title {
-  font-size: 20px;
-  margin-bottom: 15px;
-  color: #333;
-  font-weight: 600;
-}
-
-.cash-drawer-grid {
-  display: grid;
-  grid-template-columns: 1fr 1fr;
+.cSession-report {
+  flex: 1;
+  box-sizing: border-box;
+  width: 90%;
+  max-width: 1400px;
+  overflow: hidden;
+  margin: 23px auto 30px auto;
+  display: flex;
+  flex-direction: column;
   gap: 15px;
+  height: calc(100vh - 53px);
 }
 
-.cash-drawer-item {
-  padding: 10px;
+/* === LOADING SPINNER === */
+.cSession-loading {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 20px;
+  color: #4B929D;
 }
 
-.cash-drawer-label {
-  color: #666;
-  font-size: 14px;
-  margin-bottom: 5px;
+.cSession-spinner {
+  width: 50px;
+  height: 50px;
+  border: 4px solid #e5e7eb;
+  border-top-color: #4B929D;
+  border-radius: 50%;
+  animation: cSession-spin 1s linear infinite;
 }
 
-.cash-drawer-value {
-  font-size: 24px;
-  font-weight: bold;
-  color: #333;
+@keyframes cSession-spin {
+  to { transform: rotate(360deg); }
 }
 
-.cash-drawer-value.cash-sales {
-  color: #4CAF50;
-}
-
-.cash-drawer-value.expected-total {
-  color: #2196F3;
-}
-
-.cash-drawer-value.counted-total {
-  color: #FF9800;
-}
-
-/* Variance Box */
-.variance-box {
-  margin-top: 15px;
-  padding: 10px;
-  border-radius: 6px;
-  text-align: center;
-}
-
-.variance-box.positive {
-  background-color: #e8f5e9;
-}
-
-.variance-box.negative {
-  background-color: #ffebee;
-}
-
-.variance-label {
-  font-size: 14px;
-  color: #666;
-  margin-bottom: 5px;
-}
-
-.variance-value {
-  font-size: 20px;
-  font-weight: bold;
-}
-
-.variance-box.positive .variance-value {
-  color: #4CAF50;
-}
-
-.variance-box.negative .variance-value {
-  color: #f44336;
-}
-
-/* Transactions Section */
-.transactions-section {
-  margin-bottom: 25px;
-}
-
-.transactions-title {
-  font-size: 20px;
-  margin-bottom: 15px;
-  color: #333;
-  font-weight: 600;
-}
-
-.transactions-table-wrapper {
-  max-height: 300px;
-  overflow-y: auto;
-  border: 1px solid #e0e0e0;
-  border-radius: 8px;
-}
-
-/* Transactions Table */
-.transactions-table {
-  width: 100%;
-  border-collapse: collapse;
-}
-
-.transactions-table thead {
-  background-color: #f5f5f5;
-  position: sticky;
-  top: 0;
-}
-
-.transactions-table th {
-  padding: 12px;
-  text-align: left;
-  border-bottom: 2px solid #ddd;
-  font-size: 14px;
-  color: #666;
-  font-weight: 600;
-}
-
-.transactions-table th.text-center {
-  text-align: center;
-}
-
-.transactions-table th.text-right {
-  text-align: right;
-}
-
-.transactions-table tbody tr {
-  border-bottom: 1px solid #f0f0f0;
-  transition: background-color 0.2s;
-}
-
-.transactions-table tbody tr:hover {
-  background-color: #fafafa;
-}
-
-.transactions-table td {
-  padding: 12px;
-  font-size: 14px;
-}
-
-.transactions-table td.text-center {
-  text-align: center;
-}
-
-.transactions-table td.text-right {
-  text-align: right;
-}
-
-.transaction-time {
-  color: #666;
-}
-
-.transaction-amount {
+.cSession-loading p {
   font-size: 16px;
   font-weight: 500;
+  color: #6b7280;
 }
 
-/* Payment Badge */
-.payment-badge {
-  padding: 4px 8px;
-  border-radius: 4px;
-  font-size: 12px;
-  display: inline-block;
-  font-weight: 500;
-}
-
-.payment-badge.cash {
-  background-color: #e3f2fd;
-  color: #1976d2;
-}
-
-.payment-badge.gcash {
-  background-color: #f3e5f5;
-  color: #7b1fa2;
-}
-
-/* No Transactions */
-.no-transactions {
+/* === ERROR CARD === */
+.cSession-error-card {
+  background: white;
+  border-radius: 12px;
   padding: 40px;
   text-align: center;
-  color: #999;
-  font-size: 14px;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.08);
+  max-width: 500px;
 }
 
-/* Warning Box */
-.closed-session-warning {
-  text-align: center;
-  padding: 20px;
-  background-color: #fff3cd;
-  border-radius: 8px;
+.cSession-error-icon {
+  font-size: 64px;
   margin-bottom: 20px;
 }
 
-.closed-session-warning p {
-  color: #856404;
-  font-size: 14px;
-  line-height: 1.6;
-  margin: 0;
+.cSession-error-card h2 {
+  color: #1f2937;
+  margin-bottom: 15px;
+  font-size: 24px;
+  font-weight: 600;
 }
 
-/* Return Button */
-.closed-session-return-btn {
+.cSession-error-card p {
+  color: #6b7280;
+  font-size: 14px;
+  margin-bottom: 30px;
+  line-height: 1.5;
+}
+
+/* === HEADER BANNER === */
+.cSession-header-banner {
+  background: #ffffff;
+  border-radius: 16px;
+  padding: 32px 40px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 40px;
+  box-shadow: 0 4px 20px rgba(75, 146, 157, 0.12);
+  border: 1px solid rgba(75, 146, 157, 0.1);
+  position: relative;
+  overflow: hidden;
+}
+
+.cSession-header-banner::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 6px;
+  height: 100%;
+  background: #f59e0b;
+}
+
+.cSession-banner-left {
+  display: flex;
+  align-items: center;
+  gap: 24px;
+  flex: 1;
+}
+
+.cSession-banner-icon-wrapper {
+  width: 72px;
+  height: 72px;
+  background: linear-gradient(135deg, #f59e0b 0%, #d97706 100%);
+  border-radius: 16px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  box-shadow: 0 8px 16px rgba(75, 146, 157, 0.25);
+  flex-shrink: 0;
+}
+
+.cSession-banner-icon {
+  font-size: 32px;
+  color: white;
+}
+
+.cSession-banner-content {
+  flex: 1;
+}
+
+.cSession-banner-content h1 {
+  color: #1f2937;
+  font-size: 26px;
+  margin: 0 0 8px 0;
+  font-weight: 700;
+  letter-spacing: -0.5px;
+}
+
+.cSession-banner-content p {
+  color: #6b7280;
+  font-size: 15px;
+  margin: 0;
+  line-height: 1.5;
+  font-weight: 400;
+}
+
+.cSession-banner-divider {
+  width: 1px;
+  height: 80px;
+  background: linear-gradient(180deg, transparent 0%, #e5e7eb 20%, #e5e7eb 80%, transparent 100%);
+  flex-shrink: 0;
+}
+
+.cSession-banner-right {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 20px;
+  min-width: 280px;
+}
+
+.cSession-banner-info {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  padding: 14px 20px;
+  background: rgba(245, 158, 11, 0.08);
+  border: 1.5px solid rgba(245, 158, 11, 0.2);
+  border-radius: 12px;
   width: 100%;
-  padding: 15px;
-  background-color: #FF6B6B;
+}
+
+.cSession-info-icon {
+  font-size: 24px;
+  color: #f59e0b;
+  flex-shrink: 0;
+}
+
+.cSession-info-text {
+  flex: 1;
+}
+
+.cSession-info-title {
+  font-size: 14px;
+  font-weight: 600;
+  color: #92400e;
+  margin: 0 0 4px 0;
+  line-height: 1;
+}
+
+.cSession-info-subtitle {
+  font-size: 13px;
+  font-weight: 400;
+  color: #b45309;
+  margin: 0;
+  line-height: 1.4;
+}
+
+.cSession-return-btn-header {
+  padding: 14px 32px;
+  background: linear-gradient(135deg, #dc2626 0%, #b91c1c 100%);
   color: white;
   border: none;
-  border-radius: 8px;
-  font-size: 16px;
-  font-weight: bold;
+  border-radius: 12px;
+  font-size: 15px;
+  font-weight: 600;
   cursor: pointer;
-  transition: background-color 0.3s;
+  transition: all 0.3s ease;
+  font-family: inherit;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  justify-content: center;
+  width: 100%;
 }
 
-.closed-session-return-btn:hover {
-  background-color: #ff5252;
+.cSession-return-btn-header:hover {
+  background: linear-gradient(135deg, #b91c1c 0%, #991b1b 100%);
 }
 
-.closed-session-return-btn:active {
-  background-color: #ff4444;
+.cSession-return-btn-header:active {
+  transform: translateY(0);
 }
 
-/* Scrollbar Styling */
-.closed-session-container::-webkit-scrollbar,
-.transactions-table-wrapper::-webkit-scrollbar {
+/* === SCROLLABLE CONTENT === */
+.cSession-scrollable-content {
+  flex: 1;
+  overflow-y: auto;
+  overflow-x: hidden;
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+  padding-right: 5px;
+}
+
+.cSession-scrollable-content::-webkit-scrollbar {
   width: 8px;
 }
 
-.closed-session-container::-webkit-scrollbar-track,
-.transactions-table-wrapper::-webkit-scrollbar-track {
+.cSession-scrollable-content::-webkit-scrollbar-track {
   background: #f1f1f1;
-  border-radius: 4px;
+  border-radius: 10px;
 }
 
-.closed-session-container::-webkit-scrollbar-thumb,
-.transactions-table-wrapper::-webkit-scrollbar-thumb {
-  background: #888;
-  border-radius: 4px;
+.cSession-scrollable-content::-webkit-scrollbar-thumb {
+  background: #4B929D;
+  border-radius: 10px;
 }
 
-.closed-session-container::-webkit-scrollbar-thumb:hover,
-.transactions-table-wrapper::-webkit-scrollbar-thumb:hover {
-  background: #555;
+.cSession-scrollable-content::-webkit-scrollbar-thumb:hover {
+  background: #3a7580;
 }
 
-/* Responsive Design */
-@media (max-width: 768px) {
-  .closed-session-container {
-    padding: 20px;
-    max-width: 95%;
+/* === SUMMARY CARDS === */
+.cSession-cards-container {
+  display: flex;
+  gap: 16px;
+  flex-wrap: wrap;
+  justify-content: center;
+}
+
+.cSession-stat-card {
+  background: white;
+  border-radius: 12px;
+  padding: 20px;
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.08);
+  flex: 1;
+  min-width: 250px;
+  max-width: 350px;
+}
+
+.cSession-card-icon {
+  width: 56px;
+  height: 56px;
+  border-radius: 10px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 24px;
+  color: white;
+  flex-shrink: 0;
+}
+
+.cSession-icon-green {
+  background: linear-gradient(135deg, #22c55e 0%, #16a34a 100%);
+}
+
+.cSession-icon-blue {
+  background: linear-gradient(135deg, #3b82f6 0%, #2563eb 100%);
+}
+
+.cSession-icon-red {
+  background: linear-gradient(135deg, #ef4444 0%, #dc2626 100%);
+}
+
+.cSession-icon-purple {
+  background: linear-gradient(135deg, #a855f7 0%, #9333ea 100%);
+}
+
+.cSession-icon-orange {
+  background: linear-gradient(135deg, #f59e0b 0%, #d97706 100%);
+}
+
+.cSession-card-content {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  flex: 1;
+}
+
+.cSession-card-label {
+  font-size: 11px;
+  font-weight: 500;
+  color: #6b7280;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+.cSession-card-value {
+  font-size: 24px;
+  font-weight: 600;
+  color: #1f2937;
+  line-height: 1;
+}
+
+.cSession-card-value.cSession-negative {
+  color: #dc2626;
+}
+
+/* === SIDE BY SIDE CONTAINER === */
+.cSession-side-by-side-container {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 20px;
+  width: 100%;
+}
+
+/* === INFO SECTIONS === */
+.cSession-info-section {
+  background: white;
+  border-radius: 12px;
+  padding: 20px;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.08);
+}
+
+.cSession-info-section.cSession-full-width {
+  grid-column: span 2;
+}
+
+.cSession-section-title {
+  font-size: 18px;
+  font-weight: 600;
+  color: #1f2937;
+  margin: 0 0 16px 0;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+/* === DETAILS GRID === */
+.cSession-details-grid {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 12px;
+}
+
+.cSession-detail-item {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 12px 16px;
+  background-color: #f8fcfd;
+  border-radius: 8px;
+  border: 2px solid transparent;
+}
+
+.cSession-detail-item.cSession-detail-highlight {
+  background-color: #fef3c7;
+  border: 2px solid #f59e0b;
+}
+
+.cSession-detail-item.cSession-detail-balanced {
+  background-color: #dcfce7;
+  border: 2px solid #22c55e;
+}
+
+.cSession-detail-item.cSession-detail-discrepancy {
+  background-color: #fee2e2;
+  border: 2px solid #ef4444;
+}
+
+.cSession-detail-label {
+  font-size: 13px;
+  font-weight: 500;
+  color: #6b7280;
+}
+
+.cSession-detail-value {
+  font-size: 14px;
+  font-weight: 600;
+  color: #1f2937;
+}
+
+.cSession-detail-value.cSession-detail-bold {
+  font-size: 16px;
+  font-weight: 700;
+}
+
+.cSession-detail-value.cSession-negative {
+  color: #dc2626;
+}
+
+.cSession-detail-value.cSession-positive {
+  color: #dc2626;
+}
+
+.cSession-detail-value.cSession-balanced {
+  color: #16a34a;
+}
+
+/* === TRANSACTION BREAKDOWN === */
+.cSession-breakdown-grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 16px;
+}
+
+.cSession-breakdown-item {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  padding: 20px;
+  background: #f8f9fa;
+  border-radius: 12px;
+  transition: transform 0.2s;
+}
+
+.cSession-breakdown-icon {
+  font-size: 28px;
+  width: 60px;
+  height: 60px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 12px;
+  flex-shrink: 0;
+  color: white;
+}
+
+.cSession-cash-icon {
+  background: linear-gradient(135deg, #22c55e 0%, #16a34a 100%);
+}
+
+.cSession-card-icon {
+  background: linear-gradient(135deg, #f59e0b 0%, #d97706 100%);
+}
+
+.cSession-void-icon {
+  background: linear-gradient(135deg, #3b82f6 0%, #2563eb 100%);
+}
+
+.cSession-breakdown-content {
+  flex: 1;
+}
+
+.cSession-breakdown-label {
+  font-size: 14px;
+  color: #6b7280;
+  margin-bottom: 6px;
+  font-weight: 500;
+}
+
+.cSession-breakdown-value {
+  font-size: 32px;
+  font-weight: 700;
+  color: #1f2937;
+}
+
+/* === NOTICE CARD (Removed - now in header) === */
+.cSession-notice-card {
+  display: none;
+}
+
+/* === ACTION SECTION (Removed - now in header) === */
+.cSession-action-section {
+  display: none;
+}
+
+/* === BUTTONS === */
+.cSession-return-btn,
+.cSession-return-btn-large {
+  padding: 12px 32px;
+  background-color: #4B929D;
+  color: white;
+  border: none;
+  border-radius: 10px;
+  font-size: 16px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.3s ease;
+  font-family: inherit;
+  box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  justify-content: center;
+}
+
+.cSession-return-btn-large {
+  padding: 14px 48px;
+  font-size: 16px;
+}
+
+.cSession-return-btn:hover,
+.cSession-return-btn-large:hover {
+  background-color: #3a7580;
+  transform: translateY(-2px);
+  box-shadow: 0 6px 12px rgba(75, 146, 157, 0.3);
+}
+
+.cSession-return-btn:active,
+.cSession-return-btn-large:active {
+  transform: translateY(0);
+}
+
+/* === RESPONSIVE DESIGN === */
+@media (max-width: 1200px) {
+  .cSession-cards-container {
+    gap: 12px;
   }
 
-  .closed-session-title {
-    font-size: 22px;
+  .cSession-stat-card {
+    min-width: 220px;
   }
 
-  .cash-drawer-grid {
+  .cSession-breakdown-grid {
+    grid-template-columns: 1fr;
+  }
+}
+
+@media (max-width: 1024px) {
+  .cSession-report {
+    width: 95%;
+    margin: 20px 10px;
+  }
+
+  .cSession-side-by-side-container {
     grid-template-columns: 1fr;
   }
 
-  .cash-drawer-value {
+  .cSession-info-section.cSession-full-width {
+    grid-column: span 1;
+  }
+
+  .cSession-breakdown-grid {
+    grid-template-columns: 1fr;
+  }
+}
+
+@media (max-width: 768px) {
+  .cSession-report {
+    width: 95%;
+    margin: 20px 10px;
+    gap: 15px;
+  }
+
+  .cSession-header-banner {
+    flex-direction: column;
+    padding: 24px;
+    gap: 24px;
+  }
+
+  .cSession-banner-left {
+    flex-direction: column;
+    text-align: center;
+    width: 100%;
+  }
+
+  .cSession-banner-divider {
+    width: 80%;
+    height: 1px;
+    background: linear-gradient(90deg, transparent 0%, #e5e7eb 20%, #e5e7eb 80%, transparent 100%);
+  }
+
+  .cSession-banner-right {
+    width: 100%;
+    align-items: stretch;
+  }
+
+  .cSession-banner-content h1 {
+    font-size: 22px;
+  }
+
+  .cSession-banner-content p {
+    font-size: 14px;
+  }
+
+  .cSession-cards-container {
+    flex-direction: column;
+  }
+
+  .cSession-stat-card {
+    max-width: 100%;
+    padding: 16px;
+  }
+
+  .cSession-card-icon {
+    width: 48px;
+    height: 48px;
     font-size: 20px;
   }
 
-  .transactions-table th,
-  .transactions-table td {
-    padding: 8px;
-    font-size: 12px;
+  .cSession-card-label {
+    font-size: 10px;
   }
 
-  .transaction-amount {
-    font-size: 14px;
+  .cSession-card-value {
+    font-size: 20px;
+  }
+
+  .cSession-info-section {
+    padding: 16px;
+  }
+
+  .cSession-section-title {
+    font-size: 16px;
+  }
+
+  .cSession-breakdown-value {
+    font-size: 24px;
+  }
+
+  .cSession-return-btn-large {
+    width: 100%;
+  }
+}
+
+@media (max-width: 480px) {
+  .cSession-stat-card {
+    flex-direction: column;
+    text-align: center;
+    gap: 12px;
+  }
+
+  .cSession-card-content {
+    align-items: center;
+  }
+
+  .cSession-detail-item {
+    flex-direction: column;
+    gap: 6px;
+    text-align: center;
+  }
+
+  .cSession-breakdown-item {
+    flex-direction: column;
+    text-align: center;
+    gap: 12px;
   }
 }

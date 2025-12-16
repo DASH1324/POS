@@ -6,6 +6,7 @@ import DataTable from "react-data-table-component";
 import OrderPanel from "./orderPanel";
 import { toast } from 'react-toastify';
 import Loading from "../home/shared/loading";
+import { UnableToLoadData, NoData } from "../home/shared/exportModal";
 import { FaFilter, FaSearch } from "react-icons/fa";
 
 const SALES_API_BASE_URL = 'http://127.0.0.1:9000';
@@ -277,9 +278,9 @@ function Orders() {
 
   const storeColumns = [
     { 
-      name: "ORDER COUNT", 
+      name: "ORDER", 
       selector: (row, index) => index + 1, 
-      cell: (row, index) => `${index + 1}.`,
+      cell: (row, index) => `${index + 1}`,
       sortable: false, 
       width: "15%" 
     }, 
@@ -1059,9 +1060,9 @@ function Orders() {
               noDataComponent={
                 <div className="orders-message-container">
                   {error ? (
-                    <span style={{ color: "red" }}>Error: {error}</span>
+                    <UnableToLoadData />
                   ) : (
-                    `No ${activeTab} orders found for the selected filters.`
+                    <NoData />
                   )}
                 </div>
               }

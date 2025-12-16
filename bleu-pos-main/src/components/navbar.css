@@ -377,6 +377,31 @@
   padding-right: 480px;
 }
 
+/* Disabled state for navigation items */
+.nav-item.disabled {
+  opacity: 0.4;
+  pointer-events: none;
+  cursor: not-allowed;
+}
+
+.nav-icons.nav-disabled .nav-item {
+  opacity: 0.4;
+  pointer-events: none;
+  cursor: not-allowed;
+}
+
+/* Disabled state for dropdown and notification icons */
+.nav-dropdown-icon.nav-disabled,
+.nav-bell-icon.nav-disabled {
+  opacity: 0.4;
+  pointer-events: none;
+  cursor: not-allowed;
+}
+
+.nav-bell-icon.nav-disabled .notification-badge {
+  display: none;
+}
+
 /* Media query for tablets */
 @media (max-width: 1024px) {
   .navbar {
