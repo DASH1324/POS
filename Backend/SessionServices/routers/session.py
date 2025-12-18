@@ -283,7 +283,7 @@ async def get_session_summary(
         conn = await get_db_connection()
         cursor = await conn.cursor()
 
-        # 1. Fetch the session details
+        # 1. Fetch the session details (including CheckedBy for manager name)
         await cursor.execute(
             """
             SELECT TOP 1 
@@ -292,7 +292,8 @@ async def get_session_summary(
                 SessionStart, 
                 SessionEnd, 
                 ClosingCash,
-                CashSalesAtClose
+                CashSalesAtClose,
+                CheckedBy
             FROM CashierSessions 
             WHERE CashierName = ? 
               AND Status = 'Closed'
@@ -306,9 +307,39 @@ async def get_session_summary(
         if not session_row:
             raise HTTPException(status_code=404, detail="No closed session found for today.")
 
-        session_id, initial_cash, start_time, end_time, closing_cash, cash_sales_at_close = session_row
+        session_id, initial_cash, start_time, end_time, closing_cash, cash_sales_at_close, checked_by = session_row
 
-        # 2. Fetch transaction counts linked to this session
+        # 2. Get full names for cashier and manager
+        cashier_full_name = cashier_name
+        manager_full_name = "N/A"
+        
+        async with httpx.AsyncClient() as client:
+            # Get cashier full name
+            try:
+                cashier_response = await client.get(
+                    f"http://localhost:4000/users/employee_name?username={cashier_name}",
+                    headers={"Authorization": f"Bearer {token}"}
+                )
+                if cashier_response.status_code == 200:
+                    cashier_data = cashier_response.json()
+                    cashier_full_name = cashier_data.get("employee_name", cashier_name)
+            except Exception as e:
+                print(f"Error fetching cashier full name: {e}")
+            
+            # Get manager full name if CheckedBy exists
+            if checked_by:
+                try:
+                    manager_response = await client.get(
+                        f"http://localhost:4000/users/employee_name?username={checked_by}",
+                        headers={"Authorization": f"Bearer {token}"}
+                    )
+                    if manager_response.status_code == 200:
+                        manager_data = manager_response.json()
+                        manager_full_name = manager_data.get("employee_name", checked_by)
+                except Exception as e:
+                    print(f"Error fetching manager full name: {e}")
+
+        # 3. Fetch transaction counts linked to this session
         await cursor.execute(
             """
             SELECT 
@@ -328,7 +359,7 @@ async def get_session_summary(
         card_tx = tx_stats[2] or 0
         void_tx = tx_stats[3] or 0
 
-        # 3. Calculate Total Sales Amount (Gross - Discounts)
+        # 4. Calculate Total Sales Amount (Gross - Discounts)
         # Note: We use CashSalesAtClose from session for cash part, but for Total Sales display
         # we calculate based on completed sales.
         await cursor.execute(
@@ -346,12 +377,13 @@ async def get_session_summary(
         total_sales_row = await cursor.fetchone()
         total_sales_calculated = total_sales_row[0] if total_sales_row and total_sales_row[0] else 0.0
 
-        # 4. Calculate Expected Cash
+        # 5. Calculate Expected Cash
         # Expected = Initial + Cash Sales
         expected_cash = float(initial_cash) + float(cash_sales_at_close or 0)
 
         return {
-            "cashier_name": cashier_name,
+            "cashier_name": cashier_full_name,
+            "manager_name": manager_full_name,
             "date": start_time.strftime("%Y-%m-%d"),
             "start_time": start_time.strftime("%I:%M %p"),
             "end_time": end_time.strftime("%I:%M %p") if end_time else "N/A",

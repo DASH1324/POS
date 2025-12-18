@@ -590,6 +590,7 @@ function OrderPanel({ order, onClose, isOpen, isStore, onUpdateStatus, onFullRef
           onlineAddOnsTotal={onlineAddOnsTotal}
           hasRefunds={hasRefunds}
           getTotalRefundAmount={getTotalRefundAmount}
+            cashierName={order.cashierName || localStorage.getItem('username') || 'Staff'} 
         />
       </div>
     </div>

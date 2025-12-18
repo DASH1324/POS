@@ -91,6 +91,16 @@ function CashierSales({ shiftLabel = "Morning Shift", shiftTime = "6:00AM – 2:
     }
   };
 
+  // Function to handle logout and redirect
+  const handleLogoutAndRedirect = () => {
+    // Clear authentication data
+    localStorage.removeItem('authToken');
+    localStorage.removeItem('username');
+    
+    // Redirect to login page
+    window.location.href = 'http://localhost:4002/';
+  };
+
   useEffect(() => {
     const username = localStorage.getItem('username');
     if (username) {
@@ -537,8 +547,11 @@ function CashierSales({ shiftLabel = "Morning Shift", shiftTime = "6:00AM – 2:
         
         toast.success(`Session closed successfully! Verified by: ${data.checkedBy}`);
         setShowPinModal(false);
-        setActiveSessionId(null);
-        setError(`Session ${data.sessionId} has been closed.`);
+        
+        // Logout and redirect after successful session close
+        setTimeout(() => {
+          handleLogoutAndRedirect();
+        }, 1500);
 
       } else if (pinModalType === 'discrepancy') {
         const response = await fetch(`${CASH_TALLY_API_URL}/report_discrepancy`, {
@@ -557,8 +570,11 @@ function CashierSales({ shiftLabel = "Morning Shift", shiftTime = "6:00AM – 2:
         
         toast.warning(`Discrepancy of ₱${Math.abs(discrepancyInSession).toFixed(2)} reported and session closed. Verified by: ${data.checkedBy}`);
         setShowPinModal(false);
-        setActiveSessionId(null);
-        setError(`Session ${data.sessionId} has been closed with discrepancy reported.`);
+        
+        // Logout and redirect after successful discrepancy report
+        setTimeout(() => {
+          handleLogoutAndRedirect();
+        }, 1500);
       }
 
     } catch (err) {

@@ -1,7 +1,9 @@
-import React from "react";
+import React, { useState, useEffect } from "react";
 import dayjs from 'dayjs';
-import qr from '../../assets/qr.png';
+import QRCode from 'qrcode';
 import "./orderPanel.css";
+
+const API_BASE_URL = 'http://127.0.0.1:9006/api';
 
 const OrderModals = ({
   // PIN Modal props
@@ -33,8 +35,112 @@ const OrderModals = ({
   onlineBaseSubtotal,
   onlineAddOnsTotal,
   hasRefunds,
-  getTotalRefundAmount
+  getTotalRefundAmount,
+  cashierName
 }) => {
+  
+  const [receiptConfig, setReceiptConfig] = useState(null);
+  const [generatedQRCode, setGeneratedQRCode] = useState(null);
+  const [cashierFullName, setCashierFullName] = useState('');
+
+  // Fetch receipt configuration and cashier full name
+  useEffect(() => {
+    if (showReceiptModal) {
+      fetchReceiptConfig();
+      fetchCashierFullName();
+    }
+  }, [showReceiptModal]);
+
+  // Generate QR code when receipt config changes
+  useEffect(() => {
+    if (receiptConfig && receiptConfig.showQR && receiptConfig.qrType === 'link' && receiptConfig.qrLink) {
+      generateQRCode(receiptConfig.qrLink);
+    } else {
+      setGeneratedQRCode(null);
+    }
+  }, [receiptConfig]);
+
+  const fetchReceiptConfig = async () => {
+    try {
+      const token = localStorage.getItem('authToken');
+      if (!token) {
+        setDefaultConfig();
+        return;
+      }
+
+      const response = await fetch(`${API_BASE_URL}/receipt/`, {
+        headers: {
+          'Authorization': `Bearer ${token}`
+        }
+      });
+
+      if (response.ok) {
+        const config = await response.json();
+        setReceiptConfig(config);
+      } else {
+        setDefaultConfig();
+      }
+    } catch (error) {
+      console.error('Error fetching receipt config:', error);
+      setDefaultConfig();
+    }
+  };
+
+  const setDefaultConfig = () => {
+    setReceiptConfig({
+      storeName: 'BLEU BEAN CAFE',
+      vatRegTin: 'XXX-XXX-XXX-XXX',
+      address1: 'Don Fabian St., Commonwealth',
+      address2: 'Quezon City, Philippines',
+      telephone: 'NULL',
+      showQR: true,
+      qrType: 'link',
+      qrLink: '',
+      qrText: 'Scan to learn more about us!',
+      additionalText: ''
+    });
+  };
+
+  const generateQRCode = async (url) => {
+    try {
+      const qrDataUrl = await QRCode.toDataURL(url, {
+        width: 200,
+        margin: 1,
+        color: {
+          dark: '#000000',
+          light: '#FFFFFF'
+        }
+      });
+      setGeneratedQRCode(qrDataUrl);
+    } catch (err) {
+      console.error('Error generating QR code:', err);
+      setGeneratedQRCode(null);
+    }
+  };
+
+  const fetchCashierFullName = async () => {
+    try {
+      const token = localStorage.getItem('authToken');
+      const username = cashierName || localStorage.getItem('username');
+      if (!token || !username) {
+        setCashierFullName('Staff');
+        return;
+      }
+
+      const response = await fetch(`http://127.0.0.1:4000/users/employee_name?username=${username}`, {
+        headers: { "Authorization": `Bearer ${token}` }
+      });
+      if (response.ok) {
+        const data = await response.json();
+        setCashierFullName(data.employee_name || username);
+      } else {
+        setCashierFullName(username);
+      }
+    } catch (error) {
+      console.error("Error fetching cashier full name:", error);
+      setCashierFullName(cashierName || 'Staff');
+    }
+  };
   
   const getPinModalTitle = () => {
     switch (pinModalType) {
@@ -144,7 +250,7 @@ const OrderModals = ({
       )}
 
       {/* Receipt Print Modal */}
-      {showReceiptModal && (
+      {showReceiptModal && receiptConfig && (
         <div className="orderpanel-modal-overlay" onClick={() => setShowReceiptModal(false)}>
           <div className="orderpanel-modal-content orderpanel-receipt-modal" onClick={(e) => e.stopPropagation()}>
             <div className="orderpanel-modal-header">
@@ -154,16 +260,16 @@ const OrderModals = ({
             <div className="orderpanel-modal-body">
               <div className="orderpanel-receipt-print" id="orderpanel-print-section">
                 <div className="orderpanel-receipt-header">
-                  <div className="orderpanel-store-name">BLEU BEAN CAFE</div>
-                  <div className="orderpanel-store-tin">VATREGTIN: XXX-XXX-XXX-XXX</div>
-                  <div className="orderpanel-store-address">Don Fabian St., Commonwealth</div>
-                  <div className="orderpanel-store-address">Quezon City, Philippines</div>
-                  <div className="orderpanel-store-contact">TEL #: NULL</div>
+                  <div className="orderpanel-store-name">{receiptConfig.storeName}</div>
+                  <div className="orderpanel-store-tin">VATREGTIN: {receiptConfig.vatRegTin}</div>
+                  <div className="orderpanel-store-address">{receiptConfig.address1}</div>
+                  <div className="orderpanel-store-address">{receiptConfig.address2}</div>
+                  <div className="orderpanel-store-contact">TEL #: {receiptConfig.telephone}</div>
                   <div className="orderpanel-receipt-divider">{dayjs(order.date).format("MM/DD/YYYY")} {dayjs(order.date).format("hh:mm A")}</div>
                   <div className="orderpanel-receipt-info">
                     <div className="orderpanel-receipt-info-left">
                       <div>INVOICE: #{order.id}</div>
-                      <div>STAFF: {order.cashierName || 'Staff'}</div>
+                      <div>STAFF: {cashierFullName || cashierName || 'staff'}</div>
                     </div>
                   </div>    
                 </div>
@@ -300,12 +406,34 @@ const OrderModals = ({
                   })()}
                 </div>
                 <div className="orderpanel-receipt-divider">------------------------------------------</div>
-                <div className="orderpanel-receipt-footer">
-                  <div className="orderpanel-qr-section">
-                    <img src={qr} alt="QR Code" className="orderpanel-qr-code" />
-                    <div className="orderpanel-qr-text">Scan to learn more about us!</div>
+                
+                {receiptConfig.showQR && (
+                  <div className="orderpanel-receipt-footer">
+                    <div className="orderpanel-qr-section">
+                      {receiptConfig.qrType === 'image' && receiptConfig.qrImagePath ? (
+                        <img 
+                          src={receiptConfig.qrImagePath} 
+                          alt="QR Code" 
+                          className="orderpanel-qr-code" 
+                        />
+                      ) : receiptConfig.qrType === 'link' && generatedQRCode ? (
+                        <img 
+                          src={generatedQRCode} 
+                          alt="QR Code" 
+                          className="orderpanel-qr-code" 
+                        />
+                      ) : (
+                        <div className="orderpanel-qr-placeholder">QR CODE</div>
+                      )}
+                      {receiptConfig.qrText && (
+                        <div className="orderpanel-qr-text">{receiptConfig.qrText}</div>
+                      )}
+                      {receiptConfig.additionalText && (
+                        <div className="orderpanel-additional-text">{receiptConfig.additionalText}</div>
+                      )}
+                    </div>
                   </div>
-                </div>
+                )}
               </div>
             </div>
 

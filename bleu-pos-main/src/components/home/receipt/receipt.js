@@ -1,25 +1,36 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { Upload, Link } from 'lucide-react';
 import "../receipt/receipt.css";
 import Sidebar from "../shared/sidebar";
 import Header from "../shared/header";
 import Loading from "../shared/loading";
 import dayjs from 'dayjs';
+import axios from 'axios';
+import QRCode from 'qrcode';
+
+const API_BASE_URL = 'http://127.0.0.1:9006/api';
 
 function Receipt() {
   const [receiptData, setReceiptData] = useState({
-    storeName: 'BLEU BEAN CAFE',
-    vatRegTin: 'XXX-XXX-XXX-XXX',
-    address1: 'Don Fabian St., Commonwealth',
-    address2: 'Quezon City, Philippines',
-    telephone: 'NULL',
+    storeName: '',
+    vatRegTin: '',
+    address1: '',
+    address2: '',
+    telephone: '',
     showQR: true,
     qrType: 'link',
     qrLink: '',
-    qrImage: null,
-    qrText: 'Scan to learn more about us!',
+    qrImagePath: '',
+    qrText: '',
     additionalText: ''
   });
+
+  const [loading, setLoading] = useState(true);
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState(null);
+  const [configExists, setConfigExists] = useState(false);
+  const [qrImagePreview, setQrImagePreview] = useState(null);
+  const [generatedQRCode, setGeneratedQRCode] = useState(null);
 
   const [previewOrder] = useState({
     id: '12345',
@@ -49,6 +60,104 @@ function Receipt() {
     ]
   });
 
+  // Get token from localStorage
+  const getToken = () => {
+    // Try different possible token keys
+    return localStorage.getItem('authToken') || 
+           localStorage.getItem('token') || 
+           localStorage.getItem('access_token');
+  };
+
+  // Fetch receipt configuration on component mount
+  useEffect(() => {
+    fetchReceiptConfig();
+  }, []);
+
+  // Generate QR code when link changes
+  useEffect(() => {
+    if (receiptData.qrType === 'link' && receiptData.qrLink) {
+      generateQRCode(receiptData.qrLink);
+    } else {
+      setGeneratedQRCode(null);
+    }
+  }, [receiptData.qrType, receiptData.qrLink]);
+
+  const generateQRCode = async (url) => {
+    try {
+      const qrDataUrl = await QRCode.toDataURL(url, {
+        width: 200,
+        margin: 1,
+        color: {
+          dark: '#000000',
+          light: '#FFFFFF'
+        }
+      });
+      setGeneratedQRCode(qrDataUrl);
+    } catch (err) {
+      console.error('Error generating QR code:', err);
+      setGeneratedQRCode(null);
+    }
+  };
+
+  const fetchReceiptConfig = async () => {
+    try {
+      setLoading(true);
+      setError(null);
+      
+      const token = getToken();
+      const response = await axios.get(`${API_BASE_URL}/receipt/`, {
+        headers: {
+          'Authorization': `Bearer ${token}`
+        }
+      });
+
+      const config = response.data;
+      setReceiptData({
+        storeName: config.storeName || '',
+        vatRegTin: config.vatRegTin || '',
+        address1: config.address1 || '',
+        address2: config.address2 || '',
+        telephone: config.telephone || '',
+        showQR: config.showQR ?? true,
+        qrType: config.qrType || 'link',
+        qrLink: config.qrLink || '',
+        qrImagePath: config.qrImagePath || '',
+        qrText: config.qrText || '',
+        additionalText: config.additionalText || ''
+      });
+
+      // If there's a QR image path, you might want to load it
+      if (config.qrImagePath) {
+        setQrImagePreview(config.qrImagePath);
+      }
+
+      setConfigExists(true);
+    } catch (err) {
+      if (err.response?.status === 404) {
+        // No config exists yet, use default values
+        setConfigExists(false);
+        setReceiptData({
+          storeName: 'BLEU BEAN CAFE',
+          vatRegTin: 'XXX-XXX-XXX-XXX',
+          address1: 'Don Fabian St., Commonwealth',
+          address2: 'Quezon City, Philippines',
+          telephone: 'NULL',
+          showQR: true,
+          qrType: 'link',
+          qrLink: '',
+          qrImagePath: '',
+          qrText: 'Scan to learn more about us!',
+          additionalText: ''
+        });
+      } else {
+        setError('Failed to load receipt configuration');
+        console.error('Error fetching receipt config:', err);
+      }
+    } finally {
+      setLoading(false);
+    }
+  };
+
   const handleInputChange = (field, value) => {
     setReceiptData(prev => ({
       ...prev,
@@ -56,27 +165,99 @@ function Receipt() {
     }));
   };
 
-  const handleImageUpload = (e) => {
+  const handleImageUpload = async (e) => {
     const file = e.target.files[0];
     if (file) {
+      // Preview the image
       const reader = new FileReader();
       reader.onloadend = () => {
-        setReceiptData(prev => ({
-          ...prev,
-          qrImage: reader.result
-        }));
+        setQrImagePreview(reader.result);
       };
       reader.readAsDataURL(file);
+
+      // TODO: Upload image to your server/storage
+      // For now, we'll just store the file name
+      // You'll need to implement an image upload endpoint
+      // Example:
+      // const formData = new FormData();
+      // formData.append('file', file);
+      // const uploadResponse = await axios.post(`${API_BASE_URL}/upload/qr-image`, formData);
+      // const imagePath = uploadResponse.data.path;
+      
+      // For demonstration, using local file name
+      handleInputChange('qrImagePath', file.name);
     }
   };
 
-  const handleSave = () => {
-    console.log('Saving receipt data:', receiptData);
-    alert('Receipt settings saved successfully!');
+  const handleSave = async () => {
+    try {
+      setSaving(true);
+      setError(null);
+
+      const token = getToken();
+      
+      const payload = {
+        storeName: receiptData.storeName,
+        vatRegTin: receiptData.vatRegTin,
+        address1: receiptData.address1,
+        address2: receiptData.address2,
+        telephone: receiptData.telephone,
+        showQR: receiptData.showQR,
+        qrType: receiptData.qrType,
+        qrLink: receiptData.qrLink || null,
+        qrImagePath: receiptData.qrImagePath || null,
+        qrText: receiptData.qrText || null,
+        additionalText: receiptData.additionalText || null
+      };
+
+      if (configExists) {
+        // Update existing configuration
+        await axios.put(`${API_BASE_URL}/receipt/`, payload, {
+          headers: {
+            'Authorization': `Bearer ${token}`,
+            'Content-Type': 'application/json'
+          }
+        });
+        alert('Receipt configuration updated successfully!');
+      } else {
+        // Create new configuration
+        await axios.post(`${API_BASE_URL}/receipt/`, payload, {
+          headers: {
+            'Authorization': `Bearer ${token}`,
+            'Content-Type': 'application/json'
+          }
+        });
+        alert('Receipt configuration created successfully!');
+        setConfigExists(true);
+      }
+
+      // Refresh the data
+      await fetchReceiptConfig();
+    } catch (err) {
+      console.error('Error saving receipt config:', err);
+      setError(err.response?.data?.detail || 'Failed to save receipt configuration');
+      alert(`Error: ${err.response?.data?.detail || 'Failed to save receipt configuration'}`);
+    } finally {
+      setSaving(false);
+    }
   };
 
   const getTotalRefundAmount = () => 0;
   const hasRefunds = false;
+
+  if (loading) {
+    return (
+      <div className='receipt-editor'>
+        <Sidebar />
+        <div className="receipt-container">
+          <Header pageTitle="Receipt" />
+          <div className="receipt-content">
+            <Loading />
+          </div>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className='receipt-editor'>
@@ -85,6 +266,19 @@ function Receipt() {
         <Header pageTitle="Receipt" />
         <div className="receipt-content">
           
+          {error && (
+            <div style={{ 
+              padding: '10px', 
+              marginBottom: '20px', 
+              backgroundColor: '#fee', 
+              border: '1px solid #fcc',
+              borderRadius: '4px',
+              color: '#c00'
+            }}>
+              {error}
+            </div>
+          )}
+
           <div className="editReceipt-container">
             {/* Editor Panel */}
             <div className="editReceipt-editor-panel">
@@ -217,6 +411,14 @@ function Receipt() {
                             placeholder="https://example.com"
                             className="editReceipt-input"
                           />
+                          {generatedQRCode && (
+                            <div className="editReceipt-qr-preview">
+                              <img 
+                                src={generatedQRCode} 
+                                alt="QR Preview"
+                              />
+                            </div>
+                          )}
                         </div>
                       ) : (
                         <div className="editReceipt-field">
@@ -229,10 +431,10 @@ function Receipt() {
                             onChange={handleImageUpload}
                             className="editReceipt-input editReceipt-file-input"
                           />
-                          {receiptData.qrImage && (
+                          {qrImagePreview && (
                             <div className="editReceipt-qr-preview">
                               <img 
-                                src={receiptData.qrImage} 
+                                src={qrImagePreview} 
                                 alt="QR Preview"
                               />
                             </div>
@@ -273,8 +475,9 @@ function Receipt() {
               <button
                 onClick={handleSave}
                 className="editReceipt-save-btn"
+                disabled={saving}
               >
-                Save
+                {saving ? 'Saving...' : 'Save'}
               </button>
             </div>
 
@@ -433,17 +636,21 @@ function Receipt() {
                   {receiptData.showQR && (
                     <div className="editReceipt-receipt-footer">
                       <div className="editReceipt-qr-section">
-                        {receiptData.qrType === 'image' && receiptData.qrImage ? (
+                        {receiptData.qrType === 'image' && qrImagePreview ? (
                           <img 
-                            src={receiptData.qrImage} 
+                            src={qrImagePreview} 
+                            alt="QR Code"
+                            className="editReceipt-qr-image"
+                          />
+                        ) : receiptData.qrType === 'link' && generatedQRCode ? (
+                          <img 
+                            src={generatedQRCode} 
                             alt="QR Code"
                             className="editReceipt-qr-image"
                           />
                         ) : (
                           <div className="editReceipt-qr-placeholder">
-                            {receiptData.qrType === 'link' && receiptData.qrLink ? 
-                              `QR: ${receiptData.qrLink.substring(0, 20)}...` : 
-                              'QR CODE'}
+                            QR CODE
                           </div>
                         )}
                         <div className="editReceipt-qr-text">{receiptData.qrText}</div>
