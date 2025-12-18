@@ -57,6 +57,16 @@
       "problemMatcher": []
     },
     {
+      "label": "Start Receipt Service",
+      "type": "shell",
+      "command": "cd Backend/ReceiptServices; python main.py",
+      "presentation": {
+        "reveal": "always",
+        "panel": "dedicated"
+      },
+      "problemMatcher": []
+    },
+    {
       "label": "Start Frontend",
       "type": "shell",
       "command": "cd bleu-pos-main; npm start",
@@ -74,6 +84,7 @@
         "Start Waste Service",
         "Start Notification Service",
         "Start Blockchain Service",
+        "Start Receipt Service",
         "Start Frontend"
       ],
       "dependsOrder": "parallel"
