@@ -3,46 +3,42 @@ pragma solidity ^0.8.0;
 
 /**
  * @title ActivityLogger
- * @dev Smart contract for logging all POST and PATCH operations from microservices
+ * @dev Smart contract for logging all POST and PATCH operations with full explorer visibility
  */
 contract ActivityLogger {
     
     struct ActivityLog {
         uint256 logId;
-        string serviceIdentifier;  // e.g., "POS_SALES", "DISCOUNTS", "PROMOTIONS"
-        string action;             // e.g., "CREATE", "UPDATE", "DELETE"
-        string entityType;         // e.g., "Sale", "Discount", "Promotion"
-        uint256 entityId;          // ID of the entity in the database
-        string actorUsername;      // Username of the person performing the action
-        address actorAddress;      // Ethereum address that logged this action
-        string changeDescription;  // Description of what changed
-        string dataHash;           // SHA-256 hash of the data
-        uint256 timestamp;         // Block timestamp
+        string serviceIdentifier;  // e.g., "POS_SALES"
+        string action;              // e.g., "CREATE"
+        string entityType;          // e.g., "Sale"
+        uint256 entityId;           // ID of the entity in the database
+        string actorUsername;       // Username of the person
+        address actorAddress;       // Ethereum address
+        string changeDescription;   // Details: "Purchased 2x Coffee, 1x Cake"
+        string dataHash;            // SHA-256 hash
+        uint256 timestamp;          // Block timestamp
     }
     
     // Storage
     mapping(uint256 => ActivityLog) public activityLogs;
     uint256 public logCount;
     
-    // Events
+    // UPDATED EVENT: Added all detail fields so they show up in the "Logs" or "Events" tab
     event ActivityLogged(
         uint256 indexed logId,
         string serviceIdentifier,
         string action,
+        string entityType,        // Now visible in explorer
+        uint256 entityId,         // Now visible in explorer
+        string actorUsername,     // Now visible in explorer
         address indexed actorAddress,
+        string changeDescription, // This holds your "What and How Much"
         uint256 timestamp
     );
     
     /**
-     * @dev Log a new activity
-     * @param _serviceIdentifier The service that performed the action
-     * @param _action The type of action (CREATE, UPDATE, DELETE)
-     * @param _entityType The type of entity affected
-     * @param _entityId The ID of the entity
-     * @param _actorUsername The username of the actor
-     * @param _changeDescription Description of the changes
-     * @param _dataHash Hash of the data for integrity verification
-     * @return The ID of the newly created log
+     * @dev Log a new activity with full event emission
      */
     function logActivity(
         string memory _serviceIdentifier,
@@ -71,47 +67,38 @@ contract ActivityLogger {
         
         logCount++;
         
+        // UPDATED EMIT: Sending all details to the Event Logs
         emit ActivityLogged(
             newLogId,
             _serviceIdentifier,
             _action,
+            _entityType,
+            _entityId,
+            _actorUsername,
             msg.sender,
+            _changeDescription,
             block.timestamp
         );
         
         return newLogId;
     }
     
-    /**
-     * @dev Get the total number of logs
-     * @return The total count of activity logs
-     */
+    // --- View Functions ---
+
     function getLogCount() public view returns (uint256) {
         return logCount;
     }
     
-    /**
-     * @dev Get a specific activity log by ID
-     * @param _logId The ID of the log to retrieve
-     * @return The ActivityLog struct
-     */
     function getLog(uint256 _logId) public view returns (ActivityLog memory) {
         require(_logId < logCount, "Log does not exist");
         return activityLogs[_logId];
     }
     
-    /**
-     * @dev Get logs by service identifier (view function for frontend)
-     * @param _serviceIdentifier The service to filter by
-     * @param _limit Maximum number of logs to return
-     * @return Array of matching ActivityLog structs
-     */
     function getLogsByService(string memory _serviceIdentifier, uint256 _limit) 
         public 
         view 
         returns (ActivityLog[] memory) 
     {
-        // First pass: count matching logs
         uint256 matchCount = 0;
         for (uint256 i = 0; i < logCount && matchCount < _limit; i++) {
             if (keccak256(bytes(activityLogs[i].serviceIdentifier)) == keccak256(bytes(_serviceIdentifier))) {
@@ -119,7 +106,6 @@ contract ActivityLogger {
             }
         }
         
-        // Second pass: populate array
         ActivityLog[] memory result = new ActivityLog[](matchCount);
         uint256 resultIndex = 0;
         for (uint256 i = 0; i < logCount && resultIndex < matchCount; i++) {
@@ -128,48 +114,9 @@ contract ActivityLogger {
                 resultIndex++;
             }
         }
-        
         return result;
     }
-    
-    /**
-     * @dev Get logs by actor username
-     * @param _actorUsername The username to filter by
-     * @param _limit Maximum number of logs to return
-     * @return Array of matching ActivityLog structs
-     */
-    function getLogsByActor(string memory _actorUsername, uint256 _limit) 
-        public 
-        view 
-        returns (ActivityLog[] memory) 
-    {
-        // First pass: count matching logs
-        uint256 matchCount = 0;
-        for (uint256 i = 0; i < logCount && matchCount < _limit; i++) {
-            if (keccak256(bytes(activityLogs[i].actorUsername)) == keccak256(bytes(_actorUsername))) {
-                matchCount++;
-            }
-        }
-        
-        // Second pass: populate array
-        ActivityLog[] memory result = new ActivityLog[](matchCount);
-        uint256 resultIndex = 0;
-        for (uint256 i = 0; i < logCount && resultIndex < matchCount; i++) {
-            if (keccak256(bytes(activityLogs[i].actorUsername)) == keccak256(bytes(_actorUsername))) {
-                result[resultIndex] = activityLogs[i];
-                resultIndex++;
-            }
-        }
-        
-        return result;
-    }
-    
-    /**
-     * @dev Verify data integrity by comparing hashes
-     * @param _logId The ID of the log to verify
-     * @param _dataHash The hash to compare against
-     * @return bool indicating if the hashes match
-     */
+
     function verifyLogIntegrity(uint256 _logId, string memory _dataHash) 
         public 
         view 
