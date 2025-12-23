@@ -333,9 +333,10 @@ class SpillageOut(BaseModel):
 @router.get("/products-sold", response_model=List[ProductSoldInfo])
 async def get_products_sold_by_session(
     session_id: int,
+    spillage_date: Optional[date] = None,  # ✅ Add date parameter
     token: str = Depends(oauth2_scheme)
 ):
-    """Get all products sold during a specific cashier session"""
+    """Get products sold during a specific cashier session on a specific date"""
     await validate_token_and_roles(token, ["admin", "manager", "staff", "cashier"])  
     
     conn = await get_db_connection()
@@ -356,7 +357,7 @@ async def get_products_sold_by_session(
                     detail=f"Session {session_id} not found"
                 )
             
-           
+            # ✅ Build query with date filter
             query = """
                 SELECT DISTINCT 
                     si.ItemName AS product_name,
@@ -365,10 +366,18 @@ async def get_products_sold_by_session(
                 INNER JOIN Sales s ON si.SaleID = s.SaleID
                 WHERE s.SessionID = ?
                     AND s.Status = 'completed'
-                ORDER BY si.Category, si.ItemName
             """
             
-            await cursor.execute(query, (session_id,))
+            params = [session_id]
+            
+            # ✅ Add date filter if provided
+            if spillage_date:
+                query += " AND CAST(s.CreatedAt AS DATE) = ?"
+                params.append(spillage_date)
+            
+            query += " ORDER BY si.Category, si.ItemName"
+            
+            await cursor.execute(query, tuple(params))
             rows = await cursor.fetchall()
             
             return [
