@@ -507,7 +507,11 @@ function Orders() {
 
         toast.success("Order accepted and is now being prepared!");
         
-        const updatedOrder = { ...orderToUpdate, status: 'PREPARING' };
+        const updatedOrder = { 
+          ...orderToUpdate, 
+          status: 'PREPARING',
+          cashierName: username
+        };
         
         setSelectedOrder(prev => 
           prev && prev.id === orderToUpdate.id 

@@ -117,12 +117,58 @@ contract ActivityLogger {
         return result;
     }
 
-    function verifyLogIntegrity(uint256 _logId, string memory _dataHash) 
-        public 
-        view 
-        returns (bool) 
+    function verifyLogIntegrity(uint256 _logId, string memory _dataHash)
+        public
+        view
+        returns (bool)
     {
         require(_logId < logCount, "Log does not exist");
         return keccak256(bytes(activityLogs[_logId].dataHash)) == keccak256(bytes(_dataHash));
+    }
+
+    // Individual getter functions for better explorer visibility
+    function getLogServiceIdentifier(uint256 _logId) public view returns (string memory) {
+        require(_logId < logCount, "Log does not exist");
+        return activityLogs[_logId].serviceIdentifier;
+    }
+
+    function getLogAction(uint256 _logId) public view returns (string memory) {
+        require(_logId < logCount, "Log does not exist");
+        return activityLogs[_logId].action;
+    }
+
+    function getLogEntityType(uint256 _logId) public view returns (string memory) {
+        require(_logId < logCount, "Log does not exist");
+        return activityLogs[_logId].entityType;
+    }
+
+    function getLogEntityId(uint256 _logId) public view returns (uint256) {
+        require(_logId < logCount, "Log does not exist");
+        return activityLogs[_logId].entityId;
+    }
+
+    function getLogActorUsername(uint256 _logId) public view returns (string memory) {
+        require(_logId < logCount, "Log does not exist");
+        return activityLogs[_logId].actorUsername;
+    }
+
+    function getLogActorAddress(uint256 _logId) public view returns (address) {
+        require(_logId < logCount, "Log does not exist");
+        return activityLogs[_logId].actorAddress;
+    }
+
+    function getLogChangeDescription(uint256 _logId) public view returns (string memory) {
+        require(_logId < logCount, "Log does not exist");
+        return activityLogs[_logId].changeDescription;
+    }
+
+    function getLogDataHash(uint256 _logId) public view returns (string memory) {
+        require(_logId < logCount, "Log does not exist");
+        return activityLogs[_logId].dataHash;
+    }
+
+    function getLogTimestamp(uint256 _logId) public view returns (uint256) {
+        require(_logId < logCount, "Log does not exist");
+        return activityLogs[_logId].timestamp;
     }
 }

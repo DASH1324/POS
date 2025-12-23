@@ -16,123 +16,12 @@ print("🚀 DEPLOYING ACTIVITYLOGGER CONTRACT")
 print("="*70 + "\n")
 
 # Configuration - Load from .env
-BUILDBEAR_RPC_URL = os.getenv("BUILDBEAR_RPC_URL", "https://rpc.buildbear.io/disciplinary-clea-8e7277ae")
-PRIVATE_KEY = os.getenv("PRIVATE_KEY", "855db9a9d5d0183fe837b02b05e9440375b89de9ad5122c643247e4d89cfec74")
+BUILDBEAR_RPC_URL = os.getenv("BUILDBEAR_RPC_URL", "https://rpc.buildbear.io/severe-electro-aed9ddc9")
+PRIVATE_KEY = os.getenv("PRIVATE_KEY", "af6fcd3bc55a8580b646553fd164cea8d25a9746b3fab9c1bdd363d73cc6b29e")
 
-# Your contract source
-CONTRACT_SOURCE = '''
-// SPDX-License-Identifier: MIT
-pragma solidity ^0.8.0;
-
-contract ActivityLogger {
-    struct ActivityLog {
-        uint256 logId;
-        string serviceIdentifier;
-        string action;
-        string entityType;
-        uint256 entityId;
-        string actorUsername;
-        address actorAddress;
-        string changeDescription;
-        string dataHash;
-        uint256 timestamp;
-    }
-    
-    mapping(uint256 => ActivityLog) public activityLogs;
-    uint256 public logCount;
-    
-    event ActivityLogged(
-        uint256 indexed logId,
-        string serviceIdentifier,
-        string action,
-        address indexed actorAddress,
-        uint256 timestamp
-    );
-    
-    function logActivity(
-        string memory _serviceIdentifier,
-        string memory _action,
-        string memory _entityType,
-        uint256 _entityId,
-        string memory _actorUsername,
-        string memory _changeDescription,
-        string memory _dataHash
-    ) public returns (uint256) {
-        uint256 newLogId = logCount;
-        activityLogs[newLogId] = ActivityLog({
-            logId: newLogId,
-            serviceIdentifier: _serviceIdentifier,
-            action: _action,
-            entityType: _entityType,
-            entityId: _entityId,
-            actorUsername: _actorUsername,
-            actorAddress: msg.sender,
-            changeDescription: _changeDescription,
-            dataHash: _dataHash,
-            timestamp: block.timestamp
-        });
-        logCount++;
-        emit ActivityLogged(newLogId, _serviceIdentifier, _action, msg.sender, block.timestamp);
-        return newLogId;
-    }
-    
-    function getLogCount() public view returns (uint256) {
-        return logCount;
-    }
-    
-    function getLog(uint256 _logId) public view returns (ActivityLog memory) {
-        require(_logId < logCount, "Log does not exist");
-        return activityLogs[_logId];
-    }
-    
-    function getLogsByService(string memory _serviceIdentifier, uint256 _limit) 
-        public view returns (ActivityLog[] memory) 
-    {
-        uint256 matchCount = 0;
-        for (uint256 i = 0; i < logCount && matchCount < _limit; i++) {
-            if (keccak256(bytes(activityLogs[i].serviceIdentifier)) == keccak256(bytes(_serviceIdentifier))) {
-                matchCount++;
-            }
-        }
-        ActivityLog[] memory result = new ActivityLog[](matchCount);
-        uint256 resultIndex = 0;
-        for (uint256 i = 0; i < logCount && resultIndex < matchCount; i++) {
-            if (keccak256(bytes(activityLogs[i].serviceIdentifier)) == keccak256(bytes(_serviceIdentifier))) {
-                result[resultIndex] = activityLogs[i];
-                resultIndex++;
-            }
-        }
-        return result;
-    }
-    
-    function getLogsByActor(string memory _actorUsername, uint256 _limit) 
-        public view returns (ActivityLog[] memory) 
-    {
-        uint256 matchCount = 0;
-        for (uint256 i = 0; i < logCount && matchCount < _limit; i++) {
-            if (keccak256(bytes(activityLogs[i].actorUsername)) == keccak256(bytes(_actorUsername))) {
-                matchCount++;
-            }
-        }
-        ActivityLog[] memory result = new ActivityLog[](matchCount);
-        uint256 resultIndex = 0;
-        for (uint256 i = 0; i < logCount && resultIndex < matchCount; i++) {
-            if (keccak256(bytes(activityLogs[i].actorUsername)) == keccak256(bytes(_actorUsername))) {
-                result[resultIndex] = activityLogs[i];
-                resultIndex++;
-            }
-        }
-        return result;
-    }
-    
-    function verifyLogIntegrity(uint256 _logId, string memory _dataHash) 
-        public view returns (bool) 
-    {
-        require(_logId < logCount, "Log does not exist");
-        return keccak256(bytes(activityLogs[_logId].dataHash)) == keccak256(bytes(_dataHash));
-    }
-}
-'''
+# Read contract source from file
+with open('contracts/ActivityLogger.sol', 'r') as f:
+    CONTRACT_SOURCE = f.read()
 
 try:
     # Connect
@@ -218,9 +107,9 @@ CONTRACT_ADDRESS={contract_address}
     print("\n📋 Next step: Your FastAPI service will auto-reload")
     print("   and detect the new contract address!")
     print("\n🌐 View on Explorer:")
-    print(f"   https://explorer.buildbear.io/intimate-warmachine-5f7e8f8e/address/{contract_address}")
+    print(f"   https://explorer.buildbear.io/severe-electro-aed9ddc9/address/{contract_address}")
     print("\n" + "="*70 + "\n")
-    
+
 except Exception as e:
     print(f"\n❌ Error: {e}")
     import traceback

@@ -25,8 +25,8 @@ oauth2_scheme = OAuth2PasswordBearer(tokenUrl="http://localhost:4000/auth/token"
 # --- Auth Configuration ---
 USER_SERVICE_ME_URL = "http://localhost:4000/auth/users/me"
 
-BUILDBEAR_RPC_URL = os.getenv("BUILDBEAR_RPC_URL", "https://rpc.buildbear.io/experienced-hawkeye-acd031fe")
-PRIVATE_KEY = os.getenv("PRIVATE_KEY", "87c90f4636d47b8c619bd925c17327d544c9bc50093a1a0d621f797b5d62e1b4")
+BUILDBEAR_RPC_URL = os.getenv("BUILDBEAR_RPC_URL", "https://rpc.buildbear.io/severe-electro-aed9ddc9")
+PRIVATE_KEY = os.getenv("PRIVATE_KEY", "af6fcd3bc55a8580b646553fd164cea8d25a9746b3fab9c1bdd363d73cc6b29e")
 CONTRACT_ADDRESS = os.getenv("CONTRACT_ADDRESS", "0x14B5BB91Ea29056F2BECEC93fFeCEcaA26AC467B")
 
 # Matches the solidity smart contract
