@@ -151,7 +151,7 @@ export const DiscountsModal = ({
     }
   }, [showDiscountsModal]);
 
-  // ✅ NEW: Helper to get per-item promotion amount
+  // ✅ Helper to get per-item promotion amount
   const getItemPromotionAmount = (itemIndex) => {
     if (!autoPromotion || !autoPromotion.itemPromotions) return 0;
     const itemPromo = autoPromotion.itemPromotions.find(p => p.itemIndex === itemIndex);
@@ -160,7 +160,6 @@ export const DiscountsModal = ({
     const item = cartItems[itemIndex];
     if (!item) return 0;
     
-    // Calculate per-item promotion amount
     return itemPromo.promotionAmount / itemPromo.quantity;
   };
 
@@ -212,12 +211,14 @@ export const DiscountsModal = ({
   const handleSelectAll = () => {
     if (!selectedDiscount) return;
     
+    // ✅ FIXED: Exclude BOGO items from select all
     const eligibleItems = cartItems
       .map((item, index) => ({ item, index }))
       .filter(({ item, index }) => 
         isItemEligible(item, selectedDiscount) && 
         getAvailableQuantity(index) > 0 &&
-        isDiscountBetterThanPromotion(item, index, selectedDiscount) // ✅ NEW CHECK
+        isDiscountBetterThanPromotion(item, index, selectedDiscount) &&
+        !item.isFromBogo // ✅ FIXED: Exclude BOGO items
       );
     
     const allSelected = eligibleItems.every(({ index }) => 
@@ -237,6 +238,8 @@ export const DiscountsModal = ({
 
   const isItemEligible = (item, discount) => {
     if (!discount) return false;
+    if (item.isFromBogo) return false; // ✅ FIXED: Exclude BOGO items
+    
     switch (discount.applicationType) {
       case 'all_products': return true;
       case 'specific_products': return discount.applicableProducts?.includes(item.name);
@@ -245,7 +248,7 @@ export const DiscountsModal = ({
     }
   };
 
-  // ✅ NEW: Check if discount is better than promotion for this specific item
+  // ✅ Check if discount is better than promotion for this specific item
   const isDiscountBetterThanPromotion = (item, itemIndex, discount) => {
     if (!discount) return false;
     
@@ -361,11 +364,14 @@ export const DiscountsModal = ({
   if (!showDiscountsModal) return null;
 
   const subtotal = getSubtotal();
+  
+  // ✅ FIXED: Filter out BOGO items from eligible items
   const eligibleItems = cartItems.filter((item, index) => 
     selectedDiscount ? 
       isItemEligible(item, selectedDiscount) && 
       getAvailableQuantity(index) > 0 &&
-      isDiscountBetterThanPromotion(item, index, selectedDiscount) // ✅ NEW CHECK
+      isDiscountBetterThanPromotion(item, index, selectedDiscount) &&
+      !item.isFromBogo // ✅ FIXED: Exclude BOGO items
     : false
   );
   
@@ -488,19 +494,24 @@ export const DiscountsModal = ({
                 )}
                 
                 {selectedDiscount && eligibleItems.length === 0 && (
-                  <p className="cDiscount-placeholder">No eligible items for this discount</p>
+                  <p className="cDiscount-placeholder">
+                    {cartItems.some(item => item.isFromBogo) 
+                      ? 'No eligible items for this discount (BOGO items cannot be discounted)'
+                      : 'No eligible items for this discount'
+                    }
+                  </p>
                 )}
                 
                 {selectedDiscount && eligibleItems.length > 0 && cartItems.map((item, index) => {
                   if (!isItemEligible(item, selectedDiscount)) return null;
+                  if (item.isFromBogo) return null; // ✅ FIXED: Don't show BOGO items
                   
                   const availableQty = getAvailableQuantity(index);
                   if (availableQty === 0) return null;
                   
-                  // ✅ NEW: Check if discount is better than promotion for this item
                   const canApplyDiscount = isDiscountBetterThanPromotion(item, index, selectedDiscount);
                   
-                  if (!canApplyDiscount) return null; // ✅ Don't show items where promo is better
+                  if (!canApplyDiscount) return null;
                   
                   const selectedQty = selectedItemsQty[index] || 0;
                   const itemPrice = item.price + getTotalAddonsPrice(item.addons);
@@ -613,6 +624,46 @@ export const TransactionSummaryModal = ({
 }) => {
   if (!showTransactionSummary) return null;
 
+  // Group cart items by promotion (same as cart panel)
+  const groupCartItemsByPromotion = (items) => {
+    const groups = [];
+    const processedIndices = new Set();
+    
+    items.forEach((item, index) => {
+      if (processedIndices.has(index)) return;
+      
+      if (item.isFromBogo && item.bogoGroupId) {
+        const bogoGroup = {
+          type: 'bogo',
+          promoId: item.bogoPromoId,
+          groupId: item.bogoGroupId,
+          promoName: item.bogoPromoName,
+          promoImage: item.bogoPromoImage,
+          discountType: item.bogoDiscountType,
+          discountValue: item.bogoDiscountValue,
+          items: []
+        };
+        
+        items.forEach((otherItem, otherIndex) => {
+          if (otherItem.isFromBogo && otherItem.bogoGroupId === item.bogoGroupId) {
+            bogoGroup.items.push({ item: otherItem, index: otherIndex });
+            processedIndices.add(otherIndex);
+          }
+        });
+        
+        groups.push(bogoGroup);
+      } else if (!processedIndices.has(index)) {
+        groups.push({
+          type: 'regular',
+          items: [{ item, index }]
+        });
+        processedIndices.add(index);
+      }
+    });
+    
+    return groups;
+  };
+
   const getCombinedDiscountsForItem = (itemIndex) => {
     const discountGroups = {};
     
@@ -636,6 +687,8 @@ export const TransactionSummaryModal = ({
     
     return Object.values(discountGroups);
   };
+
+  const groupedItems = groupCartItemsByPromotion(cartItems);
 
   return (
     <div className="trnsSummary-modal-overlay" onClick={() => setShowTransactionSummary(false)}>
@@ -665,70 +718,140 @@ export const TransactionSummaryModal = ({
           <div className="trnsSummary-order-items">
             <h4>Order Items</h4>
             <div className="trnsSummary-items-scrollable">
-              {cartItems.map((item, index) => {
-                const itemDiscount = getItemDiscount ? getItemDiscount(index) : 0;
-                const itemPromotion = getItemPromotion ? getItemPromotion(index) : 0;
-                const itemTotal = (item.price + getTotalAddonsPrice(item.addons)) * item.quantity;
-                const combinedDiscounts = getCombinedDiscountsForItem(index);
-                const itemPromotionQty = getItemPromotionQty ? getItemPromotionQty(index) : 0;
-                
-                return (
-                <div key={index} className="trnsSummary-summary-item">
-                  <div className="trnsSummary-item-row">
-                    <div className="trnsSummary-left">
-                      <div className="trnsSummary-item-name-row">
-                        <span className="trnsSummary-item-name">{item.name}</span>
-                        <span className="trnsSummary-quantity">x{item.quantity}</span>
+              {groupedItems.map((group, groupIndex) => {
+                if (group.type === 'bogo') {
+                  // BOGO Group Layout
+                  const totalPromoDiscount = group.items.reduce((sum, { index }) => {
+                    return sum + (getItemPromotion ? getItemPromotion(index) : 0);
+                  }, 0);
+
+                  return (
+                    <div key={`bogo-${group.groupId}-${groupIndex}`} className="trnsSummary-bogo-group">
+                      <div className="trnsSummary-bogo-header">
+                        <img src={group.promoImage} alt={group.promoName} className="trnsSummary-bogo-promo-image" />
+                        <div className="trnsSummary-bogo-promo-details">
+                          <div className="trnsSummary-bogo-promo-name">{group.promoName}</div>
+                          <div className="trnsSummary-bogo-promo-discount">
+                            {group.discountType === 'percentage'
+                              ? `${group.discountValue}% off`
+                              : `₱${group.discountValue} off`}
+                            {totalPromoDiscount > 0 && (
+                              <span className="trnsSummary-bogo-total-saved"> • Saved: ₱{totalPromoDiscount.toFixed(2)}</span>
+                            )}
+                          </div>
+                        </div>
                       </div>
 
-                      <div className="trnsSummary-item-details">
-                        {item.addons?.length > 0 && (
-                          <div className="trnsSummary-item-addons">
-                            {item.addons.map(addon => (
-                              <div key={addon.addonId} className="trnsSummary-addon-line">
-                                +₱{(addon.price * addon.quantity * item.quantity).toFixed(2)} : {addon.addonName} (x{addon.quantity * item.quantity})
+                      <div className="trnsSummary-bogo-items">
+                        {group.items.map(({ item, index }) => {
+                          const itemDiscount = getItemDiscount ? getItemDiscount(index) : 0;
+                          const itemTotal = (item.price + getTotalAddonsPrice(item.addons)) * item.quantity;
+                          const combinedDiscounts = getCombinedDiscountsForItem(index);
+                          
+                          return (
+                            <div key={`${group.groupId}-${index}`} className="trnsSummary-bogo-item">
+                              <div className="trnsSummary-item-name-row">
+                                <span className="trnsSummary-item-name">{item.name}</span>
+                                <span className="trnsSummary-quantity">x{item.quantity}</span>
                               </div>
-                            ))}
-                          </div>
-                        )}
+                              
+                              <div className="trnsSummary-item-details">
+                                {item.addons?.length > 0 && (
+                                  <div className="trnsSummary-item-addons">
+                                    {item.addons.map(addon => (
+                                      <div key={addon.addonId} className="trnsSummary-addon-line">
+                                        +₱{(addon.price * addon.quantity * item.quantity).toFixed(2)} : {addon.addonName} (x{addon.quantity * item.quantity})
+                                      </div>
+                                    ))}
+                                  </div>
+                                )}
 
-                        {combinedDiscounts.length > 0 && (
-                          <div className="trnsSummary-item-discount">
-                            {combinedDiscounts.map((discount, discIdx) => (
-                              <div key={discIdx} className="trnsSummary-discount-line">
-                                -₱{discount.totalAmount.toFixed(2)} : {discount.name}
-                                <span className="trnsSummary-discount-qty"> (x{discount.totalQuantity})</span>
+                                {combinedDiscounts.length > 0 && (
+                                  <div className="trnsSummary-item-discount">
+                                    {combinedDiscounts.map((discount, discIdx) => (
+                                      <div key={discIdx} className="trnsSummary-discount-line">
+                                        -₱{discount.totalAmount.toFixed(2)} : {discount.name}
+                                        <span className="trnsSummary-discount-qty"> (x{discount.totalQuantity})</span>
+                                      </div>
+                                    ))}
+                                  </div>
+                                )}
                               </div>
-                            ))}
-                          </div>
-                        )}
 
-                        {itemPromotion > 0 && autoPromotion?.itemPromotions && (
-                          <div className="trnsSummary-item-promotion">
-                            <div className="trnsSummary-promotion-line">
-                              -₱{itemPromotion.toFixed(2)} :{" "}
-                              {autoPromotion.itemPromotions.find(p => p.itemIndex === index)?.promotionName || autoPromotion.name}
-                              <span className="trnsSummary-promotion-qty"> (x{itemPromotionQty})</span>
+                              <span className="trnsSummary-item-price">
+                                ₱{itemTotal.toFixed(2)}
+                              </span>
                             </div>
-                          </div>
-                        )}
+                          );
+                        })}
                       </div>
                     </div>
+                  );
+                } else {
+                  // Regular Item Layout
+                  const { item, index } = group.items[0];
+                  const itemDiscount = getItemDiscount ? getItemDiscount(index) : 0;
+                  const itemPromotion = getItemPromotion ? getItemPromotion(index) : 0;
+                  const itemTotal = (item.price + getTotalAddonsPrice(item.addons)) * item.quantity;
+                  const combinedDiscounts = getCombinedDiscountsForItem(index);
+                  const itemPromotionQty = getItemPromotionQty ? getItemPromotionQty(index) : 0;
+                  
+                  return (
+                    <div key={index} className="trnsSummary-summary-item">
+                      <div className="trnsSummary-item-row">
+                        <div className="trnsSummary-left">
+                          <div className="trnsSummary-item-name-row">
+                            <span className="trnsSummary-item-name">{item.name}</span>
+                            <span className="trnsSummary-quantity">x{item.quantity}</span>
+                          </div>
 
-                    {/* RIGHT SIDE: total (top) and unit price (below) */}
-                    <div className="trnsSummary-right">
-                      <span className="trnsSummary-item-total">
-                        ₱{(itemTotal - itemDiscount - itemPromotion).toFixed(2)}
-                      </span>
+                          <div className="trnsSummary-item-details">
+                            {item.addons?.length > 0 && (
+                              <div className="trnsSummary-item-addons">
+                                {item.addons.map(addon => (
+                                  <div key={addon.addonId} className="trnsSummary-addon-line">
+                                    +₱{(addon.price * addon.quantity * item.quantity).toFixed(2)} : {addon.addonName} (x{addon.quantity * item.quantity})
+                                  </div>
+                                ))}
+                              </div>
+                            )}
 
-                      <span className="trnsSummary-unit-price">
-                        ₱{item.price.toFixed(2)} each
-                      </span>
+                            {combinedDiscounts.length > 0 && (
+                              <div className="trnsSummary-item-discount">
+                                {combinedDiscounts.map((discount, discIdx) => (
+                                  <div key={discIdx} className="trnsSummary-discount-line">
+                                    -₱{discount.totalAmount.toFixed(2)} : {discount.name}
+                                    <span className="trnsSummary-discount-qty"> (x{discount.totalQuantity})</span>
+                                  </div>
+                                ))}
+                              </div>
+                            )}
+
+                            {itemPromotion > 0 && autoPromotion?.itemPromotions && (
+                              <div className="trnsSummary-item-promotion">
+                                <div className="trnsSummary-promotion-line">
+                                  -₱{itemPromotion.toFixed(2)} :{" "}
+                                  {autoPromotion.itemPromotions.find(p => p.itemIndex === index)?.promotionName || autoPromotion.name}
+                                  <span className="trnsSummary-promotion-qty"> (x{itemPromotionQty})</span>
+                                </div>
+                              </div>
+                            )}
+                          </div>
+                        </div>
+
+                        <div className="trnsSummary-right">
+                          <span className="trnsSummary-item-total">
+                            ₱{(itemTotal - itemDiscount - itemPromotion).toFixed(2)}
+                          </span>
+
+                          <span className="trnsSummary-unit-price">
+                            ₱{item.price.toFixed(2)} each
+                          </span>
+                        </div>
+                      </div>
                     </div>
-
-                  </div>
-                </div>
-                );
+                  );
+                }
               })}
             </div>
           </div>

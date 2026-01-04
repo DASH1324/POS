@@ -1088,3 +1088,115 @@
 .orderpanel-refund-qty-controls {
   margin-left: -50px; /* adjust value as needed */
 }
+
+/* BOGO Group Container */
+.orderpanel-bogo-group {
+  margin-bottom: 16px;
+  border-left: 4px solid #ff9800;
+  background: #fff8f0;
+  padding: 8px 0;
+  border-radius: 4px;
+}
+
+/* BOGO Header */
+.orderpanel-bogo-header {
+  padding: 8px 16px;
+  background: transparent;
+  margin-bottom: 4px;
+}
+
+.orderpanel-bogo-promo-name {
+  font-size: 13px;
+  font-weight: 700;
+  color: #e65100;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+.orderpanel-bogo-savings {
+  font-size: 11px;
+  font-weight: 600;
+  color: #2e7d32;
+  background: #c8e6c9;
+  padding: 2px 8px;
+  border-radius: 12px;
+  margin-left: auto;
+}
+
+/* BOGO Items Container - with indentation */
+.orderpanel-bogo-items {
+  display: flex;
+  flex-direction: column;
+  padding-left: 20px; /* Indent the items */
+}
+
+/* BOGO Item Styling - remove extra styling, keep grid layout */
+.orderpanel-bogo-item {
+  display: grid;
+  grid-template-columns: 1fr 60px 80px;
+  gap: 12px;
+  padding: 12px 16px 12px 0;
+  border-bottom: 1px solid #f0f0f0;
+  align-items: start;
+  background: transparent;
+  border-left: none;
+  border-radius: 0;
+}
+
+.orderpanel-bogo-item:last-child {
+  border-bottom: none;
+}
+
+/* Promotion Badge for Non-BOGO Promotions */
+.orderpanel-promo-badge {
+  display: inline-block;
+  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  color: white;
+  font-size: 10px;
+  font-weight: 600;
+  padding: 3px 8px;
+  border-radius: 12px;
+  margin-left: 8px;
+  vertical-align: middle;
+  box-shadow: 0 2px 4px rgba(102, 126, 234, 0.3);
+}
+
+/* Promotion Info Styling */
+.orderpanel-promotion-info {
+  color: #7b1fa2;
+  font-size: 12px;
+  font-weight: 600;
+  padding: 2px 0;
+}
+
+/* Discount Info Styling (keep existing style) */
+.orderpanel-discount-info {
+  color: #c62828;
+  font-size: 12px;
+  font-weight: 600;
+  padding: 2px 0;
+}
+
+/* Responsive Design */
+@media (max-width: 768px) {
+  .orderpanel-bogo-promo-name {
+    font-size: 12px;
+    flex-wrap: wrap;
+  }
+  
+  .orderpanel-bogo-savings {
+    font-size: 10px;
+  }
+  
+  .orderpanel-bogo-items {
+    padding-left: 12px;
+  }
+  
+  .orderpanel-promo-badge {
+    font-size: 9px;
+    padding: 2px 6px;
+  }
+}

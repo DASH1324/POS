@@ -534,93 +534,94 @@ function Discounts() {
   };
 
   const handleSavePromotion = async () => {
-    if (userRole === "manager") return;
+  if (userRole === "manager") return;
 
-    if (!promotionForm.promotionName.trim()) {
-      toast.error("Please enter a promotion name");
-      return;
-    }
-    if (new Date(promotionForm.validFrom) >= new Date(promotionForm.validTo)) {
-      toast.error("'Valid From' must be before 'Valid To'");
-      return;
+  if (!promotionForm.promotionName.trim()) {
+    toast.error("Please enter a promotion name");
+    return;
+  }
+  if (new Date(promotionForm.validFrom) >= new Date(promotionForm.validTo)) {
+    toast.error("'Valid From' must be before 'Valid To'");
+    return;
+  }
+  
+  let payload = {
+      promotionName: promotionForm.promotionName,
+      description: promotionForm.description,
+      promotionType: promotionForm.promotionType,
+      validFrom: promotionForm.validFrom,
+      validTo: promotionForm.validTo,
+      status: promotionForm.status,
+  };
+
+  if (promotionForm.promotionType === 'bogo') {
+      if (!promotionForm.selectedProducts || promotionForm.selectedProducts.length === 0) {
+          toast.error("Please select at least one product for a BOGO promotion");
+          return;
+      }
+      payload.applicationType = 'specific_products';
+      payload.selectedProducts = promotionForm.selectedProducts;
+      payload.buyQuantity = promotionForm.buyQuantity;
+      payload.getQuantity = promotionForm.getQuantity;
+      payload.bogoDiscountType = promotionForm.bogoDiscountType;
+      payload.bogoDiscountValue = promotionForm.bogoDiscountValue;
+      payload.bogoPromotionImage = promotionForm.bogoPromotionImage; // ✅ ADDED
+  } else {
+      payload.applicationType = promotionForm.applicationType;
+      payload.promotionValue = promotionForm.promotionValue;
+
+      if (promotionForm.applicationType === 'specific_products') {
+          if (!promotionForm.selectedProducts || promotionForm.selectedProducts.length === 0) {
+              toast.error("Please select at least one product for this application type");
+              return;
+          }
+          payload.selectedProducts = promotionForm.selectedProducts;
+          payload.selectedCategories = [];
+      } else if (promotionForm.applicationType === 'specific_categories') {
+          if (!promotionForm.selectedCategories || promotionForm.selectedCategories.length === 0) {
+              toast.error("Please select at least one category for this application type");
+              return;
+          }
+          payload.selectedCategories = promotionForm.selectedCategories;
+          payload.selectedProducts = [];
+      } else {
+          payload.selectedProducts = [];
+          payload.selectedCategories = [];
+      }
+
+      if (promotionForm.minQuantity) {
+          payload.minQuantity = promotionForm.minQuantity;
+      }
+  }
+
+  setIsSavingPromotion(true);
+
+  const isEditing = !!editingPromotionId;
+  const endpoint = isEditing ? `/promotions/${editingPromotionId}` : "/promotions/";
+  const method = isEditing ? "PUT" : "POST";
+
+  try {
+    const result = await apiFetch(endpoint, method, payload);
+    
+    // Transform the returned detail data to list format
+    const listItem = transformPromotionDetailToList(result);
+    
+    // Update state optimistically instead of refetching
+    if (isEditing) {
+      setPromotions(prev => prev.map(p => p.id === listItem.id ? listItem : p));
+      toast.success(`Promotion '${promotionForm.promotionName}' updated successfully`);
+    } else {
+      setPromotions(prev => [listItem, ...prev]);
+      toast.success(`Promotion '${promotionForm.promotionName}' created successfully`);
     }
     
-    let payload = {
-        promotionName: promotionForm.promotionName,
-        description: promotionForm.description,
-        promotionType: promotionForm.promotionType,
-        validFrom: promotionForm.validFrom,
-        validTo: promotionForm.validTo,
-        status: promotionForm.status,
-    };
-
-    if (promotionForm.promotionType === 'bogo') {
-        if (!promotionForm.selectedProducts || promotionForm.selectedProducts.length === 0) {
-            toast.error("Please select at least one product for a BOGO promotion");
-            return;
-        }
-        payload.applicationType = 'specific_products';
-        payload.selectedProducts = promotionForm.selectedProducts;
-        payload.buyQuantity = promotionForm.buyQuantity;
-        payload.getQuantity = promotionForm.getQuantity;
-        payload.bogoDiscountType = promotionForm.bogoDiscountType;
-        payload.bogoDiscountValue = promotionForm.bogoDiscountValue;
-    } else {
-        payload.applicationType = promotionForm.applicationType;
-        payload.promotionValue = promotionForm.promotionValue;
-
-        if (promotionForm.applicationType === 'specific_products') {
-            if (!promotionForm.selectedProducts || promotionForm.selectedProducts.length === 0) {
-                toast.error("Please select at least one product for this application type");
-                return;
-            }
-            payload.selectedProducts = promotionForm.selectedProducts;
-            payload.selectedCategories = [];
-        } else if (promotionForm.applicationType === 'specific_categories') {
-            if (!promotionForm.selectedCategories || promotionForm.selectedCategories.length === 0) {
-                toast.error("Please select at least one category for this application type");
-                return;
-            }
-            payload.selectedCategories = promotionForm.selectedCategories;
-            payload.selectedProducts = [];
-        } else {
-            payload.selectedProducts = [];
-            payload.selectedCategories = [];
-        }
-
-        if (promotionForm.minQuantity) {
-            payload.minQuantity = promotionForm.minQuantity;
-        }
-    }
-
-    setIsSavingPromotion(true);
-
-    const isEditing = !!editingPromotionId;
-    const endpoint = isEditing ? `/promotions/${editingPromotionId}` : "/promotions/";
-    const method = isEditing ? "PUT" : "POST";
-
-    try {
-      const result = await apiFetch(endpoint, method, payload);
-      
-      // Transform the returned detail data to list format
-      const listItem = transformPromotionDetailToList(result);
-      
-      // Update state optimistically instead of refetching
-      if (isEditing) {
-        setPromotions(prev => prev.map(p => p.id === listItem.id ? listItem : p));
-        toast.success(`Promotion '${promotionForm.promotionName}' updated successfully`);
-      } else {
-        setPromotions(prev => [listItem, ...prev]);
-        toast.success(`Promotion '${promotionForm.promotionName}' created successfully`);
-      }
-      
-      setShowPromotionModal(false);
-    } catch (error) {
-      toast.error(`Error saving promotion: ${error.message}`);
-    } finally {
-      setIsSavingPromotion(false);
-    }
-  };
+    setShowPromotionModal(false);
+  } catch (error) {
+    toast.error(`Error saving promotion: ${error.message}`);
+  } finally {
+    setIsSavingPromotion(false);
+  }
+};
 
   const confirmDeleteDiscount = (discount) => {
     setDeleteTarget({ type: "discount", id: discount.id, name: discount.name });

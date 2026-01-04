@@ -356,6 +356,15 @@ class PartialRefundOrderRequest(BaseModel):
         if not v or len(v) == 0:
             raise ValueError('At least one item must be selected for refund')
         return v
+class ProcessingSaleItem(BaseModel):
+    id: int
+    name: str
+    quantity: int
+    price: float
+    category: str
+    addons: List[AddonItem] = []
+    itemDiscounts: List[dict] = []  # Add this if not present
+    itemPromotions: List[dict] = []  # ✅ ADD THIS LINE
 
 @router_purchase_order.get(
     "/status/processing",
@@ -377,16 +386,16 @@ async def get_processing_orders(
         async with conn.cursor() as cursor:
             logged_in_username = current_user.get("username")
             
-            # ✅ UPDATED SQL - Join with CashierSessions
+            # Main query to get sales and items
             sql = """
                 SELECT
                     s.SaleID, s.OrderType, s.PaymentMethod, s.CreatedAt, 
-                    cs.CashierName,  -- ✅ Get from CashierSessions
-                    s.TotalDiscountAmount, s.Status,
+                    cs.CashierName,
+                    s.TotalDiscountAmount, s.PromotionalDiscountAmount, s.Status,
                     si.SaleItemID, si.ItemName, si.Quantity AS ItemQuantity, si.UnitPrice, si.Category,
                     a.AddonID, a.AddonName, a.Price AS AddonPrice, sia.Quantity AS AddonQuantity
                 FROM Sales AS s
-                LEFT JOIN CashierSessions cs ON s.SessionID = cs.SessionID  -- ✅ Added JOIN
+                LEFT JOIN CashierSessions cs ON s.SessionID = cs.SessionID
                 LEFT JOIN SaleItems AS si ON s.SaleID = si.SaleID
                 LEFT JOIN SaleItemAddons AS sia ON si.SaleItemID = sia.SaleItemID
                 LEFT JOIN Addons AS a ON sia.AddonID = a.AddonID
@@ -395,10 +404,10 @@ async def get_processing_orders(
             params = []
             if user_role in ["admin", "manager"]:
                 if cashierName:
-                    sql += " AND cs.CashierName = ? "  # ✅ Changed from s.CashierName
+                    sql += " AND cs.CashierName = ? "
                     params.append(cashierName)
             else:
-                sql += " AND cs.CashierName = ? "  # ✅ Changed from s.CashierName
+                sql += " AND cs.CashierName = ? "
                 params.append(logged_in_username)
             sql += " ORDER BY s.CreatedAt ASC, s.SaleID ASC, si.SaleItemID ASC;"
             
@@ -407,16 +416,24 @@ async def get_processing_orders(
             
             orders_dict: Dict[int, dict] = {}
             
+            # First pass: Build order structure with items and addons
             for row in rows:
                 sale_id = row.SaleID
                 if sale_id not in orders_dict:
                     orders_dict[sale_id] = {
-                        "id": f"SO-{sale_id}", "date": row.CreatedAt.strftime("%B %d, %Y %I:%M %p"),
-                        "status": row.Status, "orderType": row.OrderType,
+                        "id": f"SO-{sale_id}", 
+                        "date": row.CreatedAt.strftime("%B %d, %Y %I:%M %p"),
+                        "status": row.Status, 
+                        "orderType": row.OrderType,
                         "paymentMethod": row.PaymentMethod, 
-                        "cashierName": row.CashierName or "Unknown",  # ✅ Handle null
-                        "items": 0, "orderItems": [], "total": 0, "_totalDiscount": row.TotalDiscountAmount,
-                        "_subtotal": Decimal('0.0'), "_processed_items": set()
+                        "cashierName": row.CashierName or "Unknown",
+                        "items": 0, 
+                        "orderItems": [], 
+                        "total": 0, 
+                        "_totalDiscount": row.TotalDiscountAmount,
+                        "_promoDiscount": row.PromotionalDiscountAmount,
+                        "_subtotal": Decimal('0.0'), 
+                        "_processed_items": set()
                     }
 
                 if row.SaleItemID:
@@ -426,12 +443,16 @@ async def get_processing_orders(
                         orders_dict[sale_id]["items"] += item_quantity
                         orders_dict[sale_id]["_subtotal"] += item_price * item_quantity
                         
-                        orders_dict[sale_id]["orderItems"].append(
-                            ProcessingSaleItem(
-                                id=row.SaleItemID, name=row.ItemName, quantity=item_quantity,
-                                price=float(item_price), category=row.Category, addons=[]
-                            )
-                        )
+                        orders_dict[sale_id]["orderItems"].append({
+                            "id": row.SaleItemID,
+                            "name": row.ItemName,
+                            "quantity": item_quantity,
+                            "price": float(item_price),
+                            "category": row.Category,
+                            "addons": [],
+                            "itemDiscounts": [],
+                            "itemPromotions": []
+                        })
                         orders_dict[sale_id]["_processed_items"].add(row.SaleItemID)
                     
                     if row.AddonID:
@@ -440,20 +461,87 @@ async def get_processing_orders(
                         orders_dict[sale_id]["_subtotal"] += addon_price * addon_quantity
                         
                         for item in orders_dict[sale_id]["orderItems"]:
-                            if item.id == row.SaleItemID:
-                                item.addons.append(
-                                    AddonItem(addonId=row.AddonID, addonName=row.AddonName,
-                                              price=float(addon_price), quantity=addon_quantity)
-                                )
+                            if item["id"] == row.SaleItemID:
+                                item["addons"].append({
+                                    "addonId": row.AddonID,
+                                    "addonName": row.AddonName,
+                                    "price": float(addon_price),
+                                    "quantity": addon_quantity
+                                })
                                 break
             
+            # Second pass: Fetch discounts and promotions for each item
+            for sale_id, order_data in orders_dict.items():
+                for item in order_data["orderItems"]:
+                    sale_item_id = item["id"]
+                    
+                    # Fetch item-level discounts
+                    sql_item_discounts = """
+                        SELECT 
+                            d.name AS DiscountName,
+                            sid.QuantityDiscounted,
+                            sid.DiscountAmount
+                        FROM SaleItemDiscounts sid
+                        JOIN discounts d ON sid.DiscountID = d.id
+                        WHERE sid.SaleItemID = ?
+                    """
+                    await cursor.execute(sql_item_discounts, sale_item_id)
+                    item_discount_rows = await cursor.fetchall()
+                    
+                    for disc_row in item_discount_rows:
+                        item["itemDiscounts"].append({
+                            'discountName': disc_row.DiscountName,
+                            'quantityDiscounted': disc_row.QuantityDiscounted,
+                            'discountAmount': float(disc_row.DiscountAmount)
+                        })
+                    
+                    # ✅ Fetch item-level promotions
+                    sql_item_promotions = """
+                        SELECT 
+                            p.name AS PromotionName,
+                            sip.QuantityPromoted,
+                            sip.PromotionAmount
+                        FROM SaleItemPromotions sip
+                        JOIN promotions p ON sip.PromotionID = p.id
+                        WHERE sip.SaleItemID = ?
+                    """
+                    await cursor.execute(sql_item_promotions, sale_item_id)
+                    item_promotion_rows = await cursor.fetchall()
+                    
+                    for promo_row in item_promotion_rows:
+                        item["itemPromotions"].append({
+                            'promotionName': promo_row.PromotionName,
+                            'quantityPromoted': promo_row.QuantityPromoted,
+                            'promotionAmount': float(promo_row.PromotionAmount)
+                        })
+            
+            # Build response
             response_list = []
             for sale_id, order_data in orders_dict.items():
-                final_total = order_data["_subtotal"] - order_data["_totalDiscount"]
+                total_discount = (order_data["_totalDiscount"] or Decimal('0.0')) + (order_data["_promoDiscount"] or Decimal('0.0'))
+                final_total = order_data["_subtotal"] - total_discount
                 order_data["total"] = float(final_total)
+                
+                # Convert to ProcessingSaleItem objects
+                processed_items = []
+                for item_dict in order_data["orderItems"]:
+                    processed_items.append(
+                        ProcessingSaleItem(
+                            id=item_dict["id"],
+                            name=item_dict["name"],
+                            quantity=item_dict["quantity"],
+                            price=item_dict["price"],
+                            category=item_dict["category"],
+                            addons=[AddonItem(**addon) for addon in item_dict["addons"]]
+                        )
+                    )
+                
+                order_data["orderItems"] = processed_items
                 del order_data["_subtotal"]
                 del order_data["_processed_items"]
                 del order_data["_totalDiscount"]
+                del order_data["_promoDiscount"]
+                
                 response_list.append(ProcessingOrder(**order_data))
                 
             return response_list
@@ -791,16 +879,16 @@ async def get_all_orders(current_user: dict = Depends(get_current_active_user)):
     try:
         conn = await get_db_connection()
         async with conn.cursor() as cursor:
-            # ✅ UPDATED SQL - Join with CashierSessions
+            # Main query to get sales and items
             sql = """
                 SELECT
                     s.SaleID, s.OrderType, s.PaymentMethod, s.CreatedAt, 
-                    cs.CashierName,  -- ✅ Get from CashierSessions
-                    s.TotalDiscountAmount, s.Status, s.GCashReferenceNumber,
+                    cs.CashierName,
+                    s.TotalDiscountAmount, s.PromotionalDiscountAmount, s.Status, s.GCashReferenceNumber,
                     si.SaleItemID, si.ItemName, si.Quantity AS ItemQuantity, si.UnitPrice, si.Category,
                     a.AddonID, a.AddonName, a.Price AS AddonPrice, sia.Quantity AS AddonQuantity
                 FROM Sales AS s
-                LEFT JOIN CashierSessions cs ON s.SessionID = cs.SessionID  -- ✅ Added JOIN
+                LEFT JOIN CashierSessions cs ON s.SessionID = cs.SessionID
                 LEFT JOIN SaleItems AS si ON s.SaleID = si.SaleID
                 LEFT JOIN SaleItemAddons AS sia ON si.SaleItemID = sia.SaleItemID
                 LEFT JOIN Addons AS a ON sia.AddonID = a.AddonID
@@ -812,17 +900,25 @@ async def get_all_orders(current_user: dict = Depends(get_current_active_user)):
             
             orders_dict: Dict[int, dict] = {}
             
+            # First pass: Build order structure with items and addons
             for row in rows:
                 sale_id = row.SaleID
                 if sale_id not in orders_dict:
                     orders_dict[sale_id] = {
-                        "id": f"SO-{sale_id}", "date": row.CreatedAt.strftime("%B %d, %Y %I:%M %p"),
-                        "status": row.Status, "orderType": row.OrderType,
+                        "id": f"SO-{sale_id}", 
+                        "date": row.CreatedAt.strftime("%B %d, %Y %I:%M %p"),
+                        "status": row.Status, 
+                        "orderType": row.OrderType,
                         "paymentMethod": row.PaymentMethod, 
-                        "cashierName": row.CashierName or "Unknown",  # ✅ Handle null
-                        "GCashReferenceNumber": row.GCashReferenceNumber, "items": 0, "orderItems": [],
-                        "total": 0, "_totalDiscount": row.TotalDiscountAmount,
-                        "_subtotal": Decimal('0.0'), "_processed_items": set()
+                        "cashierName": row.CashierName or "Unknown",
+                        "GCashReferenceNumber": row.GCashReferenceNumber, 
+                        "items": 0, 
+                        "orderItems": [],
+                        "total": 0, 
+                        "_totalDiscount": row.TotalDiscountAmount,
+                        "_promoDiscount": row.PromotionalDiscountAmount,
+                        "_subtotal": Decimal('0.0'), 
+                        "_processed_items": set()
                     }
 
                 if row.SaleItemID:
@@ -832,12 +928,16 @@ async def get_all_orders(current_user: dict = Depends(get_current_active_user)):
                         orders_dict[sale_id]["items"] += item_quantity
                         orders_dict[sale_id]["_subtotal"] += item_price * item_quantity
                         
-                        orders_dict[sale_id]["orderItems"].append(
-                            ProcessingSaleItem(
-                                id=row.SaleItemID, name=row.ItemName, quantity=item_quantity,
-                                price=float(item_price), category=row.Category, addons=[]
-                            )
-                        )
+                        orders_dict[sale_id]["orderItems"].append({
+                            "id": row.SaleItemID,
+                            "name": row.ItemName,
+                            "quantity": item_quantity,
+                            "price": float(item_price),
+                            "category": row.Category,
+                            "addons": [],
+                            "itemDiscounts": [],
+                            "itemPromotions": []
+                        })
                         orders_dict[sale_id]["_processed_items"].add(row.SaleItemID)
                     
                     if row.AddonID:
@@ -846,20 +946,87 @@ async def get_all_orders(current_user: dict = Depends(get_current_active_user)):
                         orders_dict[sale_id]["_subtotal"] += addon_price * addon_quantity
                         
                         for item in orders_dict[sale_id]["orderItems"]:
-                            if item.id == row.SaleItemID:
-                                item.addons.append(
-                                    AddonItem(addonId=row.AddonID, addonName=row.AddonName,
-                                              price=float(addon_price), quantity=addon_quantity)
-                                )
+                            if item["id"] == row.SaleItemID:
+                                item["addons"].append({
+                                    "addonId": row.AddonID,
+                                    "addonName": row.AddonName,
+                                    "price": float(addon_price),
+                                    "quantity": addon_quantity
+                                })
                                 break
             
+            # Second pass: Fetch discounts and promotions for each item
+            for sale_id, order_data in orders_dict.items():
+                for item in order_data["orderItems"]:
+                    sale_item_id = item["id"]
+                    
+                    # Fetch item-level discounts
+                    sql_item_discounts = """
+                        SELECT 
+                            d.name AS DiscountName,
+                            sid.QuantityDiscounted,
+                            sid.DiscountAmount
+                        FROM SaleItemDiscounts sid
+                        JOIN discounts d ON sid.DiscountID = d.id
+                        WHERE sid.SaleItemID = ?
+                    """
+                    await cursor.execute(sql_item_discounts, sale_item_id)
+                    item_discount_rows = await cursor.fetchall()
+                    
+                    for disc_row in item_discount_rows:
+                        item["itemDiscounts"].append({
+                            'discountName': disc_row.DiscountName,
+                            'quantityDiscounted': disc_row.QuantityDiscounted,
+                            'discountAmount': float(disc_row.DiscountAmount)
+                        })
+                    
+                    # ✅ Fetch item-level promotions
+                    sql_item_promotions = """
+                        SELECT 
+                            p.name AS PromotionName,
+                            sip.QuantityPromoted,
+                            sip.PromotionAmount
+                        FROM SaleItemPromotions sip
+                        JOIN promotions p ON sip.PromotionID = p.id
+                        WHERE sip.SaleItemID = ?
+                    """
+                    await cursor.execute(sql_item_promotions, sale_item_id)
+                    item_promotion_rows = await cursor.fetchall()
+                    
+                    for promo_row in item_promotion_rows:
+                        item["itemPromotions"].append({
+                            'promotionName': promo_row.PromotionName,
+                            'quantityPromoted': promo_row.QuantityPromoted,
+                            'promotionAmount': float(promo_row.PromotionAmount)
+                        })
+            
+            # Build response
             response_list = []
             for sale_id, order_data in orders_dict.items():
-                final_total = order_data["_subtotal"] - order_data["_totalDiscount"]
+                total_discount = (order_data["_totalDiscount"] or Decimal('0.0')) + (order_data["_promoDiscount"] or Decimal('0.0'))
+                final_total = order_data["_subtotal"] - total_discount
                 order_data["total"] = float(final_total)
+                
+                # Convert to ProcessingSaleItem objects
+                processed_items = []
+                for item_dict in order_data["orderItems"]:
+                    processed_items.append(
+                        ProcessingSaleItem(
+                            id=item_dict["id"],
+                            name=item_dict["name"],
+                            quantity=item_dict["quantity"],
+                            price=item_dict["price"],
+                            category=item_dict["category"],
+                            addons=[AddonItem(**addon) for addon in item_dict["addons"]]
+                        )
+                    )
+                
+                order_data["orderItems"] = processed_items
                 del order_data["_subtotal"]
                 del order_data["_processed_items"]
                 del order_data["_totalDiscount"]
+                del order_data["_promoDiscount"]
+                
                 response_list.append(ProcessingOrder(**order_data))
                 
             return response_list

@@ -522,3 +522,102 @@ body, html {
 .initialCash-submit-btn:hover {
   background-color: #0056b3;
 }
+
+.menu-promo-item {
+  position: relative;
+  border: 2px solid #FF6B6B !important;
+  background: linear-gradient(135deg, #FFF5F5 0%, #FFFFFF 100%);
+  box-shadow: 0 4px 12px rgba(255, 107, 107, 0.2) !important;
+}
+
+.menu-promo-badge {
+  position: absolute;
+  top: -10px;
+  right: -10px;
+  background: linear-gradient(135deg, #FF6B6B 0%, #EE5A6F 100%);
+  color: white;
+  padding: 6px 16px;
+  border-radius: 20px;
+  font-weight: bold;
+  font-size: 11px;
+  letter-spacing: 0.5px;
+  box-shadow: 0 3px 8px rgba(255, 107, 107, 0.4);
+  z-index: 2;
+  animation: promoBadgePulse 2s ease-in-out infinite;
+}
+
+@keyframes promoBadgePulse {
+  0%, 100% {
+    transform: scale(1);
+  }
+  50% {
+    transform: scale(1.05);
+  }
+}
+
+.menu-promo-description {
+  font-size: 13px;
+  color: #666;
+  margin: 6px 0;
+  font-weight: 500;
+}
+
+.menu-promo-discount {
+  font-size: 16px;
+  color: #FF6B6B;
+  font-weight: bold;
+  margin: 8px 0;
+  padding: 6px 12px;
+  background: rgba(255, 107, 107, 0.1);
+  border-radius: 6px;
+  display: inline-block;
+}
+
+.menu-promo-products {
+  font-size: 12px;
+  color: #555;
+  margin: 8px 0;
+  line-height: 1.5;
+}
+
+.menu-promo-products strong {
+  color: #333;
+  font-weight: 600;
+}
+
+.menu-promo-validity {
+  font-size: 11px;
+  color: #888;
+  margin-top: 8px;
+  font-style: italic;
+}
+
+.menu-promo-info-note {
+  padding: 10px 15px;
+  background: rgba(255, 107, 107, 0.08);
+  border-top: 1px solid rgba(255, 107, 107, 0.2);
+  font-size: 11px;
+  color: #666;
+  text-align: center;
+  font-style: italic;
+  margin-top: 10px;
+}
+
+/* Hover effect for promo items */
+.menu-promo-item:hover {
+  transform: translateY(-3px);
+  box-shadow: 0 6px 20px rgba(255, 107, 107, 0.3) !important;
+  border-color: #EE5A6F !important;
+}
+
+/* Responsive adjustments */
+@media (max-width: 768px) {
+  .menu-promo-badge {
+    font-size: 10px;
+    padding: 5px 12px;
+  }
+  
+  .menu-promo-discount {
+    font-size: 14px;
+  }
+}

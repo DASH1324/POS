@@ -1,10 +1,11 @@
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
-import { useNavigate } from 'react-router-dom'; // IMPORT ADDED
+import { useNavigate } from 'react-router-dom';
 import Navbar from '../navbar';
 import CartPanel from './cartPanel.js';
 import Loading from "../home/shared/loading";
 import { UnableToLoadData, NoData } from "../home/shared/exportModal";
 import { toast } from 'react-toastify';
+import PromotionsList from './PromotionsList';
 import './menu.css';
 
 const API_BASE_URL = 'http://127.0.0.1:9001/api';
@@ -13,7 +14,7 @@ const PRODUCTS_API_URL = 'http://127.0.0.1:8001';
 const MERCHANDISE_API_URL = 'http://127.0.0.1:8002/merchandise/';
 
 function Menu() {
-  const navigate = useNavigate(); // HOOK INITIALIZED
+  const navigate = useNavigate();
 
   // State for UI and Cart
   const [selectedFilter, setSelectedFilter] = useState({ type: 'all', value: 'All Products' });
@@ -25,12 +26,11 @@ function Menu() {
   const [initialCash, setInitialCash] = useState('');
   const [initialCashError, setInitialCashError] = useState('');
 
-  // NOTE: Closed session modal states removed as we now redirect.
-
   // State for data fetching, loading, and errors
   const [products, setProducts] = useState([]);
   const [merchandise, setMerchandise] = useState([]);
   const [showMerchandise, setShowMerchandise] = useState(false);
+  const [showPromotions, setShowPromotions] = useState(false);
   const [categories, setCategories] = useState({});
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState(null);
@@ -38,10 +38,6 @@ function Menu() {
   // --- PROMOTIONS STATE ---
   const [promotions, setPromotions] = useState([]);
   const [discounts, setDiscounts] = useState([]); 
-
-  const [showBogoInfoModal, setShowBogoInfoModal] = useState(false);
-  const [showBogoCongratsModal, setShowBogoCongratsModal] = useState(false);
-  const [activeBogoPromo, setActiveBogoPromo] = useState(null);
 
   // State for order details
   const [orderType, setOrderType] = useState('Dine in');
@@ -58,13 +54,6 @@ function Menu() {
         return `${promo.promotion_value}%`;
     } else if (promo.promotion_type === 'fixed') {
         return `₱${promo.promotion_value}`;
-    } else if (promo.promotion_type === 'bogo') {
-        if (promo.bogo_discount_type === 'percentage') {
-            return `${promo.bogo_discount_value}%`;
-        } else if (promo.bogo_discount_type === 'fixed_amount') {
-            return `₱${promo.bogo_discount_value}`;
-        }
-        return ''; 
     }
     return `${promo.promotion_value}`;
   };
@@ -106,21 +95,11 @@ function Menu() {
           .filter(p => p.status === 'active')
           .map(promo => {
             let promotionType = null;
-            let buyQty = 1;
-            let getQty = 1;
             let discountValue = 0;
-            let bogoDiscountType = null;
             
             const typeStr = (promo.type || '').toUpperCase();
             
-            if (typeStr.includes('BOGO')) {
-              promotionType = 'bogo';
-              const match = promo.type.match(/\((\d+)\+(\d+)\)/);
-              if (match) {
-                buyQty = parseInt(match[1]);
-                getQty = parseInt(match[2]);
-              }
-            } else if (typeStr.includes('PERCENTAGE') || typeStr.includes('%')) {
+            if (typeStr.includes('PERCENTAGE') || typeStr.includes('%')) {
               promotionType = 'percentage';
             } else if (typeStr.includes('FIXED') || typeStr.includes('₱')) {
               promotionType = 'fixed';
@@ -130,14 +109,6 @@ function Menu() {
               const numMatch = promo.value.match(/(\d+\.?\d*)/);
               if (numMatch) {
                 discountValue = parseFloat(numMatch[0]);
-              }
-              
-              if (promotionType === 'bogo') {
-                if (promo.value.includes('%')) {
-                  bogoDiscountType = 'percentage';
-                } else if (promo.value.includes('₱') || promo.value.toLowerCase().includes('off')) {
-                  bogoDiscountType = 'fixed_amount';
-                }
               }
             }
             
@@ -168,13 +139,6 @@ function Menu() {
               valid_from: promo.validFrom,
               valid_to: promo.validTo,
               application_type: applicationType,
-              buyQuantity: buyQty,
-              getQuantity: getQty,
-              buy_quantity: buyQty,
-              get_quantity: getQty,
-              bogoDiscountType: bogoDiscountType,
-              bogo_discount_type: bogoDiscountType,
-              bogo_discount_value: promotionType === 'bogo' ? discountValue : null,
               discountValue: discountValue
             };
           });
@@ -197,10 +161,8 @@ function Menu() {
 
       try {
         // 1. Check if session is closed today first
-        // If closed, checkClosedSessionToday will navigate away.
         const isClosed = await checkClosedSessionToday(token, username);
         if (isClosed) {
-          // Stop loading the rest of the menu data
           return; 
         }
 
@@ -264,7 +226,7 @@ function Menu() {
         initializeData(activeToken, activeUsername);
         fetchPromotions(activeToken);
     }
-  }, []); // Removed 'navigate' from deps to avoid re-runs/loops, safe in newer React
+  }, []);
 
   const fetchMerchandise = async () => {
     setIsLoading(true);
@@ -288,6 +250,7 @@ function Menu() {
       const data = await response.json();
       setMerchandise(data);
       setShowMerchandise(true);
+      setShowPromotions(false);
       setSelectedFilter({ type: 'merchandise', value: 'Merchandise' });
     } catch (e) {
       setError(e.message);
@@ -315,7 +278,6 @@ function Menu() {
     }
   };
 
-  // UPDATED FUNCTION: Navigates instead of showing modal
   const checkClosedSessionToday = async (token, cashierName) => {
     try {
       const response = await fetch(`${API_BASE_URL}/session/check-closed-today?cashier_name=${encodeURIComponent(cashierName)}`, {
@@ -328,11 +290,10 @@ function Menu() {
       const data = await response.json();
       
       if (data.hasClosedSessionToday) {
-        // Redirect to summary page
         navigate('/cashier-session-summary');
-        return true; // Indicate session is closed
+        return true;
       }
-      return false; // Session is not closed
+      return false;
     } catch (err) {
       console.error("Closed session check error:", err);
       setError("Could not verify closed session status. Please try refreshing.");
@@ -474,198 +435,149 @@ function Menu() {
     }
   }, [cartItems]);
 
-  const addToCart = useCallback(async (item, type = 'product') => {
+// ✅ FIXED: addToCart function that combines same BOGO promotions
+const addToCart = useCallback(async (item, type = 'product') => {
+  console.log('🛒 Adding to cart:', item.name, {
+    type,
+    isFromBogo: item.isFromBogo,
+    bogoPromoId: item.bogoPromoId,
+    bogoGroupId: item.bogoGroupId,
+    bogoPromoName: item.bogoPromoName
+  });
+  
+  if (item.Status === 'Not Available' || item.status === 'Unavailable') {
+    return;
+  }
+
+  if (type === 'product') {
+    const conflictCheck = await checkInventoryConflicts(item.id);
     
-    if (item.Status === 'Not Available' || item.status === 'Unavailable') {
+    if (!conflictCheck.canAdd) {
+      const conflictMessages = conflictCheck.conflicts.map(c => 
+        `• ${c.type.toUpperCase()}: ${c.name}\n  Needs ${c.needed}, only ${c.available} available\n  Conflicts with: "${c.conflictsWith}"`
+      ).join('\n\n');
+      
+      alert(`❌ Cannot add "${item.name}" to cart.\n\nShared limited resources:\n\n${conflictMessages}`);
       return;
     }
 
-    if (type === 'product') {
-      const conflictCheck = await checkInventoryConflicts(item.id);
-      
-      if (!conflictCheck.canAdd) {
-        const conflictMessages = conflictCheck.conflicts.map(c => 
-          `• ${c.type.toUpperCase()}: ${c.name}\n  Needs ${c.needed}, only ${c.available} available\n  Conflicts with: "${c.conflictsWith}"`
-        ).join('\n\n');
-        
-        alert(`❌ Cannot add "${item.name}" to cart.\n\nShared limited resources:\n\n${conflictMessages}`);
-        return;
-      }
-
-      const maxQtyInfo = await getDynamicMaxQuantity(item.name, item.category, item.id);
-      
-      if (maxQtyInfo && maxQtyInfo.maxQuantity === 0) {
-        alert(`Cannot add ${item.name}. ${maxQtyInfo.limitedBy || 'Insufficient stock'}`);
-        return;
-      }
-
-      let previousBogoCompleted = false;
-      let isFirstAdd = false;
-      let wasBogoAlreadyStarted = false;
-      const bogoPromo = promotions.find(p => {
-        if (!p.type || p.type !== 'bogo') return false;
-        if (!p.products) return false;
-        const applicableProducts = p.products.split(',').map(name => name.trim());
-        return applicableProducts.includes(item.name);
-      });
-
-      if (bogoPromo) {
-        const buyQuantity = bogoPromo.buyQuantity;
-        const getQuantity = bogoPromo.getQuantity;
-        const requiredTotal = buyQuantity + getQuantity;
-
-        const applicableProducts = bogoPromo.products.split(',').map(name => name.trim());
-        const buyItemName = applicableProducts[0];
-        const getItemName = applicableProducts.length > 1 ? applicableProducts[1] : buyItemName;
-
-        const hasBuyItem = cartItems.some(cartItem => cartItem.name === buyItemName);
-        const hasGetItem = cartItems.some(cartItem => cartItem.name === getItemName);
-        wasBogoAlreadyStarted = hasBuyItem || hasGetItem;
-
-        isFirstAdd = !wasBogoAlreadyStarted;
-
-        if (buyItemName === getItemName) {
-          const currentItemInCart = cartItems.find(cartItem => cartItem.name === item.name);
-          const currentQuantity = currentItemInCart ? currentItemInCart.quantity : 0;
-          previousBogoCompleted = currentQuantity >= requiredTotal;
-        } else {
-          const buyItemsInCart = cartItems.find(cartItem => cartItem.name === buyItemName);
-          const getItemsInCart = cartItems.find(cartItem => cartItem.name === getItemName);
-          const buyQty = buyItemsInCart ? buyItemsInCart.quantity : 0;
-          const getQty = getItemsInCart ? getItemsInCart.quantity : 0;
-
-          const bogoSets = Math.floor(buyQty / buyQuantity);
-          const eligibleGetItems = bogoSets * getQuantity;
-          previousBogoCompleted = (buyQty >= buyQuantity && getQty >= eligibleGetItems);
-        }
-      }
-
-      setCartItems(prev => {
-        const existingIndex = prev.findIndex(cartItem => 
-          cartItem.id === item.id && 
-          cartItem.type === 'product' && 
-          (!cartItem.addons || cartItem.addons.length === 0)
-        );
-
-        let updatedCart;
-        
-        if (existingIndex !== -1) {
-          const currentQty = prev[existingIndex].quantity;
-          const maxQty = maxQtyInfo ? maxQtyInfo.maxQuantity : 999;
-          
-          if (currentQty >= maxQty) {
-            alert(`Maximum quantity of ${maxQty} reached for ${item.name}. ${maxQtyInfo?.limitedBy || ''}`);
-            return prev;
-          }
-
-          updatedCart = [...prev];
-          const newQuantity = currentQty + 1;
-          updatedCart[existingIndex] = {
-            ...updatedCart[existingIndex],
-            quantity: newQuantity,
-            maxQuantity: maxQty,
-            limitedBy: maxQtyInfo?.limitedBy
-          };
-        } else {
-          const maxQty = maxQtyInfo ? maxQtyInfo.maxQuantity : 999;
-          const newCartItem = { 
-            ...item, 
-            quantity: 1, 
-            type: 'product', 
-            addons: [],
-            maxQuantity: maxQty,
-            limitedBy: maxQtyInfo?.limitedBy,
-            cartId: Date.now() + Math.random()
-          };
-          updatedCart = [...prev, newCartItem];
-        }
-
-        if (bogoPromo && !previousBogoCompleted) {
-          const buyQuantity = bogoPromo.buyQuantity;
-          const getQuantity = bogoPromo.getQuantity;
-
-          const applicableProducts = bogoPromo.products.split(',').map(name => name.trim());
-          const buyItemName = applicableProducts[0];
-          const getItemName = applicableProducts.length > 1 ? applicableProducts[1] : buyItemName;
-
-          let isNowCompleted = false;
-
-          if (buyItemName === getItemName) {
-            const requiredTotal = buyQuantity + getQuantity;
-            const currentItemInCart = updatedCart.find(cartItem => cartItem.name === buyItemName);
-            const currentQuantity = currentItemInCart ? currentItemInCart.quantity : 0;
-
-            if (currentQuantity >= requiredTotal) {
-              isNowCompleted = true;
-            }
-          } else {
-            const buyItemsInCart = updatedCart.find(cartItem => cartItem.name === buyItemName);
-            const getItemsInCart = updatedCart.find(cartItem => cartItem.name === getItemName);
-            const buyQty = buyItemsInCart ? buyItemsInCart.quantity : 0;
-            const getQty = getItemsInCart ? getItemsInCart.quantity : 0;
-
-            if (buyQty >= buyQuantity && getQty >= getQuantity) {
-              isNowCompleted = true;
-            }
-          }
-
-          if (isNowCompleted) {
-            const valueMatch = bogoPromo.value.match(/(\d+\.?\d*)/);
-            const discountValue = valueMatch ? valueMatch[0] : '0';
-            const isPercentage = bogoPromo.value.includes('%');
-
-            setTimeout(() => {
-              setActiveBogoPromo({
-                ...bogoPromo,
-                congratsMessage: `Congratulations! You've completed the ${bogoPromo.type} promotion and received ${discountValue}${isPercentage ? '%' : '₱'} discount!`
-              });
-              setShowBogoCongratsModal(true);
-            }, 100);
-          }
-        }
-
-        return updatedCart;
-      });
-
-      if (bogoPromo && isFirstAdd && !previousBogoCompleted) {
-        setActiveBogoPromo(bogoPromo);
-        setShowBogoInfoModal(true);
-      }
-
-    } else if (type === 'merchandise') {
-      setCartItems(prev => {
-        const existingIndex = prev.findIndex(cartItem => 
-          cartItem.id === item.MerchandiseID && cartItem.type === 'merchandise'
-        );
-      
-        if (existingIndex !== -1) {
-          const updatedCart = [...prev];
-          if (updatedCart[existingIndex].quantity >= item.MerchandiseQuantity) {
-            alert(`Maximum stock of ${item.MerchandiseQuantity} reached for ${item.MerchandiseName}`);
-            return prev;
-          }
-          updatedCart[existingIndex] = {
-            ...updatedCart[existingIndex],
-            quantity: updatedCart[existingIndex].quantity + 1
-          };
-          return updatedCart;
-        } else {
-          return [...prev, { 
-            id: item.MerchandiseID, 
-            name: item.MerchandiseName, 
-            price: item.MerchandisePrice, 
-            quantity: 1, 
-            type: 'merchandise',
-            image: item.MerchandiseImage,
-            category: 'Merchandise',
-            addons: [],
-            maxQuantity: item.MerchandiseQuantity,
-            cartId: Date.now() + Math.random()
-          }];
-        }
-      });
+    const maxQtyInfo = await getDynamicMaxQuantity(item.name, item.category, item.id);
+    
+    if (maxQtyInfo && maxQtyInfo.maxQuantity === 0) {
+      alert(`Cannot add ${item.name}. ${maxQtyInfo.limitedBy || 'Insufficient stock'}`);
+      return;
     }
-  }, [checkInventoryConflicts, getDynamicMaxQuantity, promotions, cartItems]);
+
+    setCartItems(prev => {
+      // ✅ CRITICAL FIX: For BOGO items, find existing item with SAME promoId (not groupId)
+      // This allows combining same promotions together
+      const existingIndex = prev.findIndex(cartItem => {
+        // Must match product ID and type
+        if (cartItem.id !== item.id || cartItem.type !== 'product') {
+          return false;
+        }
+        
+        // ✅ FIXED: If item is from BOGO, match by promoId (not groupId) to combine same promos
+        if (item.isFromBogo && cartItem.isFromBogo) {
+          return (
+            cartItem.bogoPromoId === item.bogoPromoId &&
+            (!cartItem.addons || cartItem.addons.length === 0)
+          );
+        }
+        
+        // ✅ FIXED: If item is NOT from BOGO, must also NOT be from BOGO
+        if (!item.isFromBogo && !cartItem.isFromBogo) {
+          return (!cartItem.addons || cartItem.addons.length === 0);
+        }
+        
+        // One is BOGO, one is not - they should NOT match
+        return false;
+      });
+
+      let updatedCart;
+      
+      if (existingIndex !== -1) {
+        // Update existing item quantity
+        const currentQty = prev[existingIndex].quantity;
+        const maxQty = maxQtyInfo ? maxQtyInfo.maxQuantity : 999;
+        
+        if (currentQty >= maxQty) {
+          alert(`Maximum quantity of ${maxQty} reached for ${item.name}. ${maxQtyInfo?.limitedBy || ''}`);
+          return prev;
+        }
+
+        updatedCart = [...prev];
+        const newQuantity = currentQty + 1;
+        updatedCart[existingIndex] = {
+          ...updatedCart[existingIndex],
+          quantity: newQuantity,
+          maxQuantity: maxQty,
+          limitedBy: maxQtyInfo?.limitedBy
+        };
+        
+        console.log(`✅ Updated existing item quantity to ${newQuantity}`);
+      } else {
+        // Add new item to cart
+        const maxQty = maxQtyInfo ? maxQtyInfo.maxQuantity : 999;
+        const newCartItem = { 
+          ...item, 
+          quantity: 1, 
+          type: 'product', 
+          addons: [],
+          maxQuantity: maxQty,
+          limitedBy: maxQtyInfo?.limitedBy,
+          cartId: Date.now() + Math.random(),
+          // ✅ CRITICAL: Preserve ALL BOGO properties
+          isFromBogo: item.isFromBogo || false,
+          bogoPromoId: item.bogoPromoId || null,
+          bogoGroupId: item.bogoGroupId || null,
+          bogoPromoName: item.bogoPromoName || null,
+          bogoPromoImage: item.bogoPromoImage || null,
+          bogoDiscountType: item.bogoDiscountType || null,
+          bogoDiscountValue: item.bogoDiscountValue || null
+        };
+        updatedCart = [...prev, newCartItem];
+        
+        console.log(`✅ Added new item with bogoGroupId: ${item.bogoGroupId || 'none'}`);
+      }
+
+      return updatedCart;
+    });
+
+  } else if (type === 'merchandise') {
+    setCartItems(prev => {
+      const existingIndex = prev.findIndex(cartItem => 
+        cartItem.id === item.MerchandiseID && cartItem.type === 'merchandise'
+      );
+    
+      if (existingIndex !== -1) {
+        const updatedCart = [...prev];
+        if (updatedCart[existingIndex].quantity >= item.MerchandiseQuantity) {
+          alert(`Maximum stock of ${item.MerchandiseQuantity} reached for ${item.MerchandiseName}`);
+          return prev;
+        }
+        updatedCart[existingIndex] = {
+          ...updatedCart[existingIndex],
+          quantity: updatedCart[existingIndex].quantity + 1
+        };
+        return updatedCart;
+      } else {
+        return [...prev, { 
+          id: item.MerchandiseID, 
+          name: item.MerchandiseName, 
+          price: item.MerchandisePrice, 
+          quantity: 1, 
+          type: 'merchandise',
+          image: item.MerchandiseImage,
+          category: 'Merchandise',
+          addons: [],
+          maxQuantity: item.MerchandiseQuantity,
+          cartId: Date.now() + Math.random()
+        }];
+      }
+    });
+  }
+}, [checkInventoryConflicts, getDynamicMaxQuantity]);
 
   const handleInitialCashSubmit = async (e) => {
     e.preventDefault();
@@ -783,6 +695,18 @@ function Menu() {
     if (error && error.includes("Authorization Error")) return <div className="menu-status-container"><UnableToLoadData /></div>;
     if (error && error.includes("session is invalid")) return <div className="menu-status-container"><NoData /></div>;
     if (error) return <div className="menu-status-container">Error: {error}</div>;
+    if (showPromotions) {
+      return (
+        <>
+          <div className="menu-product-list-header">
+            <h2 className="menu-selected-category-title">Promotions</h2>
+          </div>
+          <div className="menu-product-grid-container">
+            <PromotionsList promotions={promotions} addToCart={addToCart} products={products} />
+          </div>
+        </>
+      );
+    }
     if (showMerchandise) {
       return (
         <>
@@ -847,71 +771,7 @@ function Menu() {
         </div>
       )}
 
-      {/* --- BOGO INFO MODAL (FIRST ADD) --- */}
-      {showBogoInfoModal && activeBogoPromo && (
-        <div className="initialCash-modal-overlay">
-          <div className="initialCash-modal-container">
-            <div className="initialCash-modal-title">Promotional Offer!</div>
-            <div className="initialCash-modal-description" style={{textAlign: "left", alignSelf: 'stretch', padding: "0 20px"}}>
-              This product is part of the <strong>"{activeBogoPromo.name}"</strong> promotion ({activeBogoPromo.type}).
-              <br/><br/>
-              <strong>Discount:</strong> {activeBogoPromo.value}
-              <br/><br/>
-              Add the required products to the cart to receive the promotional discount.
-              <br/><br/>
-              <strong>Eligible Products:</strong> {activeBogoPromo.products}
-            </div>
-            <button
-              onClick={() => {
-                setShowBogoInfoModal(false);
-                setActiveBogoPromo(null);
-              }}
-              className="initialCash-submit-btn"
-              style={{marginTop: "20px"}}
-            >
-              OK
-            </button>
-          </div>
-        </div>
-      )}
-
-      {/* --- BOGO CONGRATULATIONS MODAL (COMPLETION) --- */}
-      {showBogoCongratsModal && activeBogoPromo && (
-        <div className="initialCash-modal-overlay">
-          <div className="initialCash-modal-container">
-            <div className="initialCash-modal-title" style={{color: '#4CAF50'}}>
-              🎉 Congratulations! 🎉
-            </div>
-            <div className="initialCash-modal-description" style={{textAlign: "center", alignSelf: 'stretch', padding: "0 20px"}}>
-              <strong>{activeBogoPromo.congratsMessage || `You've completed the ${activeBogoPromo.type} promotion!`}</strong>
-              <br/><br/>
-              <div style={{textAlign: "left"}}>
-                <strong>Promotion:</strong> {activeBogoPromo.name}
-                <br/>
-                <strong>Type:</strong> {activeBogoPromo.type}
-                <br/>
-                <strong>Discount:</strong> {activeBogoPromo.value}
-                <br/>
-                <strong>Products:</strong> {activeBogoPromo.products}
-              </div>
-              <br/>
-              <em>The discount will be automatically applied at checkout!</em>
-            </div>
-            <button
-              onClick={() => {
-                setShowBogoCongratsModal(false);
-                setActiveBogoPromo(null);
-              }}
-              className="initialCash-submit-btn"
-              style={{marginTop: "20px", backgroundColor: '#4CAF50'}}
-            >
-              Awesome!
-            </button>
-          </div>
-        </div>
-      )}
-
-      <div className={`menu-page-content ${showInitialCashModal || showBogoInfoModal || showBogoCongratsModal ? 'blurred' : ''}`}>
+      <div className={`menu-page-content ${showInitialCashModal ? 'blurred' : ''}`}>
         {isLoading && <Loading />}
         
         {!isLoading && (
@@ -921,10 +781,11 @@ function Menu() {
                 <div className={`menu-all-products-btn ${selectedFilter.type === 'all' ? 'active' : ''}`}
                   onClick={() => {
                     setShowMerchandise(false);
+                    setShowPromotions(false);
                     setSelectedFilter({ type: 'all', value: 'All Products' });
                   }}>
                   ALL PRODUCTS
-                </div>
+                </div>  
               </div>
               {Object.entries(categories).map(([group, items]) => (
                 <div className="menu-category-group" key={group}>
@@ -946,6 +807,16 @@ function Menu() {
                   ))}
                 </div>
               ))}
+              <div className="menu-category-group">
+                <div className={`menu-all-products-btn ${selectedFilter.type === 'promotions' ? 'active' : ''}`}
+                  onClick={() => {
+                    setShowMerchandise(false);
+                    setShowPromotions(true);
+                    setSelectedFilter({ type: 'promotions', value: 'Promotions' });
+                  }}>
+                  PROMOTIONS
+                </div>
+              </div>
               <div className="menu-category-group">
                 <div className={`menu-all-products-btn ${selectedFilter.type === 'merchandise' ? 'active' : ''}`}
                   onClick={fetchMerchandise}>

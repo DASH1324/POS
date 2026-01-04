@@ -1,5 +1,3 @@
-# routers/promotion.py
-
 from fastapi import APIRouter, Depends, HTTPException, status, BackgroundTasks
 from fastapi.security import OAuth2PasswordBearer
 from pydantic import BaseModel, Field
@@ -120,6 +118,7 @@ class PromotionBase(BaseModel):
     getQuantity: Optional[int] = Field(1, ge=1)
     bogoDiscountType: Optional[Literal['percentage', 'fixed_amount']] = None
     bogoDiscountValue: Optional[Decimal] = Field(None, gt=0)
+    bogoPromotionImage: Optional[str] = None  # ✅ ADDED
     minQuantity: Optional[int] = Field(None, ge=1)
     validFrom: date
     validTo: date
@@ -127,6 +126,12 @@ class PromotionBase(BaseModel):
 
 class PromotionCreate(PromotionBase): pass
 class PromotionUpdate(PromotionBase): pass
+
+class PromotionDetailOut(PromotionBase):
+    id: int
+
+class BogoProductInfo(BaseModel):
+    product_name: str
 
 class PromotionListOut(BaseModel):
     id: int
@@ -137,9 +142,13 @@ class PromotionListOut(BaseModel):
     validFrom: str
     validTo: str
     status: str
-
-class PromotionDetailOut(PromotionBase):
-    id: int
+    bogoProducts: Optional[List[BogoProductInfo]] = None
+    buyQuantity: Optional[int] = None  # ✅ ADD THIS
+    getQuantity: Optional[int] = None  # ✅ ADD THIS
+    bogoDiscountType: Optional[str] = None  # ✅ ADD THIS
+    bogoDiscountValue: Optional[Decimal] = None  # ✅ ADD THIS
+    bogoPromotionImage: Optional[str] = None  # ✅ ADD THIS
+    description: Optional[str] = None  # ✅ ADD THIS
 
 # HELPER FUNCTION FOR EXTERNAL DATA 
 async def get_external_choices(token: str):
@@ -164,12 +173,12 @@ async def get_external_choices(token: str):
 @promotions_router.post("/", response_model=PromotionDetailOut, status_code=status.HTTP_201_CREATED)
 async def create_promotion(
     promotion_data: PromotionCreate, 
-    background_tasks: BackgroundTasks, # OPTIMIZED: Added BackgroundTasks
+    background_tasks: BackgroundTasks,
     token: str = Depends(oauth2_scheme)
 ):
     user_data = await validate_token_and_roles(token, allowed_roles=["admin"])
     
-    # Validation logic remains the same
+    # Validation logic
     if promotion_data.promotionType == 'bogo':
         promotion_data.applicationType = 'specific_products'
         if not promotion_data.selectedProducts:
@@ -191,35 +200,40 @@ async def create_promotion(
         conn.autocommit = False
         async with conn.cursor() as cursor:
             sql_insert = """
-                INSERT INTO promotions (name, description, application_type, promotion_type, promotion_value, buy_quantity, get_quantity, 
-                 bogo_discount_type, bogo_discount_value, min_quantity, valid_from, valid_to, status, isDeleted)
-                OUTPUT INSERTED.id VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0);
+                INSERT INTO promotions (name, description, application_type, promotion_type, promotion_value, 
+                 buy_quantity, get_quantity, bogo_discount_type, bogo_discount_value, bogo_promotion_image, 
+                 min_quantity, valid_from, valid_to, status, isDeleted)
+                OUTPUT INSERTED.id VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0);
             """
-            await cursor.execute(sql_insert, promotion_data.promotionName, promotion_data.description, promotion_data.applicationType,
-                                 promotion_data.promotionType, promotion_data.promotionValue, promotion_data.buyQuantity, promotion_data.getQuantity,
-                                 promotion_data.bogoDiscountType, promotion_data.bogoDiscountValue, promotion_data.minQuantity,
-                                 promotion_data.validFrom.isoformat(), promotion_data.validTo.isoformat(), promotion_data.status)
+            await cursor.execute(sql_insert, 
+                promotion_data.promotionName, 
+                promotion_data.description, 
+                promotion_data.applicationType,
+                promotion_data.promotionType, 
+                promotion_data.promotionValue, 
+                promotion_data.buyQuantity, 
+                promotion_data.getQuantity,
+                promotion_data.bogoDiscountType, 
+                promotion_data.bogoDiscountValue,
+                promotion_data.bogoPromotionImage,  # ✅ ADDED
+                promotion_data.minQuantity,
+                promotion_data.validFrom.isoformat(), 
+                promotion_data.validTo.isoformat(), 
+                promotion_data.status
+            )
             new_id = (await cursor.fetchone())[0]
 
+            # Insert products
             for product_name in promotion_data.selectedProducts:
-                await cursor.execute("INSERT INTO promotion_applicable_products (promotion_id, product_name) VALUES (?, ?)", new_id, product_name)
+                await cursor.execute(
+                    "INSERT INTO promotion_applicable_products (promotion_id, product_name) VALUES (?, ?)", 
+                    new_id, product_name
+                )
+            
             for category_name in promotion_data.selectedCategories:
                 await cursor.execute("INSERT INTO promotion_applicable_categories (promotion_id, category_name) VALUES (?, ?)", new_id, category_name)
             
             await conn.commit()
-            
-            # Removed blockchain logging
-            #blockchain_data = promotion_data.model_dump()
-            #blockchain_data['id'] = new_id
-            #background_tasks.add_task(
-            #    log_to_blockchain_background,
-            #    token=token,
-            #    action="CREATE",
-            #    entity_id=new_id,
-            #    actor_username=user_data.get("username", "unknown"),
-            #    change_description=f"Created promotion: {promotion_data.promotionName}",
-            #    data=blockchain_data
-            #)
             
             return PromotionDetailOut(id=new_id, **promotion_data.model_dump())
     except Exception as e:
@@ -281,19 +295,33 @@ async def get_all_promotions(token: str = Depends(oauth2_scheme)):
                         value_str = f"₱{p.bogo_discount_value:.2f} off"
                 
                 products_str = ""
+                bogo_products_list = None
+                
                 if p.application_type == 'all_products':
                     products_str = "All Products"
                 elif p.application_type == 'specific_categories':
                     products_str = p.categories if p.categories else "N/A"
-                else: # 'specific_products' or BOGO
+                else:
                     products_str = p.products if p.products else "N/A"
+                    
+                    # Fetch BOGO product info if it's a BOGO promotion
+                    if p.promotion_type == 'bogo':
+                        await cursor.execute(
+                            "SELECT product_name FROM promotion_applicable_products WHERE promotion_id=?", 
+                            p.id
+                        )
+                        bogo_rows = await cursor.fetchall()
+                        bogo_products_list = [
+                            BogoProductInfo(product_name=row.product_name) for row in bogo_rows
+                        ]
                 
                 results.append(PromotionListOut(
                     id=p.id, name=p.name, type=type_str, value=value_str,
                     products=products_str,
                     validFrom=p.valid_from.strftime('%Y-%m-%d'),
                     validTo=p.valid_to.strftime('%Y-%m-%d'),
-                    status=p.status
+                    status=p.status,
+                    bogoProducts=bogo_products_list
                 ))
             return results
     except Exception as e:
@@ -301,6 +329,81 @@ async def get_all_promotions(token: str = Depends(oauth2_scheme)):
     finally:
         if conn: await conn.close()
 
+@promotions_router.get("/bogo", response_model=List[PromotionListOut])
+async def get_bogo_promotions(token: str = Depends(oauth2_scheme)):
+    """Get all active BOGO promotions with their images and details"""
+    await validate_token_and_roles(token, allowed_roles=["admin", "manager", "cashier"])
+    conn = await get_db_connection()
+    try:
+        await auto_expire_promotions(conn)
+        
+        async with conn.cursor() as cursor:
+            sql = """
+                SELECT 
+                    p.id, p.name, p.description, p.application_type, p.promotion_type, 
+                    p.promotion_value, p.buy_quantity, p.get_quantity, p.bogo_discount_type, 
+                    p.bogo_discount_value, p.bogo_promotion_image, p.valid_from, 
+                    p.valid_to, p.status,
+                    (
+                        STUFF((SELECT DISTINCT ', ' + pp.product_name
+                               FROM promotion_applicable_products pp
+                               WHERE pp.promotion_id = p.id
+                               FOR XML PATH('')), 1, 2, '')
+                    ) as products
+                FROM promotions p
+                WHERE p.isDeleted = 0 
+                  AND p.promotion_type = 'bogo'
+                  AND p.status = 'active'
+                ORDER BY p.id DESC
+            """
+            await cursor.execute(sql)
+            promotions = await cursor.fetchall()
+            
+            results = []
+            for p in promotions:
+                type_str = f"BOGO ({p.buy_quantity}+{p.get_quantity})"
+                
+                value_str = ""
+                if p.bogo_discount_type == 'percentage':
+                    value_str = f"{p.bogo_discount_value:.1f}% off"
+                else:
+                    value_str = f"₱{p.bogo_discount_value:.2f} off"
+                
+                products_str = p.products if p.products else "N/A"
+                
+                # Fetch BOGO product info
+                await cursor.execute(
+                    "SELECT product_name FROM promotion_applicable_products WHERE promotion_id=?", 
+                    p.id
+                )
+                bogo_rows = await cursor.fetchall()
+                bogo_products_list = [
+                    BogoProductInfo(product_name=row.product_name) for row in bogo_rows
+                ]
+                
+                results.append(PromotionListOut(
+                    id=p.id, 
+                    name=p.name, 
+                    type=type_str, 
+                    value=value_str,
+                    products=products_str,
+                    validFrom=p.valid_from.strftime('%Y-%m-%d'),
+                    validTo=p.valid_to.strftime('%Y-%m-%d'),
+                    status=p.status,
+                    bogoProducts=bogo_products_list,
+                    buyQuantity=p.buy_quantity,  # ✅ ADD THIS
+                    getQuantity=p.get_quantity,  # ✅ ADD THIS
+                    bogoDiscountType=p.bogo_discount_type,  # ✅ ADD THIS
+                    bogoDiscountValue=p.bogo_discount_value,  # ✅ ADD THIS
+                    bogoPromotionImage=p.bogo_promotion_image,  # ✅ ADD THIS
+                    description=p.description  # ✅ ADD THIS
+                ))
+            return results
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Database error on get BOGO promotions: {e}")
+    finally:
+        if conn: await conn.close()
+        
 @promotions_router.get("/{promotion_id}", response_model=PromotionDetailOut)
 async def get_promotion(promotion_id: int, token: str = Depends(oauth2_scheme)):
     await validate_token_and_roles(token, allowed_roles=["admin", "manager", "cashier"])
@@ -320,7 +423,6 @@ async def get_promotion(promotion_id: int, token: str = Depends(oauth2_scheme)):
             await cursor.execute("SELECT category_name FROM promotion_applicable_categories WHERE promotion_id=?", promotion_id)
             categories = [row.category_name for row in await cursor.fetchall()]
 
-            # ✅ FIX: Convert datetime from database to date for Pydantic model
             return PromotionDetailOut(
                 id=base_data['id'], 
                 promotionName=base_data['name'], 
@@ -333,14 +435,14 @@ async def get_promotion(promotion_id: int, token: str = Depends(oauth2_scheme)):
                 buyQuantity=base_data['buy_quantity'],
                 getQuantity=base_data['get_quantity'], 
                 bogoDiscountType=base_data['bogo_discount_type'],
-                bogoDiscountValue=base_data['bogo_discount_value'], 
+                bogoDiscountValue=base_data['bogo_discount_value'],
+                bogoPromotionImage=base_data['bogo_promotion_image'],  # ✅ ADDED
                 minQuantity=base_data['min_quantity'],
                 validFrom=base_data['valid_from'].date(),  
                 validTo=base_data['valid_to'].date(),      
                 status=base_data['status']
             )
     except Exception as e:
-        # The error you are seeing is caught here
         raise HTTPException(status_code=500, detail=f"Database error on get one: {e}")
     finally:
         if conn: await conn.close()
@@ -349,12 +451,12 @@ async def get_promotion(promotion_id: int, token: str = Depends(oauth2_scheme)):
 async def update_promotion(
     promotion_id: int, 
     promotion_data: PromotionUpdate, 
-    background_tasks: BackgroundTasks, # OPTIMIZED: Added BackgroundTasks
+    background_tasks: BackgroundTasks,
     token: str = Depends(oauth2_scheme)
 ):
     user_data = await validate_token_and_roles(token, allowed_roles=["admin"])
     
-    # Validation logic remains the same
+    # Validation logic
     if promotion_data.promotionType == 'bogo':
         promotion_data.applicationType = 'specific_products'
         if not promotion_data.selectedProducts:
@@ -381,35 +483,45 @@ async def update_promotion(
             old_data = dict(zip([c[0] for c in cursor.description], old_row))
             
             sql_update = """
-                UPDATE promotions SET name=?, description=?, application_type=?, promotion_type=?, promotion_value=?, buy_quantity=?, get_quantity=?,
-                    bogo_discount_type=?, bogo_discount_value=?, min_quantity=?, valid_from=?, valid_to=?, status=?, updated_at=GETDATE()
+                UPDATE promotions SET 
+                    name=?, description=?, application_type=?, promotion_type=?, promotion_value=?, 
+                    buy_quantity=?, get_quantity=?, bogo_discount_type=?, bogo_discount_value=?, 
+                    bogo_promotion_image=?, min_quantity=?, valid_from=?, valid_to=?, status=?, 
+                    updated_at=GETDATE()
                 WHERE id=? AND isDeleted = 0
             """
-            await cursor.execute(sql_update, promotion_data.promotionName, promotion_data.description, promotion_data.applicationType,
-                                 promotion_data.promotionType, promotion_data.promotionValue, promotion_data.buyQuantity, promotion_data.getQuantity,
-                                 promotion_data.bogoDiscountType, promotion_data.bogoDiscountValue, promotion_data.minQuantity,
-                                 promotion_data.validFrom.isoformat(), promotion_data.validTo.isoformat(), promotion_data.status, promotion_id)
+            await cursor.execute(sql_update, 
+                promotion_data.promotionName, 
+                promotion_data.description, 
+                promotion_data.applicationType,
+                promotion_data.promotionType, 
+                promotion_data.promotionValue, 
+                promotion_data.buyQuantity, 
+                promotion_data.getQuantity,
+                promotion_data.bogoDiscountType, 
+                promotion_data.bogoDiscountValue,
+                promotion_data.bogoPromotionImage,  # ✅ ADDED
+                promotion_data.minQuantity,
+                promotion_data.validFrom.isoformat(), 
+                promotion_data.validTo.isoformat(), 
+                promotion_data.status, 
+                promotion_id
+            )
             if cursor.rowcount == 0: raise HTTPException(status_code=404, detail="Promotion not found")
 
+            # Delete and re-insert products
             await cursor.execute("DELETE FROM promotion_applicable_products WHERE promotion_id=?", promotion_id)
             for product_name in promotion_data.selectedProducts:
-                await cursor.execute("INSERT INTO promotion_applicable_products (promotion_id, product_name) VALUES (?, ?)", promotion_id, product_name)
+                await cursor.execute(
+                    "INSERT INTO promotion_applicable_products (promotion_id, product_name) VALUES (?, ?)", 
+                    promotion_id, product_name
+                )
+            
             await cursor.execute("DELETE FROM promotion_applicable_categories WHERE promotion_id=?", promotion_id)
             for category_name in promotion_data.selectedCategories:
                 await cursor.execute("INSERT INTO promotion_applicable_categories (promotion_id, category_name) VALUES (?, ?)", promotion_id, category_name)
 
             await conn.commit()
-            
-            # Removed blockchain logging 
-            #blockchain_data = {"before": old_data, "after": promotion_data.model_dump(), "id": promotion_id}
-            #change_desc = f"Updated promotion: {promotion_data.promotionName}"
-            #
-            #background_tasks.add_task(
-            #    log_to_blockchain_background,
-            #    token=token, action="UPDATE", entity_id=promotion_id,
-            #    actor_username=user_data.get("username", "unknown"),
-            #    change_description=change_desc, data=blockchain_data
-            #)
             
             return PromotionDetailOut(id=promotion_id, **promotion_data.model_dump())
     except Exception as e:
@@ -424,7 +536,7 @@ async def update_promotion(
 @promotions_router.delete("/{promotion_id}", status_code=status.HTTP_200_OK)
 async def delete_promotion(
     promotion_id: int, 
-    background_tasks: BackgroundTasks, # OPTIMIZED: Added BackgroundTasks
+    background_tasks: BackgroundTasks,
     token: str = Depends(oauth2_scheme)
 ):
     user_data = await validate_token_and_roles(token, allowed_roles=["admin"])
@@ -442,18 +554,6 @@ async def delete_promotion(
             
             await conn.commit()
             
-            # Removed blockchain logging 
-            #blockchain_data = {"id": promotion_id, "name": promotion_data.get('name')}
-            #background_tasks.add_task(
-            #    log_to_blockchain_background,
-            #    token=token,
-            #    action="DELETE",
-            #    entity_id=promotion_id,
-            #    actor_username=user_data.get("username", "unknown"),
-            #    change_description=f"Deleted promotion: {promotion_data.get('name')}",
-            #    data=blockchain_data
-            #)
-            
             return {"message": "Promotion deleted successfully."}
     except Exception as e:
         await conn.rollback()
@@ -462,4 +562,7 @@ async def delete_promotion(
         conn.autocommit = True
         if conn: await conn.close()
 
+
+
 router.include_router(promotions_router)
+

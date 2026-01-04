@@ -1505,3 +1505,98 @@
   font-style: italic;
   margin-left: 8px;
 }
+
+/* BOGO Group Styles for Transaction Summary */
+.trnsSummary-bogo-group {
+  border: 2px solid #4CAF50;
+  border-radius: 8px;
+  padding: 12px;
+  margin-bottom: 12px;
+  background: #f9fff9;
+}
+
+.trnsSummary-bogo-header {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding-bottom: 12px;
+  border-bottom: 1px solid #e0e0e0;
+  margin-bottom: 12px;
+}
+
+.trnsSummary-bogo-promo-image {
+  width: 50px;
+  height: 50px;
+  border-radius: 6px;
+  object-fit: cover;
+}
+
+.trnsSummary-bogo-promo-details {
+  flex: 1;
+}
+
+.trnsSummary-bogo-promo-name {
+  font-weight: 600;
+  font-size: 14px;
+  color: #2c3e50;
+  margin-bottom: 4px;
+}
+
+.trnsSummary-bogo-promo-discount {
+  font-size: 12px;
+  color: #4CAF50;
+  font-weight: 500;
+}
+
+.trnsSummary-bogo-total-saved {
+  color: #f39c12;
+  font-weight: 600;
+}
+
+.trnsSummary-bogo-items {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.trnsSummary-bogo-item {
+  padding: 8px;
+  background: white;
+  border-radius: 6px;
+  border: 1px solid #e8f5e9;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.trnsSummary-bogo-item .trnsSummary-item-name-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.trnsSummary-bogo-item .trnsSummary-item-name {
+  font-size: 13px;
+  font-weight: 500;
+  color: #2c3e50;
+}
+
+.trnsSummary-bogo-item .trnsSummary-quantity {
+  font-size: 12px;
+  color: #666;
+  background: #f0f0f0;
+  padding: 2px 8px;
+  border-radius: 4px;
+}
+
+.trnsSummary-bogo-item .trnsSummary-item-price {
+  font-size: 13px;
+  font-weight: 600;
+  color: #2c3e50;
+  text-align: right;
+}
+
+.trnsSummary-bogo-item .trnsSummary-item-details {
+  font-size: 11px;
+  color: #666;
+}

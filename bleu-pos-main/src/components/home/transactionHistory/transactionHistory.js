@@ -33,6 +33,29 @@ const STATISTICS_API_URL = "http://127.0.0.1:9000/auth/transaction_history/stati
 const CASHIERS_API_URL = "http://127.0.0.1:4000/users/cashiers";
 const PARTIAL_REFUND_API_URL = "http://127.0.0.1:9000/auth/purchase_orders";
 
+// Helper function to calculate correct refund amount
+const calculateCorrectRefundAmount = (transaction) => {
+  // If no refund info, return 0
+  if (!transaction.refundInfo || !transaction.refundInfo.totalRefundAmount) {
+    return 0;
+  }
+
+  // Check if this is a full refund by comparing total refunded quantity to total order quantity
+  const totalOrderQty = transaction.items?.reduce((sum, item) => sum + (item.quantity || 0), 0) || 0;
+  const totalRefundedQty = transaction.items?.reduce((sum, item) => sum + (item.refundedQuantity || 0), 0) || 0;
+  
+  const isFullRefund = totalRefundedQty === totalOrderQty && totalOrderQty > 0;
+  
+  if (isFullRefund) {
+    // For full refunds, return the actual total paid
+    const actualTotal = transaction.subtotal - (transaction.discount || 0) - (transaction.promotionalDiscount || 0);
+    return Math.max(0, actualTotal);
+  }
+  
+  // For partial refunds, use the backend's calculation
+  return transaction.refundInfo.totalRefundAmount;
+};
+
 // Helper function for displaying date ranges
 const getPeriodText = (dateRange, customStart, customEnd) => {
   const today = new Date();
@@ -161,10 +184,9 @@ function TransactionHistory() {
   const [isExportModalOpen, setIsExportModalOpen] = useState(false);
   const [isNoDataModalOpen, setIsNoDataModalOpen] = useState(false);
   const [isRefundReasonModalOpen, setIsRefundReasonModalOpen] = useState(false);
-  const [refundType, setRefundType] = useState(null); // 'full' or 'partial'
+  const [refundType, setRefundType] = useState(null);
   const [pendingRefundData, setPendingRefundData] = useState(null);
   
-  // New state for statistics from backend
   const [statistics, setStatistics] = useState({
     total_transactions: 0,
     completed_transactions: 0,
@@ -279,7 +301,6 @@ function TransactionHistory() {
     const now = new Date();
     switch (dateRange) {
       case "today":
-        // Use local date, not UTC
         const todayStart = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 0, 0, 0, 0);
         const todayEnd = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 23, 59, 59, 999);
         return [todayStart, todayEnd];
@@ -306,7 +327,6 @@ function TransactionHistory() {
     }
   }, [dateRange, customStart, customEnd]);
 
-  // Helper to format dates in local timezone
   const formatLocalDate = (date) => {
     if (!date) return null;
     const year = date.getFullYear();
@@ -328,20 +348,17 @@ function TransactionHistory() {
     fetchTransactions(token);
   }, [navigate, fetchTransactions]);
 
-  // Fetch statistics whenever filters change
   useEffect(() => {
     const token = getAuthToken();
     if (!token) return;
 
     const [start, end] = getDateRange();
     
-    // Format dates in local timezone
     const startDate = formatLocalDate(start);
     const endDate = formatLocalDate(end);
 
     fetchStatistics(token, startDate, endDate, activeTab);
   }, [dateRange, customStart, customEnd, activeTab, fetchStatistics, getDateRange]);
-
 
   const handleClearFilters = () => {
     setSearchTerm("");
@@ -368,15 +385,12 @@ function TransactionHistory() {
     }
   };
 
-  // Handle full refund
-  // Handle full refund
   const handleFullRefund = async (transaction) => {
     setRefundType('full');
     setPendingRefundData({ transaction });
     setIsRefundReasonModalOpen(true);
   };
 
-  // Process full refund with reason
   const processFullRefund = async (refundReason) => {
     try {
       const token = localStorage.getItem("authToken");
@@ -428,14 +442,12 @@ function TransactionHistory() {
     }
   };
 
-  // Handle partial refund
   const handlePartialRefund = async (transaction, itemsToRefund) => {
     setRefundType('partial');
     setPendingRefundData({ transaction, itemsToRefund });
     setIsRefundReasonModalOpen(true);
   };
 
-  // Process partial refund with reason
   const processPartialRefund = async (refundReason) => {
     try {
       const token = localStorage.getItem("authToken");
@@ -587,10 +599,12 @@ function TransactionHistory() {
       .filter(t => t.status.toLowerCase() === 'completed' && t.paymentMethod === 'GCASH')
       .reduce((sum, t) => sum + parseFloat(t.total || 0), 0);
     
-    const totalRefunds = statistics.refund_summary?.totalRefundAmount || 0;
+    // Calculate total refunds using the correct calculation
+    const totalRefunds = filteredTransactions
+      .reduce((sum, t) => sum + calculateCorrectRefundAmount(t), 0);
     
     return { totalSales, totalTransactions, totalRefunds, cashSales, digitalSales };
-  }, [filteredTransactions, statistics]);
+  }, [filteredTransactions]);
 
   const formatCurrency = (amount) => {
     return `₱${parseFloat(amount).toFixed(2)}`;
@@ -679,7 +693,8 @@ function TransactionHistory() {
   const columns = [
     { name: "ORDER", selector: (row) => row.id, cell: (row) => <div style={{ fontWeight: "600" }}>{row.id}</div>, sortable: true, width: "7%", left: true },
     {
-      name: "DATE & TIME", selector: (row) => new Date(row.date),
+      name: "DATE & TIME", 
+      selector: (row) => new Date(row.date),
       cell: (row) => {
         const date = new Date(row.date);
         return (
@@ -688,14 +703,33 @@ function TransactionHistory() {
             <div style={{ fontSize: "12px", color: "#666" }}>{date.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', hour12: true })}</div>
           </div>
         );
-      }, sortable: true, width: "10%",
+      }, 
+      sortable: true, 
+      width: "10%",
     },
     { name: "CASHIER", selector: (row) => cashiersMap[row.cashierName] || row.cashierName || "—", width: "10%", center: true },
     { name: "ORDER TYPE", selector: (row) => row.orderType || "—", width: "10%", center: true },
     { name: "ITEMS", selector: (row) => row.items?.map(item => item.name).join(', ') || "—", width: "13%", center: true },
     { name: "QTY", selector: (row) => row.items?.reduce((sum, item) => sum + (item.quantity || 0), 0) || 0, sortable: true, width: "5%", center: true },
     { name: "SUBTOTAL", selector: (row) => row.subtotal, cell: (row) => <div style={{ fontWeight: "600" }}>₱{parseFloat(row.subtotal).toFixed(2)}</div>, sortable: true, width: "10%", center: true },
-    { name: "REFUND", selector: (row) => row.refundInfo?.totalRefundAmount || 0, cell: (row) => <div style={{ color: row.refundInfo?.totalRefundAmount > 0 ? "#dc3545" : "#666" }}>₱{parseFloat(row.refundInfo?.totalRefundAmount || 0).toFixed(2)}</div>, sortable: true, width: "7%", center: true },
+    { 
+      name: "REFUND", 
+      selector: (row) => calculateCorrectRefundAmount(row), 
+      cell: (row) => {
+        const refundAmount = calculateCorrectRefundAmount(row);
+        return (
+          <div style={{ 
+            color: refundAmount > 0 ? "#dc3545" : "#666",
+            fontWeight: refundAmount > 0 ? "600" : "400"
+          }}>
+            ₱{parseFloat(refundAmount).toFixed(2)}
+          </div>
+        );
+      }, 
+      sortable: true, 
+      width: "7%", 
+      center: true 
+    },
     { name: "DISCOUNT", selector: (row) => (row.discount || 0) + (row.promotionalDiscount || 0), cell: (row) => <div>₱{(parseFloat(row.discount || 0) + parseFloat(row.promotionalDiscount || 0)).toFixed(2)}</div>, sortable: true, width: "8%", center: true },
     {
       name: "PAYMENT",
