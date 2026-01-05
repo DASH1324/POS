@@ -1,4 +1,6 @@
 import React, { useState, useEffect } from 'react';
+import { toast } from 'react-toastify';
+import Loading from "../home/shared/loading";
 import './menu.css';
 
 const PromotionsList = React.memo(({ addToCart, products = [] }) => {
@@ -59,22 +61,6 @@ const PromotionsList = React.memo(({ addToCart, products = [] }) => {
     fetchBogoPromotions();
   }, []);
 
-  const getHowToGetPromotion = (promo) => {
-    const applicableProducts = promo.bogoProducts 
-      ? promo.bogoProducts.map(p => p.product_name) 
-      : [];
-    
-    const buyQty = promo.buyQuantity || 1;
-    const getQty = promo.getQuantity || 1;
-
-    if (applicableProducts.length === 1) {
-      return `Click "Add to Cart" to automatically add ${buyQty + getQty} ${applicableProducts[0]} to your cart`;
-    } else if (applicableProducts.length === 2) {
-      return `Click "Add to Cart" to automatically add ${buyQty} ${applicableProducts[0]} and ${getQty} ${applicableProducts[1]} to your cart`;
-    }
-    return 'Click "Add to Cart" to apply this promotion';
-  };
-
   const handleAddPromotion = async (promo) => {
     if (addingPromo) return;
     
@@ -93,7 +79,7 @@ const PromotionsList = React.memo(({ addToCart, products = [] }) => {
       console.log('🔢 Buy quantity:', buyQty, 'Get quantity:', getQty);
 
       if (applicableProducts.length === 0) {
-        alert('No products found for this promotion.');
+        toast.error('No products found for this promotion.');
         setAddingPromo(null);
         return;
       }
@@ -108,7 +94,7 @@ const PromotionsList = React.memo(({ addToCart, products = [] }) => {
       for (const productName of applicableProducts) {
         const product = products.find(p => p.name === productName);
         if (!product) {
-          alert(`Product "${productName}" not found in menu.`);
+          toast.error(`Product "${productName}" not found in menu.`);
           setAddingPromo(null);
           return;
         }
@@ -142,7 +128,7 @@ const PromotionsList = React.memo(({ addToCart, products = [] }) => {
           await new Promise(resolve => setTimeout(resolve, 200));
         }
         
-        alert(`Added ${totalQty} ${product.name} to cart!\nPromotion: ${promo.name}`);
+        toast.success(`Added ${totalQty} ${product.name} to cart!\nPromotion: ${promo.name}`);
       } 
       // Case 2: Different products (Buy X of Product A, Get Y of Product B)
       else if (applicableProducts.length === 2) {
@@ -188,25 +174,21 @@ const PromotionsList = React.memo(({ addToCart, products = [] }) => {
           await new Promise(resolve => setTimeout(resolve, 200));
         }
         
-        alert(`Added promotion to cart!\n${buyQty} ${buyProduct.name} + ${getQty} ${getProduct.name}\nPromotion: ${promo.name}`);
+        toast.success(`Added promotion to cart!\n${buyQty} ${buyProduct.name} + ${getQty} ${getProduct.name}\nPromotion: ${promo.name}`);
       }
       
       console.log('✅ Promotion added successfully with unique group ID:', uniqueGroupId);
       
     } catch (error) {
       console.error('❌ Error adding promotion:', error);
-      alert('Failed to add promotion to cart. Please try again.');
+      toast.error('Failed to add promotion to cart. Please try again.');
     } finally {
       setAddingPromo(null);
     }
   };
 
   if (loading) {
-    return (
-      <div className="menu-loading">
-        Loading BOGO promotions...
-      </div>
-    );
+    return <Loading />;
   }
 
   if (error) {
@@ -244,13 +226,15 @@ const PromotionsList = React.memo(({ addToCart, products = [] }) => {
 
         let promoDescription = '';
         if (applicableProducts.length === 1) {
-          promoDescription = `Buy ${buyQty}, Get ${getQty} (Same Product)`;
+          promoDescription = `Buy ${buyQty} ${applicableProducts[0]}, Get ${getQty} ${applicableProducts[0]}`;
         } else if (applicableProducts.length === 2) {
           promoDescription = `Buy ${buyQty} ${applicableProducts[0]}, Get ${getQty} ${applicableProducts[1]}`;
         }
 
         const isAdding = addingPromo === promo.id;
         const isAvailable = isPromotionAvailable(promo);
+
+        const badgeText = discountText ? `BOGO - ${discountText}` : 'BOGO PROMO';
 
         return (
           <div key={promo.id} className="menu-product-item menu-promo-item">
@@ -259,7 +243,7 @@ const PromotionsList = React.memo(({ addToCart, products = [] }) => {
                 <span>Unavailable</span>
               </div>
             )}
-            <div className="menu-promo-badge">BOGO PROMO</div>
+            <div className="menu-promo-badge">{badgeText}</div>
             
             <div className="menu-product-main">
               <div className="menu-product-img-container">
@@ -283,22 +267,6 @@ const PromotionsList = React.memo(({ addToCart, products = [] }) => {
                 
                 <div className="menu-promo-description">
                   {promoDescription}
-                </div>
-                
-                {discountText && (
-                  <div className="menu-promo-discount">
-                    {discountText}
-                  </div>
-                )}
-                
-                <div className="menu-promo-how-to-get">
-                  <strong>How to get this promotion:</strong>
-                  <br />
-                  {getHowToGetPromotion(promo)}
-                </div>
-                
-                <div className="menu-promo-products">
-                  <strong>Products:</strong> {applicableProducts.join(', ')}
                 </div>
                 
                 <div className="menu-promo-validity">

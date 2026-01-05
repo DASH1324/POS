@@ -18,21 +18,18 @@ export const generatePDFReport = async (metrics, selectedCategory, selectedCashi
     let topProductsImage = '';
 
     try {
-      // Capture Sales Trend Chart
       const salesTrendChart = document.querySelector('.salesMonChartCard:nth-child(1) .recharts-wrapper');
       if (salesTrendChart) {
         const canvas = await html2canvas(salesTrendChart, { scale: 2, useCORS: true, backgroundColor: '#ffffff' });
         salesTrendImage = canvas.toDataURL('image/png');
       }
 
-      // Capture Category Pie Chart
       const categoryChart = document.querySelector('.salesMonChartCard:nth-child(2) .recharts-wrapper');
       if (categoryChart) {
         const canvas = await html2canvas(categoryChart, { scale: 2, useCORS: true, backgroundColor: '#ffffff' });
         categoryPieImage = canvas.toDataURL('image/png');
       }
 
-      // Capture Top Products Bar Chart
       const topProductsChart = document.querySelector('.salesMonChartCardWide .recharts-wrapper');
       if (topProductsChart) {
         const canvas = await html2canvas(topProductsChart, { scale: 2, useCORS: true, backgroundColor: '#ffffff' });
@@ -64,13 +61,11 @@ export const generatePDFReport = async (metrics, selectedCategory, selectedCashi
           </td>
           <td class="text-center">${item.quantity}</td>
           <td class="text-right bold">₱${item.revenue.toFixed(2)}</td>
-          <td>${item.orderType || '—'}</td>
           <td>${item.cashier || '—'}</td>
         </tr>
       `;
     }).join('');
 
-    // Complete HTML with page-break-friendly CSS
     const htmlContent = `
       <div id="pdfContent">
         <style>
@@ -232,7 +227,7 @@ export const generatePDFReport = async (metrics, selectedCategory, selectedCashi
         </style>
 
         <div class="export-header">
-          <h1>End-of-Day Sales Monitoring</h1>
+          <h1>Sales Monitoring Report</h1>
           <p><strong>Generated On:</strong> ${reportDate}</p>
           <p><strong>Category:</strong> ${selectedCategory !== 'all' ? selectedCategory : 'All Categories'} | <strong>Cashier:</strong> ${selectedCashier !== 'all' ? selectedCashier : 'All Cashiers'}</p>
         </div>
@@ -284,7 +279,6 @@ export const generatePDFReport = async (metrics, selectedCategory, selectedCashi
                 <th>DATE & TIME</th>
                 <th>QTY</th>
                 <th>REVENUE</th>
-                <th>ORDER TYPE</th>
                 <th>CASHIER</th>
               </tr>
             </thead>
@@ -301,24 +295,19 @@ export const generatePDFReport = async (metrics, selectedCategory, selectedCashi
       </div>
     `;
 
-    // Temporary container
     const container = document.createElement('div');
     container.innerHTML = htmlContent;
     document.body.appendChild(container);
 
-    // PDF options
     const opt = {
       margin: [10, 10, 10, 10],
-      filename: `Sales_Report_${new Date().toISOString().split('T')[0]}.pdf`,
+      filename: `Sales_Monitoring_${new Date().toISOString().split('T')[0]}.pdf`,
       image: { type: 'jpeg', quality: 0.98 },
       html2canvas: { scale: 2, useCORS: true },
       jsPDF: { unit: 'mm', format: 'a4', orientation: 'landscape' }
     };
 
-    // Generate PDF and download
     await html2pdf().set(opt).from(container).save();
-
-    // Remove container
     document.body.removeChild(container);
 
   } catch (error) {
@@ -335,7 +324,6 @@ export const generateCSVReport = (metrics) => {
     'Time',
     'Quantity',
     'Revenue', 
-    'Order Type',
     'Cashier'
   ];
   
@@ -355,12 +343,10 @@ export const generateCSVReport = (metrics) => {
       formattedTime,
       item.quantity,
       item.revenue.toFixed(2),
-      item.orderType || '—',
       item.cashier || '—'
     ];
   });
 
-  // Escape CSV values properly
   const escapeCSV = (value) => {
     if (value === null || value === undefined) return '';
     const stringValue = String(value);
@@ -380,7 +366,7 @@ export const generateCSVReport = (metrics) => {
 
   const link = document.createElement('a');
   link.setAttribute('href', url);
-  link.setAttribute('download', `sales_report_${new Date().toISOString().split('T')[0]}.csv`);
+  link.setAttribute('download', `Sales_Monitoring_${new Date().toISOString().split('T')[0]}.csv`);
   document.body.appendChild(link);
   link.click();
   document.body.removeChild(link);

@@ -638,7 +638,6 @@ export const TransactionSummaryModal = ({
           promoId: item.bogoPromoId,
           groupId: item.bogoGroupId,
           promoName: item.bogoPromoName,
-          promoImage: item.bogoPromoImage,
           discountType: item.bogoDiscountType,
           discountValue: item.bogoDiscountValue,
           items: []
@@ -720,73 +719,69 @@ export const TransactionSummaryModal = ({
             <div className="trnsSummary-items-scrollable">
               {groupedItems.map((group, groupIndex) => {
                 if (group.type === 'bogo') {
-                  // BOGO Group Layout
-                  const totalPromoDiscount = group.items.reduce((sum, { index }) => {
-                    return sum + (getItemPromotion ? getItemPromotion(index) : 0);
-                  }, 0);
+                  // BOGO items - same layout as regular items
+                  return group.items.map(({ item, index }) => {
+                    const itemDiscount = getItemDiscount ? getItemDiscount(index) : 0;
+                    const itemPromotion = getItemPromotion ? getItemPromotion(index) : 0;
+                    const itemTotal = (item.price + getTotalAddonsPrice(item.addons)) * item.quantity;
+                    const combinedDiscounts = getCombinedDiscountsForItem(index);
+                    const itemPromotionQty = getItemPromotionQty ? getItemPromotionQty(index) : 0;
+                    
+                    return (
+                      <div key={`${group.groupId}-${index}`} className="trnsSummary-summary-item">
+                        <div className="trnsSummary-item-row">
+                          <div className="trnsSummary-left">
+                            <div className="trnsSummary-item-name-row">
+                              <span className="trnsSummary-item-name">{item.name}</span>
+                              <span className="trnsSummary-quantity">x{item.quantity}</span>
+                            </div>
 
-                  return (
-                    <div key={`bogo-${group.groupId}-${groupIndex}`} className="trnsSummary-bogo-group">
-                      <div className="trnsSummary-bogo-header">
-                        <img src={group.promoImage} alt={group.promoName} className="trnsSummary-bogo-promo-image" />
-                        <div className="trnsSummary-bogo-promo-details">
-                          <div className="trnsSummary-bogo-promo-name">{group.promoName}</div>
-                          <div className="trnsSummary-bogo-promo-discount">
-                            {group.discountType === 'percentage'
-                              ? `${group.discountValue}% off`
-                              : `₱${group.discountValue} off`}
-                            {totalPromoDiscount > 0 && (
-                              <span className="trnsSummary-bogo-total-saved"> • Saved: ₱{totalPromoDiscount.toFixed(2)}</span>
-                            )}
+                            <div className="trnsSummary-item-details">
+                              {item.addons?.length > 0 && (
+                                <div className="trnsSummary-item-addons">
+                                  {item.addons.map(addon => (
+                                    <div key={addon.addonId} className="trnsSummary-addon-line">
+                                      +₱{(addon.price * addon.quantity * item.quantity).toFixed(2)} : {addon.addonName} (x{addon.quantity * item.quantity})
+                                    </div>
+                                  ))}
+                                </div>
+                              )}
+
+                              {combinedDiscounts.length > 0 && (
+                                <div className="trnsSummary-item-discount">
+                                  {combinedDiscounts.map((discount, discIdx) => (
+                                    <div key={discIdx} className="trnsSummary-discount-line">
+                                      -₱{discount.totalAmount.toFixed(2)} : {discount.name}
+                                      <span className="trnsSummary-discount-qty"> (x{discount.totalQuantity})</span>
+                                    </div>
+                                  ))}
+                                </div>
+                              )}
+
+                              {itemPromotion > 0 && (
+                                <div className="trnsSummary-item-promotion">
+                                  <div className="trnsSummary-promotion-line">
+                                    -₱{itemPromotion.toFixed(2)} : {group.promoName}
+                                    <span className="trnsSummary-promotion-qty"> (x{itemPromotionQty})</span>
+                                  </div>
+                                </div>
+                              )}
+                            </div>
+                          </div>
+
+                          <div className="trnsSummary-right">
+                            <span className="trnsSummary-item-total">
+                              ₱{(itemTotal - itemDiscount - itemPromotion).toFixed(2)}
+                            </span>
+
+                            <span className="trnsSummary-unit-price">
+                              ₱{item.price.toFixed(2)} each
+                            </span>
                           </div>
                         </div>
                       </div>
-
-                      <div className="trnsSummary-bogo-items">
-                        {group.items.map(({ item, index }) => {
-                          const itemDiscount = getItemDiscount ? getItemDiscount(index) : 0;
-                          const itemTotal = (item.price + getTotalAddonsPrice(item.addons)) * item.quantity;
-                          const combinedDiscounts = getCombinedDiscountsForItem(index);
-                          
-                          return (
-                            <div key={`${group.groupId}-${index}`} className="trnsSummary-bogo-item">
-                              <div className="trnsSummary-item-name-row">
-                                <span className="trnsSummary-item-name">{item.name}</span>
-                                <span className="trnsSummary-quantity">x{item.quantity}</span>
-                              </div>
-                              
-                              <div className="trnsSummary-item-details">
-                                {item.addons?.length > 0 && (
-                                  <div className="trnsSummary-item-addons">
-                                    {item.addons.map(addon => (
-                                      <div key={addon.addonId} className="trnsSummary-addon-line">
-                                        +₱{(addon.price * addon.quantity * item.quantity).toFixed(2)} : {addon.addonName} (x{addon.quantity * item.quantity})
-                                      </div>
-                                    ))}
-                                  </div>
-                                )}
-
-                                {combinedDiscounts.length > 0 && (
-                                  <div className="trnsSummary-item-discount">
-                                    {combinedDiscounts.map((discount, discIdx) => (
-                                      <div key={discIdx} className="trnsSummary-discount-line">
-                                        -₱{discount.totalAmount.toFixed(2)} : {discount.name}
-                                        <span className="trnsSummary-discount-qty"> (x{discount.totalQuantity})</span>
-                                      </div>
-                                    ))}
-                                  </div>
-                                )}
-                              </div>
-
-                              <span className="trnsSummary-item-price">
-                                ₱{itemTotal.toFixed(2)}
-                              </span>
-                            </div>
-                          );
-                        })}
-                      </div>
-                    </div>
-                  );
+                    );
+                  });
                 } else {
                   // Regular Item Layout
                   const { item, index } = group.items[0];

@@ -335,12 +335,6 @@ const TransHisModal = ({
                     
                     return (
                       <div key={`bogo-group-${groupIdx}`} className="transHis-modal-bogo-group">
-                        <div className="transHis-modal-bogo-header">
-                          🎁 {group.promoName}
-                          {totalPromoAmount > 0 && (
-                            <span className="transHis-modal-bogo-savings"> • Saved: ₱{totalPromoAmount.toFixed(2)}</span>
-                          )}
-                        </div>
                         
                         <div className="transHis-modal-bogo-items">
                           {group.items.map(({ item, index: idx }) => {
@@ -386,6 +380,27 @@ const TransHisModal = ({
                                             return Object.values(combinedDiscounts).map((discount, discIdx) => (
                                               <div key={discIdx} className="transHis-modal-discount-info">
                                                 - ₱{discount.totalAmount.toFixed(2)} : {discount.name} (x{discount.totalQuantity})
+                                              </div>
+                                            ));
+                                          })()}
+                                        </div>
+                                      )}
+
+                                      {item.itemPromotions && item.itemPromotions.length > 0 && (
+                                        <div className="transHis-modal-item-discount-applied">
+                                          {(() => {
+                                            const combinedPromotions = {};
+                                            item.itemPromotions.forEach(promo => {
+                                              if (!combinedPromotions[promo.promotionName]) {
+                                                combinedPromotions[promo.promotionName] = { name: promo.promotionName, totalQuantity: 0, totalAmount: 0 };
+                                              }
+                                              combinedPromotions[promo.promotionName].totalQuantity += promo.quantityPromoted;
+                                              combinedPromotions[promo.promotionName].totalAmount += promo.promotionAmount;
+                                            });
+                                            
+                                            return Object.values(combinedPromotions).map((promo, promoIdx) => (
+                                              <div key={promoIdx} className="transHis-modal-discount-info">
+                                                - ₱{promo.totalAmount.toFixed(2)} : {promo.name} (x{promo.totalQuantity})
                                               </div>
                                             ));
                                           })()}
@@ -447,13 +462,8 @@ const TransHisModal = ({
                           <div className="transHis-modal-item-header">
                             <div className="transHis-modal-item-left">
                               <div className="transHis-modal-item-name-container">
-                                <span className="transHis-modal-item-name">
+                               <span className="transHis-modal-item-name">
                                   {item.name}
-                                  {regularPromotions.length > 0 && (
-                                    <span className="transHis-modal-promo-badge">
-                                      🎉 {regularPromotions[0].promotionName}
-                                    </span>
-                                  )}
                                 </span>
                                 <span className="transHis-modal-quantity">x{item.quantity}</span>
                               </div>
@@ -490,7 +500,7 @@ const TransHisModal = ({
                               )}
                               
                               {regularPromotions.length > 0 && (
-                                <div className="transHis-modal-item-promotion-applied">
+                                <div className="transHis-modal-item-discount-applied">
                                   {(() => {
                                     const combinedPromotions = {};
                                     regularPromotions.forEach(promo => {

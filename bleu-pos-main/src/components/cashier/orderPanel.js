@@ -552,15 +552,6 @@ function OrderPanel({ order, onClose, isOpen, isStore, onUpdateStatus, onFullRef
               
               return (
                 <div key={`bogo-group-${groupIdx}`} className="orderpanel-bogo-group">
-                  <div className="orderpanel-bogo-header">
-                    <div className="orderpanel-bogo-promo-name">
-                      🎁 {group.promoName}
-                      {totalPromoAmount > 0 && (
-                        <span className="orderpanel-bogo-savings"> • Saved: ₱{totalPromoAmount.toFixed(2)}</span>
-                      )}
-                    </div>
-                  </div>
-                  
                   <div className="orderpanel-bogo-items">
                     {group.items.map(({ item, index: idx }) => {
                       const itemDiscounts = (item.itemDiscounts || []).map(discount => ({ 
@@ -609,6 +600,25 @@ function OrderPanel({ order, onClose, isOpen, isStore, onUpdateStatus, onFullRef
                                       return Object.values(combinedDiscounts).map((discount, discIdx) => (
                                         <div key={discIdx} className="orderpanel-discount-info">
                                           -₱{discount.totalAmount.toFixed(2)} : {discount.name} (x{discount.totalQuantity})
+                                        </div>
+                                      ));
+                                    })()}
+                                  </div>
+                                )}
+                                {itemPromotions.length > 0 && (
+                                  <div className="orderpanel-item-promodis-applied">
+                                    {(() => {
+                                      const combinedPromotions = {};
+                                      itemPromotions.forEach(promo => {
+                                        if (!combinedPromotions[promo.name]) {
+                                          combinedPromotions[promo.name] = { name: promo.name, totalQuantity: 0, totalAmount: 0 };
+                                        }
+                                        combinedPromotions[promo.name].totalQuantity += promo.quantity;
+                                        combinedPromotions[promo.name].totalAmount += promo.amount;
+                                      });
+                                      return Object.values(combinedPromotions).map((promo, promoIdx) => (
+                                        <div key={promoIdx} className="orderpanel-discount-info">
+                                          -₱{promo.totalAmount.toFixed(2)} : {promo.name} (x{promo.totalQuantity})
                                         </div>
                                       ));
                                     })()}
@@ -679,11 +689,6 @@ function OrderPanel({ order, onClose, isOpen, isStore, onUpdateStatus, onFullRef
                   <div className="orderpanel-item-details">
                     <div className="orderpanel-item-name">
                       {item.name}
-                      {regularPromotions.length > 0 && (
-                        <span className="orderpanel-promo-badge">
-                          🎉 {regularPromotions[0].name}
-                        </span>
-                      )}
                       <span>
                         {item.addons && item.addons.length > 0 && (
                           <div className="orderpanel-item-addons">
@@ -730,7 +735,7 @@ function OrderPanel({ order, onClose, isOpen, isStore, onUpdateStatus, onFullRef
                                 combinedPromotions[promo.name].totalAmount += promo.amount;
                               });
                               return Object.values(combinedPromotions).map((promo, promoIdx) => (
-                                <div key={promoIdx} className="orderpanel-promotion-info">
+                                <div key={promoIdx} className="orderpanel-discount-info">
                                   -₱{promo.totalAmount.toFixed(2)} : {promo.name} (x{promo.totalQuantity})
                                 </div>
                               ));
@@ -783,7 +788,7 @@ function OrderPanel({ order, onClose, isOpen, isStore, onUpdateStatus, onFullRef
           {isStore && ( <div className="orderpanel-calc-row"><span className="orderpanel-calc-label">Subtotal:</span><span className="orderpanel-calc-value">₱{subtotal.toFixed(2)}</span></div> )}
           {(hasRefunds || (refundMode && hasSelectedItems)) && ( <div className="orderpanel-calc-row orderpanel-refund-row"><span className="orderpanel-calc-value orderpanel-refund-amount">{refundMode ? "Est. Refund Amount:" : "Refunded Amount:"}</span><span className="orderpanel-calc-value orderpanel-refund-amount">-₱{refundMode ? estimatedPendingRefund.toFixed(2) : netHistoricalRefund.toFixed(2)}</span></div> )}
           {(order.promotionalDiscount > 0) && (
-            <div className="orderpanel-calc-row">
+            <div className="orderpanel-calc-row orderpanel-promo-row">
               <span className="orderpanel-calc-label">Promotion:</span>
               <span className="orderpanel-calc-value">
                 -₱{order.promotionalDiscount.toFixed(2)}
@@ -792,7 +797,7 @@ function OrderPanel({ order, onClose, isOpen, isStore, onUpdateStatus, onFullRef
           )}
 
           {(order.manualDiscount > 0) && (
-            <div className="orderpanel-calc-row">
+            <div className="orderpanel-calc-row orderpanel-discount-row">
               <span className="orderpanel-calc-label">Discount:</span>
               <span className="orderpanel-calc-value">
                 -₱{order.manualDiscount.toFixed(2)}
@@ -801,7 +806,7 @@ function OrderPanel({ order, onClose, isOpen, isStore, onUpdateStatus, onFullRef
           )}
 
           <div className="orderpanel-calc-row orderpanel-total-row" style={{
-            borderTop: '2px solid #333',
+            borderTop: '1px solid #333',
             marginTop: '8px',
             paddingTop: '8px',
             fontWeight: 'bold',

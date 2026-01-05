@@ -452,12 +452,26 @@ function SalesMonitoring() {
 
     const handleExportPDF = () => {
       cleanup();
-      generatePDFReport(metrics, selectedCategory, selectedCashier);
+      // Pass all required parameters including dateRange and currentPeriodText
+      generatePDFReport(
+        metrics, 
+        selectedCategory, 
+        selectedCashier, 
+        dateRange, 
+        currentPeriodText
+      );
     };
 
     const handleExportCSV = () => {
       cleanup();
-      generateCSVReport(metrics);
+      // Pass all required parameters including dateRange and currentPeriodText
+      generateCSVReport(
+        metrics, 
+        selectedCategory, 
+        selectedCashier, 
+        dateRange, 
+        currentPeriodText
+      );
     };
 
     root.render(

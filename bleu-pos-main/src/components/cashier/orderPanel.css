@@ -28,14 +28,12 @@
   flex-shrink: 0;
 }
 
-/* Wrap close button and status */
 .orderpanel-header-right {
   display: flex;
   align-items: center;
-  gap: 8px; /* space between status and button */
+  gap: 8px;
 }
 
-/* Adjust badge size if needed */
 .orderpanel-status-badge {
   padding: 4px 8px;
   font-size: 11px;
@@ -44,14 +42,8 @@
   letter-spacing: 0.5px;
   min-width: 60px;
   text-align: center;
+  border-radius: 12px;
 }
-
-/* Optionally make badge smaller to fit nicely */
-.orderpanel-status-badge {
-  font-size: 10px;
-  padding: 2px 6px;
-}
-
 
 .orderpanel-title {
   font-size: 24px;
@@ -81,11 +73,11 @@
 }
 
 .orderpanel-content {
-  padding: 24px ;
+  padding: 24px;
   display: flex;
   flex-direction: column;
   height: 100%;
-  overflow: hidden; /* Prevent content from scrolling */
+  overflow: hidden;
   margin-top: -10px;
 }
 
@@ -109,19 +101,7 @@
   font-size: 14px;
 }
 
-/* Status badge in order panel */
-.orderpanel-status-badge {
-  padding: 4px 8px;
-  border-radius: 12px;
-  font-size: 11px;
-  font-weight: 500;
-  text-transform: uppercase;
-  letter-spacing: 0.5px;
-  display: inline-block;
-  min-width: 60px;
-  text-align: center;
-}
-
+/* Status badge colors */
 .orderpanel-status-badge.orderpanel-request {
   background-color: #e3f2fd;
   color: #0d6efd;
@@ -152,7 +132,6 @@
   border: 1px solid #f5c6cb;
 }
 
-/* Refund mode indicator */
 .orderpanel-refund-mode-indicator {
   font-size: 12px;
   color: #e74c3c;
@@ -167,13 +146,13 @@
 .orderpanel-items-section {
   flex: 1;
   overflow-y: auto;
-  padding-right: 4px;/* for scrollbar spacing */
+  padding-right: 4px;
 }
 
 .orderpanel-items-wrapper {
   display: flex;
   flex-direction: column;
-  max-height: 300px; /* or whatever fits your layout */
+  max-height: 300px;
 }
 
 .orderpanel-items-header {
@@ -192,7 +171,6 @@
   text-align: left;
 }
 
-/* Discount badges display for each item in order panel */
 .orderpanel-item-discount-badges {
   display: flex;
   flex-wrap: wrap;
@@ -232,19 +210,13 @@
   border-bottom: none;
 }
 
-.orderpanel-item-details {
-  display: flex;
-  flex-direction: column;
-  gap: 4px;
-}
-
 .orderpanel-item-name {
   font-weight: 600;
   font-size: 14px;
   color: #333;
 }
 
-.orderpanel-item-name span{
+.orderpanel-item-name span {
   font-weight: 500;
   font-size: 15px;
   color: #333;
@@ -280,6 +252,16 @@
   color: #333;
   align-self: start;
   padding-top: 2px;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  line-height: 1.3;
+}
+
+.orderpanel-item-each-price {
+  font-size: 0.85em;
+  color: #888;
+  margin-top: 2px;
 }
 
 .orderpanel-summary {
@@ -288,7 +270,7 @@
 
 .orderpanel-promotions {
   display: flex;
-  background-color:#f5f5f7;
+  background-color: #f5f5f7;
   margin-bottom: 16px;
   flex-direction: column;
   width: 100%;
@@ -329,7 +311,7 @@
 
 .orderpanel-discount-tags {
   display: flex;
-  flex-direction: row-reverse; /* new tags appear on the right */
+  flex-direction: row-reverse;
   margin-left: auto;
   gap: 4px;
   overflow-x: auto;
@@ -474,6 +456,11 @@
   background-color: #5a6268;
 }
 
+.orderpanel-btn-disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
 /* Responsive design */
 @media (max-width: 768px) {
   .orderpanel-container {
@@ -507,7 +494,7 @@
   }
 }
 
-/* Overlay */
+/* Modal Styles */
 .orderpanel-modal-overlay {
   position: fixed;
   inset: 0;
@@ -518,13 +505,12 @@
   z-index: 1200;
 }
 
-/* Modal box */
 .orderpanel-modal-content {
   background: #ffffff;
   border-radius: 10px;
   width: 90%;
   max-width: 400px;
-  max-height: 80vh; /* limit modal height */
+  max-height: 80vh;
   box-shadow: 0 8px 24px rgba(0, 0, 0, 0.12);
   display: flex;
   flex-direction: column;
@@ -532,7 +518,6 @@
   animation: modalSlideIn 0.2s ease-out;
 }
 
-/* Top accent stripe */
 .orderpanel-modal-content::before {
   content: '';
   position: absolute;
@@ -544,7 +529,6 @@
   z-index: 1;
 }
 
-/* Header */
 .orderpanel-modal-header {
   display: flex;
   justify-content: space-between;
@@ -581,14 +565,14 @@
 .orderpanel-modal-body {
   padding: 24px;
   padding-top: 5px;
-  flex: 1; 
-  overflow-y: auto; 
-  scrollbar-width: none; 
-  -ms-overflow-style: none; 
+  flex: 1;
+  overflow-y: auto;
+  scrollbar-width: none;
+  -ms-overflow-style: none;
 }
 
 .orderpanel-modal-body::-webkit-scrollbar {
-  display: none; 
+  display: none;
 }
 
 .orderpanel-modal-description {
@@ -624,7 +608,7 @@
   display: flex;
   gap: 10px;
   justify-content: flex-end;
-  flex-shrink: 0; /* prevent footer from shrinking */
+  flex-shrink: 0;
 }
 
 .orderpanel-modal-btn {
@@ -659,20 +643,33 @@
   background-color: #317c87;
 }
 
-/* === RECEIPT MODAL & PRINT === */
+.orderpanel-modal-warning {
+  color: #f59e0b;
+  font-weight: 500;
+  margin: 10px 0;
+  text-align: center;
+}
+
+.orderpanel-modal-subdescription {
+  color: #6b7280;
+  font-size: 0.9em;
+  margin-top: 10px;
+  text-align: center;
+}
+
+/* Receipt Styles */
 .orderpanel-receipt-print {
   width: 280px;
   font-family: 'Courier New', monospace;
   font-size: 12px;
   background-color: #fff;
   color: #000;
-  padding: 10px;
+  padding: 15px;
   border: 1px dashed #000;
   margin: auto;
   line-height: 1.5;
 }
 
-/* Receipt Header Styles */
 .orderpanel-receipt-header {
   text-align: center;
   margin-bottom: 10px;
@@ -708,13 +705,21 @@
   text-align: left;
   font-size: 11px;
   line-height: 1.6;
+  display: flex;
+  justify-content: space-between;
 }
 
 .orderpanel-receipt-info > div {
   margin: 2px 0;
 }
 
-/* Receipt Body Styles */
+.orderpanel-receipt-info-left,
+.orderpanel-receipt-info-right {
+  display: flex;
+  flex-direction: column;
+  text-transform: uppercase;
+}
+
 .orderpanel-receipt-body {
   margin: 10px 0;
 }
@@ -729,6 +734,11 @@
   font-size: 11px;
   line-height: 1.4;
   margin: 2px 0;
+}
+
+.orderpanel-receipt-line.refund-line {
+  color: #dc3545;
+  font-weight: 600;
 }
 
 .orderpanel-receipt-item-name {
@@ -750,7 +760,6 @@
   padding-left: 8px;
 }
 
-/* Receipt Summary Styles */
 .orderpanel-receipt-summary {
   margin-top: 10px;
 }
@@ -767,30 +776,9 @@
   padding-top: 4px;
 }
 
-/* Receipt Footer Styles */
 .orderpanel-receipt-footer {
   text-align: center;
   margin-top: 10px;
-}
-
-.orderpanel-receipt-info {
-  display: flex;
-  justify-content: space-between;
-  font-size: 11px;
-  line-height: 1.6;
-  text-align: left;
-}
-
-.orderpanel-receipt-info-left,
-.orderpanel-receipt-info-right {
-  display: flex;
-  flex-direction: column;
-  text-transform: uppercase;
-}
-
-.orderpanel-receipt-info-left > div,
-.orderpanel-receipt-info-right > div {
-  margin: 2px 0;
 }
 
 .orderpanel-thankyou {
@@ -830,6 +818,7 @@
   font-style: italic;
 }
 
+/* Item Details */
 .orderpanel-item-addons {
   margin-top: 4px;
   font-size: 13px;
@@ -876,86 +865,13 @@
   margin-left: 8px;
 }
 
-.orderpanel-receipt-addon {
-  font-size: 12px;
-  color: #666;
-  font-style: italic;
-}
-
-@media print {
-  @page {
-    margin: 0 !important;
-    size: 80mm auto; /* Thermal printer width */
-  }
-
-  body * {
-    visibility: hidden;
-  }
-
-  html, body {
-    margin: 0 !important;
-    padding: 0 !important;
-    height: auto !important;
-  }
-
-  .orderpanel-receipt-print, .orderpanel-receipt-print * {
-    visibility: visible;
-  }
-
-  .orderpanel-receipt-print {
-    position: fixed;
-    left: 0 !important;
-    top: 0 !important;
-    width: 280px;
-    margin: 0 !important;
-    padding: 0 !important;
-    border: none !important;
-    transform: translateY(0);
-  }
-
-  /* Remove padding from receipt content */
-  .orderpanel-receipt-header,
-  .orderpanel-receipt-body,
-  .orderpanel-receipt-summary,
-  .orderpanel-receipt-footer {
-    padding: 0 10px;
-  }
-
-  /* Optional: Hide the print/cancel buttons in the modal when printing */
-  .orderpanel-modal-buttons {
-    display: none;
-  }
-}
-
-.orderpanel-btn-disabled {
-  opacity: 0.5;
-  cursor: not-allowed;
-}
-
-.orderpanel-modal-warning {
-  color: #f59e0b;
-  font-weight: 500;
-  margin: 10px 0;
-  text-align: center;
-}
-
-.orderpanel-modal-subdescription {
-  color: #6b7280;
-  font-size: 0.9em;
-  margin-top: 10px;
-  text-align: center;
-}
-
-/* Add these styles to your existing orderPanel.css file */
-
-/* Refunded text styling */
+/* Refund Styles */
 .orderpanel-refunded-text {
   text-decoration: line-through;
   color: #999;
   opacity: 0.7;
 }
 
-/* Refund indicator below item name */
 .orderpanel-refund-indicator {
   font-size: 12px;
   color: #dc3545;
@@ -964,7 +880,6 @@
   font-style: italic;
 }
 
-/* Refund row in summary */
 .orderpanel-refund-row {
   color: #dc3545;
   font-weight: 600;
@@ -974,30 +889,28 @@
   color: #dc3545 !important;
 }
 
-/* Style for partially refunded items */
 .orderpanel-item.partial-refund {
   border-left: 3px solid #ffc107;
   padding-left: 8px;
 }
 
-/* Ensure refunded items have proper spacing */
 .orderpanel-item-name .orderpanel-refund-indicator {
   display: block;
   margin-top: 4px;
 }
 
-/* Receipt styling for refund line */
-.orderpanel-receipt-line.refund-line {
-  color: #dc3545;
-  font-weight: 600;
+.orderpanel-item-refunded-info {
+  color: #d9534f;
+  font-size: 0.9em;
+  margin-top: 5px;
 }
 
-/* Refund mode quantity controls in Qty column - matching reference */
 .orderpanel-refund-qty-controls {
   display: flex;
   align-items: center;
   justify-content: center;
   gap: 8px;
+  margin-left: -50px;
 }
 
 .orderpanel-qty-btn {
@@ -1038,7 +951,6 @@
   font-size: 14px;
 }
 
-/* Refund total row styling */
 .orderpanel-refund-total-row {
   color: #e74c3c;
   font-weight: 600;
@@ -1052,151 +964,103 @@
   color: #e74c3c;
 }
 
-/* Refunded items section */
 .orderpanel-refunded-items-section {
   margin-bottom: 16px;
   padding: 12px;
-  background: #f8f9fa; /* Light gray background */
-  border-left: 5px solid #6c757d; /* Darker gray accent border */
+  background: #f8f9fa;
+  border-left: 5px solid #6c757d;
   border-radius: 8px;
-  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.05); /* Softer shadow */
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.05);
 }
 
-
-
-
-.orderpanel-item-refunded-info {
-  color: #d9534f;
-  font-size: 0.9em;
-  margin-top: 5px;
-}
-
-.orderpanel-item-subtotal {
-  display: flex;
-  flex-direction: column;
-  align-items: flex-end;
-  line-height: 1.3;
-}
-
-.orderpanel-item-each-price {
-  font-size: 0.85em;
-  color: #888;
-  margin-top: 2px;
-}
-
-/* Shift refund qty controls slightly to the left */
-.orderpanel-refund-qty-controls {
-  margin-left: -50px; /* adjust value as needed */
-}
-
-/* BOGO Group Container */
+/* BOGO Group - Clean Design (NO background highlights) */
 .orderpanel-bogo-group {
   margin-bottom: 16px;
-  border-left: 4px solid #ff9800;
-  background: #fff8f0;
-  padding: 8px 0;
-  border-radius: 4px;
 }
 
-/* BOGO Header */
-.orderpanel-bogo-header {
-  padding: 8px 16px;
-  background: transparent;
-  margin-bottom: 4px;
-}
-
-.orderpanel-bogo-promo-name {
-  font-size: 13px;
-  font-weight: 700;
-  color: #e65100;
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  text-transform: uppercase;
-  letter-spacing: 0.5px;
-}
-
-.orderpanel-bogo-savings {
-  font-size: 11px;
-  font-weight: 600;
-  color: #2e7d32;
-  background: #c8e6c9;
-  padding: 2px 8px;
-  border-radius: 12px;
-  margin-left: auto;
-}
-
-/* BOGO Items Container - with indentation */
 .orderpanel-bogo-items {
   display: flex;
   flex-direction: column;
-  padding-left: 20px; /* Indent the items */
 }
 
-/* BOGO Item Styling - remove extra styling, keep grid layout */
 .orderpanel-bogo-item {
   display: grid;
   grid-template-columns: 1fr 60px 80px;
   gap: 12px;
-  padding: 12px 16px 12px 0;
+  padding: 16px 0;
   border-bottom: 1px solid #f0f0f0;
   align-items: start;
-  background: transparent;
-  border-left: none;
-  border-radius: 0;
 }
 
 .orderpanel-bogo-item:last-child {
   border-bottom: none;
 }
 
-/* Promotion Badge for Non-BOGO Promotions */
-.orderpanel-promo-badge {
-  display: inline-block;
-  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-  color: white;
-  font-size: 10px;
-  font-weight: 600;
-  padding: 3px 8px;
-  border-radius: 12px;
-  margin-left: 8px;
-  vertical-align: middle;
-  box-shadow: 0 2px 4px rgba(102, 126, 234, 0.3);
-}
-
-/* Promotion Info Styling */
-.orderpanel-promotion-info {
-  color: #7b1fa2;
-  font-size: 12px;
-  font-weight: 600;
-  padding: 2px 0;
-}
-
-/* Discount Info Styling (keep existing style) */
 .orderpanel-discount-info {
-  color: #c62828;
+  color: #666;
   font-size: 12px;
-  font-weight: 600;
+  font-weight: 500;
   padding: 2px 0;
 }
 
-/* Responsive Design */
+@media print {
+  @page {
+    margin: 0 !important;
+    size: 80mm auto;
+  }
+
+  body * {
+    visibility: hidden;
+  }
+
+  html, body {
+    margin: 0 !important;
+    padding: 0 !important;
+    height: auto !important;
+  }
+
+  .orderpanel-receipt-print, .orderpanel-receipt-print * {
+    visibility: visible;
+  }
+
+  .orderpanel-receipt-print {
+    position: fixed;
+    left: 0 !important;
+    top: 0 !important;
+    width: 280px;
+    margin: 0 !important;
+    padding: 0 !important;
+    border: none !important;
+    transform: translateY(0);
+  }
+
+  .orderpanel-receipt-header,
+  .orderpanel-receipt-body,
+  .orderpanel-receipt-summary,
+  .orderpanel-receipt-footer {
+    padding: 0 10px;
+  }
+
+  .orderpanel-modal-buttons {
+    display: none;
+  }
+}
+
 @media (max-width: 768px) {
   .orderpanel-bogo-promo-name {
-    font-size: 12px;
+    font-size: 11px;
     flex-wrap: wrap;
   }
   
   .orderpanel-bogo-savings {
     font-size: 10px;
   }
-  
-  .orderpanel-bogo-items {
-    padding-left: 12px;
-  }
-  
-  .orderpanel-promo-badge {
-    font-size: 9px;
-    padding: 2px 6px;
-  }
+}
+
+/* Make promotion and discount rows red */
+.orderpanel-calc-row.orderpanel-promo-row .orderpanel-calc-label,
+.orderpanel-calc-row.orderpanel-promo-row .orderpanel-calc-value,
+.orderpanel-calc-row.orderpanel-discount-row .orderpanel-calc-label,
+.orderpanel-calc-row.orderpanel-discount-row .orderpanel-calc-value {
+  color: #dc3545 !important;
 }

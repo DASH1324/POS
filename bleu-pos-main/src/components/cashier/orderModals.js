@@ -89,10 +89,9 @@ const OrderModals = ({
   const setDefaultConfig = () => {
     setReceiptConfig({
       storeName: 'BLEU BEAN CAFE',
-      vatRegTin: 'XXX-XXX-XXX-XXX',
       address1: 'Don Fabian St., Commonwealth',
       address2: 'Quezon City, Philippines',
-      telephone: 'NULL',
+      telephone: '0917XXXXXXX',
       showQR: true,
       qrType: 'link',
       qrLink: '',
@@ -261,89 +260,70 @@ const OrderModals = ({
               <div className="orderpanel-receipt-print" id="orderpanel-print-section">
                 <div className="orderpanel-receipt-header">
                   <div className="orderpanel-store-name">{receiptConfig.storeName}</div>
-                  <div className="orderpanel-store-tin">VATREGTIN: {receiptConfig.vatRegTin}</div>
                   <div className="orderpanel-store-address">{receiptConfig.address1}</div>
                   <div className="orderpanel-store-address">{receiptConfig.address2}</div>
                   <div className="orderpanel-store-contact">TEL #: {receiptConfig.telephone}</div>
-                  <div className="orderpanel-receipt-divider">{dayjs(order.date).format("MM/DD/YYYY")} {dayjs(order.date).format("hh:mm A")}</div>
-                  <div className="orderpanel-receipt-info">
-                    <div className="orderpanel-receipt-info-left">
-                      <div>INVOICE: #{order.id}</div>
-                      <div>STAFF: {cashierFullName || cashierName || 'staff'}</div>
-                    </div>
-                  </div>    
                 </div>
 
-                <div className="orderpanel-receipt-body">
-                  {(() => {
-                    let totalNetAmt = 0;
-                    let totalScPwdDisc = 0;
-                    
-                    return order.orderItems.map((item, i) => {
-                      const itemTotal = item.price * item.quantity;
-                      const addonsTotal = item.addons?.reduce((sum, addon) => sum + ((addon.price || 0) * (addon.quantity || 1) * (item.quantity || 1)), 0) || 0;
-                      const fullItemTotal = itemTotal + addonsTotal;
-                      
-                      // Per-item discounts and promotions
-                      const itemDiscounts = (item.itemDiscounts || []).map(d => ({ name: d.discountName, quantity: d.quantityDiscounted, amount: d.discountAmount }));
-                      const itemPromotions = (item.itemPromotions || []).map(p => ({ name: p.promotionName, quantity: p.quantityPromoted, amount: p.promotionAmount }));
-                      
-                      // Combine discounts, separating SC/PWD
-                      const combinedDiscounts = {};
-                      const scPwdDiscounts = [];
-                      [...itemDiscounts, ...itemPromotions].forEach(d => {
-                        if (d.name === 'PWD' || d.name === 'Senior') {
-                          scPwdDiscounts.push(d);
-                          totalScPwdDisc += d.amount;
-                        } else {
-                          if (!combinedDiscounts[d.name]) combinedDiscounts[d.name] = { name: d.name, totalQuantity: 0, totalAmount: 0 };
-                          combinedDiscounts[d.name].totalQuantity += d.quantity;
-                          combinedDiscounts[d.name].totalAmount += d.amount;
-                        }
-                      });
-                      
-                      const totalItemDiscount = Object.values(combinedDiscounts).reduce((sum, d) => sum + d.totalAmount, 0) + scPwdDiscounts.reduce((sum, d) => sum + d.amount, 0);
-                      const netAmt = fullItemTotal - totalItemDiscount;
-                      totalNetAmt += netAmt;
-                      
-                      return (
-                        <div key={i} className="orderpanel-receipt-item">
-                          <div className="orderpanel-receipt-line">
-                            <span className="orderpanel-receipt-item-name">{item.name}</span>
-                          </div>
-                          <div className="orderpanel-receipt-line orderpanel-receipt-qty-price">
-                            <span>{item.price.toFixed(2)} x {item.quantity}</span>
-                            <span>{itemTotal.toFixed(2)}</span>
-                          </div>
-                          {item.addons?.length > 0 && item.addons.map((addon, idx) => (
-                            <div key={idx} className="orderpanel-receipt-line orderpanel-receipt-qty-price">
-                              <span>{addon.addon_name || addon.addonName || addon.name} {addon.price.toFixed(2)} x {(addon.quantity || 1) * (item.quantity || 1)}</span>
-                              <span>{((addon.price || 0) * (addon.quantity || 1) * (item.quantity || 1)).toFixed(2)}</span>
-                            </div>
-                          ))}
-                          {/* Show non-SC/PWD discounts above NET AMT, with qty only if >1 */}
-                          {Object.values(combinedDiscounts).map((discount, discIdx) => (
-                            <div key={discIdx} className="orderpanel-receipt-line orderpanel-receipt-qty-price">
-                              <span>{discount.name}{discount.totalQuantity > 1 ? ` (x${discount.totalQuantity})` : ''}</span>
-                              <span>-{discount.totalAmount.toFixed(2)}</span>
-                            </div>
-                          ))}
-                          <div className="orderpanel-receipt-line orderpanel-receipt-net-amt">
-                            <span>NET AMT:</span>
-                            <span>{netAmt.toFixed(2)}</span>
-                          </div>
-                        </div>
-                      );
-                    });
-                  })()}
+                <div className="orderpanel-receipt-info">
+                  <div className="orderpanel-receipt-info-left">
+                    <div>DATE: {dayjs(order.date).format("MM/DD/YYYY")}</div>
+                    <div>TIME: {dayjs(order.date).format("hh:mm A")}</div>
+                    <div>CASHIER: {cashierFullName || cashierName || 'STAFF'}</div>
+                  </div>
                 </div>
-                <div className="orderpanel-receipt-divider">------------------------------------------</div>
+
+                <div className="orderpanel-receipt-divider">----------------------------------------</div>
+
+                <div className="orderpanel-receipt-body">
+                  {order.orderItems.map((item, i) => {
+                    const itemTotal = item.price * item.quantity;
+                    const addonsTotal = item.addons?.reduce((sum, addon) => sum + ((addon.price || 0) * (addon.quantity || 1) * (item.quantity || 1)), 0) || 0;
+                    const fullItemTotal = itemTotal + addonsTotal;
+                    
+                    const itemDiscounts = (item.itemDiscounts || []).map(d => ({ name: d.discountName, quantity: d.quantityDiscounted, amount: d.discountAmount }));
+                    const itemPromotions = (item.itemPromotions || []).map(p => ({ name: p.promotionName, quantity: p.quantityPromoted, amount: p.promotionAmount }));
+                    
+                    const combinedDiscounts = {};
+                    [...itemDiscounts, ...itemPromotions].forEach(d => {
+                      if (!combinedDiscounts[d.name]) combinedDiscounts[d.name] = { name: d.name, totalQuantity: 0, totalAmount: 0 };
+                      combinedDiscounts[d.name].totalQuantity += d.quantity;
+                      combinedDiscounts[d.name].totalAmount += d.amount;
+                    });
+                    
+                    const totalItemDiscount = Object.values(combinedDiscounts).reduce((sum, d) => sum + d.totalAmount, 0);
+                    
+                    return (
+                      <div key={i} className="orderpanel-receipt-item">
+                        <div className="orderpanel-receipt-line">
+                          <span className="orderpanel-receipt-item-name">{item.name}</span>
+                        </div>
+                        <div className="orderpanel-receipt-line orderpanel-receipt-qty-price">
+                          <span>{item.price.toFixed(2)} x {item.quantity}</span>
+                          <span>{itemTotal.toFixed(2)}</span>
+                        </div>
+                        {item.addons?.length > 0 && item.addons.map((addon, idx) => (
+                          <div key={idx} className="orderpanel-receipt-line orderpanel-receipt-qty-price">
+                            <span>{addon.addon_name || addon.addonName || addon.name} {addon.price.toFixed(2)} x {(addon.quantity || 1) * (item.quantity || 1)}</span>
+                            <span>{((addon.price || 0) * (addon.quantity || 1) * (item.quantity || 1)).toFixed(2)}</span>
+                          </div>
+                        ))}
+                        {Object.values(combinedDiscounts).map((discount, discIdx) => (
+                          <div key={discIdx} className="orderpanel-receipt-line orderpanel-receipt-qty-price">
+                            <span>{discount.name}{discount.totalQuantity > 1 ? ` (x${discount.totalQuantity})` : ''}</span>
+                            <span>-{discount.totalAmount.toFixed(2)}</span>
+                          </div>
+                        ))}
+                      </div>
+                    );
+                  })}
+                </div>
+
+                <div className="orderpanel-receipt-divider">----------------------------------------</div>
 
                 <div className="orderpanel-receipt-summary">
                   {(() => {
-                    // Recalculate totals here for summary (since we can't access from map)
                     let totalNetAmt = 0;
-                    let totalScPwdDisc = 0;
                     order.orderItems.forEach(item => {
                       const itemTotal = item.price * item.quantity;
                       const addonsTotal = item.addons?.reduce((sum, addon) => sum + ((addon.price || 0) * (addon.quantity || 1) * (item.quantity || 1)), 0) || 0;
@@ -352,21 +332,15 @@ const OrderModals = ({
                       const itemDiscounts = (item.itemDiscounts || []).map(d => ({ name: d.discountName, amount: d.discountAmount }));
                       const itemPromotions = (item.itemPromotions || []).map(p => ({ name: p.promotionName, amount: p.promotionAmount }));
                       
-                      const totalItemDiscount = [...itemDiscounts, ...itemPromotions].reduce((sum, d) => {
-                        if (d.name === 'PWD' || d.name === 'Senior Citizen') {
-                          totalScPwdDisc += d.amount;
-                        }
-                        return sum + d.amount;
-                      }, 0);
-                      
+                      const totalItemDiscount = [...itemDiscounts, ...itemPromotions].reduce((sum, d) => sum + d.amount, 0);
                       const netAmt = fullItemTotal - totalItemDiscount;
                       totalNetAmt += netAmt;
                     });
                     
                     return (
                       <>
-                        <div className="orderpanel-receipt-line orderpanel-receipt-total">
-                          <span>TOTAL:</span>
+                        <div className="orderpanel-receipt-line" style={{ fontWeight: '600', margin: '4px 0' }}>
+                          <span>NET AMOUNT</span>
                           <span>{totalNetAmt.toFixed(2)}</span>
                         </div>
 
@@ -375,37 +349,37 @@ const OrderModals = ({
                             <span>REFUND:</span>
                             <span>-₱{getTotalRefundAmount().toFixed(2)}</span>
                           </div>
-                        )}            
+                        )}
 
-                        <div className="orderpanel-receipt-qty-price">
-                          <div className="orderpanel-receipt-line">
-                            <span>Vatable:</span>
-                            <span>0.00</span>
-                          </div>
-                          <div className="orderpanel-receipt-line">
-                            <span>VAT_Amt:</span>
-                            <span>0.00</span>
-                          </div>
-                          <div className="orderpanel-receipt-line">
-                            <span>Zero-Rated Sales:</span>
-                            <span>0.00</span>
-                          </div>
-                          <div className="orderpanel-receipt-line">
-                            <span>VAT Exempt Sales:</span>
-                            <span>{(totalNetAmt - getTotalRefundAmount()).toFixed(2)}</span>
-                          </div>
-                          {totalScPwdDisc > 0 && (
-                            <div className="orderpanel-receipt-line">
-                              <span>TOTAL SC/PWD DISC:</span>
-                              <span>{totalScPwdDisc.toFixed(2)}</span>
-                            </div>
-                          )}
+                        <div className="orderpanel-receipt-divider">----------------------------------------</div>
+
+
+                        <div className="orderpanel-receipt-line orderpanel-receipt-total">
+                          <span>TOTAL</span>
+                          <span>{(totalNetAmt - (hasRefunds ? getTotalRefundAmount() : 0)).toFixed(2)}</span>
+                        </div>
+
+                        <div style={{ textAlign: 'center', margin: '10px 0', fontSize: '11px', fontWeight: 'bold' }}>
+                          <div>NON-VAT</div>
+                          <div>EXEMPT</div>
+                        </div>
+
+                        <div className="orderpanel-receipt-divider">----------------------------------------</div>
+
+                        <div style={{ textAlign: 'center', margin: '10px 0', fontSize: '10px', fontWeight: 'bold', lineHeight: '1.4' }}>
+                          <div>THIS IS NOT AN OFFICIAL RECEIPT</div>
+                        </div>
+
+                        <div className="orderpanel-receipt-divider">----------------------------------------</div>
+
+                        <div style={{ textAlign: 'center', margin: '10px 0', fontSize: '11px', fontWeight: 'bold', lineHeight: '1.6' }}>
+                          <div>THANK YOU FOR YOUR PURCHASE!</div>
+                          <div>PLEASE COME AGAIN 😊</div>
                         </div>
                       </>
                     );
                   })()}
                 </div>
-                <div className="orderpanel-receipt-divider">------------------------------------------</div>
                 
                 {receiptConfig.showQR && (
                   <div className="orderpanel-receipt-footer">

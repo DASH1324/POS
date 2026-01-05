@@ -15,18 +15,12 @@ const MERCHANDISE_API_URL = 'http://127.0.0.1:8002/merchandise/';
 
 function Menu() {
   const navigate = useNavigate();
-
-  // State for UI and Cart
   const [selectedFilter, setSelectedFilter] = useState({ type: 'all', value: 'All Products' });
   const [cartItems, setCartItems] = useState([]);
   const [isCartOpen, setIsCartOpen] = useState(false);
-
-  // Initial cash modal states
   const [showInitialCashModal, setShowInitialCashModal] = useState(false);
   const [initialCash, setInitialCash] = useState('');
   const [initialCashError, setInitialCashError] = useState('');
-
-  // State for data fetching, loading, and errors
   const [products, setProducts] = useState([]);
   const [merchandise, setMerchandise] = useState([]);
   const [showMerchandise, setShowMerchandise] = useState(false);
@@ -34,19 +28,12 @@ function Menu() {
   const [categories, setCategories] = useState({});
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState(null);
-
-  // --- PROMOTIONS STATE ---
+  const [isLoadingPromotions, setIsLoadingPromotions] = useState(false);
   const [promotions, setPromotions] = useState([]);
   const [discounts, setDiscounts] = useState([]); 
-
-  // State for order details
   const [orderType, setOrderType] = useState('Dine in');
   const [paymentMethod, setPaymentMethod] = useState('Cash');
-
-  // State for user info
   const [loggedInUser, setLoggedInUser] = useState(null);
-
-  // Cache for max quantities to avoid redundant API calls
   const [maxQuantityCache, setMaxQuantityCache] = useState({});
 
   const formatPromotionValue = (promo) => {
@@ -57,6 +44,77 @@ function Menu() {
     }
     return `${promo.promotion_value}`;
   };
+
+  const fetchPromotions = useCallback(async (token) => {
+    setIsLoadingPromotions(true);
+    try {
+      const response = await fetch(`${PROMOTION_BASE_URL}/promotions/`, {
+        headers: { 'Authorization': `Bearer ${token}` }
+      });
+      if (!response.ok) {
+        throw new Error('Failed to fetch promotions.');
+      }
+      const data = await response.json();
+      
+      const transformedPromotions = data
+        .filter(p => p.status === 'active')
+        .map(promo => {
+          let promotionType = null;
+          let discountValue = 0;
+          
+          const typeStr = (promo.type || '').toUpperCase();
+          
+          if (typeStr.includes('PERCENTAGE') || typeStr.includes('%')) {
+            promotionType = 'percentage';
+          } else if (typeStr.includes('FIXED') || typeStr.includes('₱')) {
+            promotionType = 'fixed';
+          }
+          
+          if (promo.value) {
+            const numMatch = promo.value.match(/(\d+\.?\d*)/);
+            if (numMatch) {
+              discountValue = parseFloat(numMatch[0]);
+            }
+          }
+          
+          let productsList = [];
+          let applicationType = 'specific_products';
+          
+          if (promo.products) {
+            if (promo.products.toLowerCase() === 'all products') {
+              applicationType = 'all_products';
+              productsList = [];
+            } else {
+              productsList = promo.products.split(',').map(p => p.trim()).filter(Boolean);
+            }
+          }
+          
+          return {
+            id: promo.id,
+            name: promo.name,
+            type: promotionType,
+            promotion_type: promotionType,
+            value: promo.value || '0',
+            promotion_value: discountValue,
+            products: promo.products || '',
+            applicable_products: productsList,
+            status: promo.status,
+            validFrom: promo.validFrom,
+            validTo: promo.validTo,
+            valid_from: promo.validFrom,
+            valid_to: promo.validTo,
+            application_type: applicationType,
+            discountValue: discountValue
+          };
+        });
+      
+      setPromotions(transformedPromotions);
+    } catch (error) {
+      console.error("Error fetching promotions:", error.message);
+    } finally {
+      setIsLoadingPromotions(false);
+    }
+  }, []);
 
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
@@ -81,74 +139,6 @@ function Menu() {
       setLoggedInUser(activeUsername);
     }
 
-    const fetchPromotions = async (token) => {
-      try {
-        const response = await fetch(`${PROMOTION_BASE_URL}/promotions/`, {
-          headers: { 'Authorization': `Bearer ${token}` }
-        });
-        if (!response.ok) {
-          throw new Error('Failed to fetch promotions.');
-        }
-        const data = await response.json();
-        
-        const transformedPromotions = data
-          .filter(p => p.status === 'active')
-          .map(promo => {
-            let promotionType = null;
-            let discountValue = 0;
-            
-            const typeStr = (promo.type || '').toUpperCase();
-            
-            if (typeStr.includes('PERCENTAGE') || typeStr.includes('%')) {
-              promotionType = 'percentage';
-            } else if (typeStr.includes('FIXED') || typeStr.includes('₱')) {
-              promotionType = 'fixed';
-            }
-            
-            if (promo.value) {
-              const numMatch = promo.value.match(/(\d+\.?\d*)/);
-              if (numMatch) {
-                discountValue = parseFloat(numMatch[0]);
-              }
-            }
-            
-            let productsList = [];
-            let applicationType = 'specific_products';
-            
-            if (promo.products) {
-              if (promo.products.toLowerCase() === 'all products') {
-                applicationType = 'all_products';
-                productsList = [];
-              } else {
-                productsList = promo.products.split(',').map(p => p.trim()).filter(Boolean);
-              }
-            }
-            
-            return {
-              id: promo.id,
-              name: promo.name,
-              type: promotionType,
-              promotion_type: promotionType,
-              value: promo.value || '0',
-              promotion_value: discountValue,
-              products: promo.products || '',
-              applicable_products: productsList,
-              status: promo.status,
-              validFrom: promo.validFrom,
-              validTo: promo.validTo,
-              valid_from: promo.validFrom,
-              valid_to: promo.validTo,
-              application_type: applicationType,
-              discountValue: discountValue
-            };
-          });
-        
-        setPromotions(transformedPromotions);
-      } catch (error) {
-        console.error("Error fetching promotions:", error.message);
-      }
-    };
-
     const initializeData = async (token, username) => {
       setIsLoading(true);
       setError(null);
@@ -160,13 +150,11 @@ function Menu() {
       }
 
       try {
-        // 1. Check if session is closed today first
         const isClosed = await checkClosedSessionToday(token, username);
         if (isClosed) {
           return; 
         }
 
-        // 2. Check active session status
         await checkCashierSession(token, username);
 
         const headers = { 'Authorization': `Bearer ${token}` };
@@ -226,7 +214,7 @@ function Menu() {
         initializeData(activeToken, activeUsername);
         fetchPromotions(activeToken);
     }
-  }, []);
+  }, [fetchPromotions]);
 
   const fetchMerchandise = async () => {
     setIsLoading(true);
@@ -435,7 +423,6 @@ function Menu() {
     }
   }, [cartItems]);
 
-// ✅ FIXED: addToCart function that combines same BOGO promotions
 const addToCart = useCallback(async (item, type = 'product') => {
   console.log('🛒 Adding to cart:', item.name, {
     type,
@@ -457,27 +444,23 @@ const addToCart = useCallback(async (item, type = 'product') => {
         `• ${c.type.toUpperCase()}: ${c.name}\n  Needs ${c.needed}, only ${c.available} available\n  Conflicts with: "${c.conflictsWith}"`
       ).join('\n\n');
       
-      alert(`❌ Cannot add "${item.name}" to cart.\n\nShared limited resources:\n\n${conflictMessages}`);
+      toast.error(`Cannot add "${item.name}" to cart.\n\nShared limited resources:\n\n${conflictMessages}`);
       return;
     }
 
     const maxQtyInfo = await getDynamicMaxQuantity(item.name, item.category, item.id);
     
     if (maxQtyInfo && maxQtyInfo.maxQuantity === 0) {
-      alert(`Cannot add ${item.name}. ${maxQtyInfo.limitedBy || 'Insufficient stock'}`);
+      toast.error(`Cannot add ${item.name}. ${maxQtyInfo.limitedBy || 'Insufficient stock'}`);
       return;
     }
 
     setCartItems(prev => {
-      // ✅ CRITICAL FIX: For BOGO items, find existing item with SAME promoId (not groupId)
-      // This allows combining same promotions together
       const existingIndex = prev.findIndex(cartItem => {
-        // Must match product ID and type
         if (cartItem.id !== item.id || cartItem.type !== 'product') {
           return false;
         }
         
-        // ✅ FIXED: If item is from BOGO, match by promoId (not groupId) to combine same promos
         if (item.isFromBogo && cartItem.isFromBogo) {
           return (
             cartItem.bogoPromoId === item.bogoPromoId &&
@@ -485,24 +468,21 @@ const addToCart = useCallback(async (item, type = 'product') => {
           );
         }
         
-        // ✅ FIXED: If item is NOT from BOGO, must also NOT be from BOGO
         if (!item.isFromBogo && !cartItem.isFromBogo) {
           return (!cartItem.addons || cartItem.addons.length === 0);
         }
         
-        // One is BOGO, one is not - they should NOT match
         return false;
       });
 
       let updatedCart;
       
       if (existingIndex !== -1) {
-        // Update existing item quantity
         const currentQty = prev[existingIndex].quantity;
         const maxQty = maxQtyInfo ? maxQtyInfo.maxQuantity : 999;
         
         if (currentQty >= maxQty) {
-          alert(`Maximum quantity of ${maxQty} reached for ${item.name}. ${maxQtyInfo?.limitedBy || ''}`);
+          toast.error(`Maximum quantity of ${maxQty} reached for ${item.name}. ${maxQtyInfo?.limitedBy || ''}`);
           return prev;
         }
 
@@ -517,7 +497,6 @@ const addToCart = useCallback(async (item, type = 'product') => {
         
         console.log(`✅ Updated existing item quantity to ${newQuantity}`);
       } else {
-        // Add new item to cart
         const maxQty = maxQtyInfo ? maxQtyInfo.maxQuantity : 999;
         const newCartItem = { 
           ...item, 
@@ -527,7 +506,6 @@ const addToCart = useCallback(async (item, type = 'product') => {
           maxQuantity: maxQty,
           limitedBy: maxQtyInfo?.limitedBy,
           cartId: Date.now() + Math.random(),
-          // ✅ CRITICAL: Preserve ALL BOGO properties
           isFromBogo: item.isFromBogo || false,
           bogoPromoId: item.bogoPromoId || null,
           bogoGroupId: item.bogoGroupId || null,
@@ -553,7 +531,7 @@ const addToCart = useCallback(async (item, type = 'product') => {
       if (existingIndex !== -1) {
         const updatedCart = [...prev];
         if (updatedCart[existingIndex].quantity >= item.MerchandiseQuantity) {
-          alert(`Maximum stock of ${item.MerchandiseQuantity} reached for ${item.MerchandiseName}`);
+          toast.error(`Maximum stock of ${item.MerchandiseQuantity} reached for ${item.MerchandiseName}`);
           return prev;
         }
         updatedCart[existingIndex] = {
@@ -702,7 +680,11 @@ const addToCart = useCallback(async (item, type = 'product') => {
             <h2 className="menu-selected-category-title">Promotions</h2>
           </div>
           <div className="menu-product-grid-container">
-            <PromotionsList promotions={promotions} addToCart={addToCart} products={products} />
+            {isLoadingPromotions ? (
+              <Loading />
+            ) : (
+              <PromotionsList promotions={promotions} addToCart={addToCart} products={products} />
+            )}
           </div>
         </>
       );
@@ -787,11 +769,26 @@ const addToCart = useCallback(async (item, type = 'product') => {
                   ALL PRODUCTS
                 </div>  
               </div>
+              <div className="menu-category-group">
+                <div className={`menu-all-products-btn ${selectedFilter.type === 'promotions' ? 'active' : ''}`}
+                  onClick={() => {
+                    setShowMerchandise(false);
+                    setShowPromotions(true);
+                    setSelectedFilter({ type: 'promotions', value: 'Promotions' });
+                    const token = localStorage.getItem('authToken');
+                    if (token) {
+                      fetchPromotions(token);
+                    }
+                  }}>
+                  PROMOTIONS
+                </div>  
+              </div>
               {Object.entries(categories).map(([group, items]) => (
                 <div className="menu-category-group" key={group}>
                   <div className={`menu-group-title ${selectedFilter.type === 'group' && selectedFilter.value === group ? 'active' : ''}`}
                     onClick={() => {
                       setShowMerchandise(false);
+                      setShowPromotions(false);
                       setSelectedFilter({ type: 'group', value: group });
                     }}>
                     {group}
@@ -800,6 +797,7 @@ const addToCart = useCallback(async (item, type = 'product') => {
                     <div key={item} className={`menu-category-item ${selectedFilter.type === 'item' && selectedFilter.value === item ? 'active' : ''}`}
                       onClick={() => {
                         setShowMerchandise(false);
+                        setShowPromotions(false);
                         setSelectedFilter({ type: 'item', value: item });
                       }}>
                       {item}
@@ -807,16 +805,6 @@ const addToCart = useCallback(async (item, type = 'product') => {
                   ))}
                 </div>
               ))}
-              <div className="menu-category-group">
-                <div className={`menu-all-products-btn ${selectedFilter.type === 'promotions' ? 'active' : ''}`}
-                  onClick={() => {
-                    setShowMerchandise(false);
-                    setShowPromotions(true);
-                    setSelectedFilter({ type: 'promotions', value: 'Promotions' });
-                  }}>
-                  PROMOTIONS
-                </div>
-              </div>
               <div className="menu-category-group">
                 <div className={`menu-all-products-btn ${selectedFilter.type === 'merchandise' ? 'active' : ''}`}
                   onClick={fetchMerchandise}>
