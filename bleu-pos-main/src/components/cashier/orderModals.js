@@ -41,6 +41,7 @@ const OrderModals = ({
   
   const [receiptConfig, setReceiptConfig] = useState(null);
   const [generatedQRCode, setGeneratedQRCode] = useState(null);
+  const [blockchainQRCode, setBlockchainQRCode] = useState(null);
   const [cashierFullName, setCashierFullName] = useState('');
 
   // Fetch receipt configuration and cashier full name
@@ -51,14 +52,27 @@ const OrderModals = ({
     }
   }, [showReceiptModal]);
 
-  // Generate QR code when receipt config changes
+  // Generate QR codes when receipt config changes or order changes
   useEffect(() => {
-    if (receiptConfig && receiptConfig.showQR && receiptConfig.qrType === 'link' && receiptConfig.qrLink) {
-      generateQRCode(receiptConfig.qrLink);
-    } else {
-      setGeneratedQRCode(null);
+    if (receiptConfig && order) {
+      // Generate the first QR code (existing functionality)
+      if (receiptConfig.showQR && receiptConfig.qrType === 'link' && receiptConfig.qrLink) {
+        generateQRCode(receiptConfig.qrLink, setGeneratedQRCode);
+      } else {
+        setGeneratedQRCode(null);
+      }
+      
+      // Always generate blockchain QR code
+      const blockchainUrl = generateBlockchainUrl();
+      generateQRCode(blockchainUrl, setBlockchainQRCode);
     }
-  }, [receiptConfig]);
+  }, [receiptConfig, order]);
+
+  const generateBlockchainUrl = () => {
+    // Generate URL for blockchain transaction view
+    const baseUrl = window.location.origin;
+    return `${baseUrl}/blockchain?${order.id}`;
+  };
 
   const fetchReceiptConfig = async () => {
     try {
@@ -100,7 +114,7 @@ const OrderModals = ({
     });
   };
 
-  const generateQRCode = async (url) => {
+  const generateQRCode = async (url, setQRCodeState) => {
     try {
       const qrDataUrl = await QRCode.toDataURL(url, {
         width: 200,
@@ -110,10 +124,10 @@ const OrderModals = ({
           light: '#FFFFFF'
         }
       });
-      setGeneratedQRCode(qrDataUrl);
+      setQRCodeState(qrDataUrl);
     } catch (err) {
       console.error('Error generating QR code:', err);
-      setGeneratedQRCode(null);
+      setQRCodeState(null);
     }
   };
 
@@ -353,7 +367,6 @@ const OrderModals = ({
 
                         <div className="orderpanel-receipt-divider">----------------------------------------</div>
 
-
                         <div className="orderpanel-receipt-line orderpanel-receipt-total">
                           <span>TOTAL</span>
                           <span>{(totalNetAmt - (hasRefunds ? getTotalRefundAmount() : 0)).toFixed(2)}</span>
@@ -381,33 +394,54 @@ const OrderModals = ({
                   })()}
                 </div>
                 
-                {receiptConfig.showQR && (
-                  <div className="orderpanel-receipt-footer">
-                    <div className="orderpanel-qr-section">
-                      {receiptConfig.qrType === 'image' && receiptConfig.qrImagePath ? (
+                {/* Dual QR Code Section */}
+                <div className="orderpanel-receipt-footer">
+                  <div className="orderpanel-dual-qr-section">
+                    {/* First QR Code - Existing functionality (OOS/Feedback) */}
+                    {receiptConfig.showQR && (
+                      <div className="orderpanel-qr-item">
+                        {receiptConfig.qrType === 'image' && receiptConfig.qrImagePath ? (
+                          <img 
+                            src={receiptConfig.qrImagePath} 
+                            alt="QR Code" 
+                            className="orderpanel-qr-code" 
+                          />
+                        ) : receiptConfig.qrType === 'link' && generatedQRCode ? (
+                          <img 
+                            src={generatedQRCode} 
+                            alt="Feedback QR Code" 
+                            className="orderpanel-qr-code" 
+                          />
+                        ) : (
+                          <div className="orderpanel-qr-placeholder">QR CODE</div>
+                        )}
+                        <div className="orderpanel-qr-label">
+                          {receiptConfig.qrText || 'SCAN FOR FEEDBACK'}
+                        </div>
+                      </div>
+                    )}
+                    
+                    {/* Second QR Code - Blockchain Transaction */}
+                    <div className="orderpanel-qr-item">
+                      {blockchainQRCode ? (
                         <img 
-                          src={receiptConfig.qrImagePath} 
-                          alt="QR Code" 
-                          className="orderpanel-qr-code" 
-                        />
-                      ) : receiptConfig.qrType === 'link' && generatedQRCode ? (
-                        <img 
-                          src={generatedQRCode} 
-                          alt="QR Code" 
+                          src={blockchainQRCode} 
+                          alt="Blockchain Transaction QR Code" 
                           className="orderpanel-qr-code" 
                         />
                       ) : (
                         <div className="orderpanel-qr-placeholder">QR CODE</div>
                       )}
-                      {receiptConfig.qrText && (
-                        <div className="orderpanel-qr-text">{receiptConfig.qrText}</div>
-                      )}
-                      {receiptConfig.additionalText && (
-                        <div className="orderpanel-additional-text">{receiptConfig.additionalText}</div>
-                      )}
+                      <div className="orderpanel-qr-label">
+                        SCAN TO VIEW TRANSACTION
+                      </div>
                     </div>
                   </div>
-                )}
+                  
+                  {receiptConfig.additionalText && (
+                    <div className="orderpanel-additional-text">{receiptConfig.additionalText}</div>
+                  )}
+                </div>
               </div>
             </div>
 

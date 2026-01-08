@@ -635,7 +635,7 @@ async def save_online_order(
                     sql_insert_sale, 
                     order_data.order_type,
                     corrected_payment_method,
-                    session_id,  # ✅ Changed from order_data.cashier_name
+                    session_id,
                     order_data.customer_name,
                     discount_amount,
                     pos_order_status, 
@@ -663,7 +663,7 @@ async def save_online_order(
                     sql_insert_sale_fallback,
                     order_data.order_type,
                     corrected_payment_method,
-                    session_id,  # ✅ Changed from order_data.cashier_name
+                    session_id,
                     order_data.customer_name,
                     discount_amount,
                     pos_order_status,
@@ -805,16 +805,35 @@ async def save_online_order(
                 "reference_number": final_reference_number,
                 "total_items": len(order_data.items),
                 "total_amount": float(order_data.total_amount),
-                "session_id": session_id  # ✅ Added
+                "session_id": session_id
             }
-            
+
+            # 🆕 NEW: Fetch actor's full name (cashier) for blockchain logging
+            try:
+                async with httpx.AsyncClient() as client:
+                    response = await client.get(
+                        f"http://127.0.0.1:4000/users/employee_name",
+                        params={"username": order_data.cashier_name},
+                        headers={"Authorization": f"Bearer {current_user['access_token']}"},
+                        timeout=5.0
+                    )
+                    
+                    if response.status_code == 200:
+                        data = response.json()
+                        actor_full_name = data.get("employee_name") or order_data.cashier_name
+                    else:
+                        actor_full_name = order_data.cashier_name
+            except Exception as e:
+                logger.error(f"Error fetching employee name for cashier: {e}")
+                actor_full_name = order_data.cashier_name
+
             background_tasks.add_task(
                 log_to_blockchain,
                 service_identifier="PURCHASE_ORDER_SERVICE",
                 action="CREATE",
                 entity_type="PurchaseOrder",
                 entity_id=new_sale_id,
-                actor_username=current_user.get("username"),
+                actor_username=actor_full_name,  # 🆕 Now using full name instead of username
                 change_description=blockchain_description,
                 data=blockchain_payload,
                 token=current_user['access_token']
@@ -1115,7 +1134,7 @@ async def update_order_status(
                     )
                 
                 # Handle cancellation transaction
-                conn.autocommit = False  # ✅ FIXED: Set as property, not call as method
+                conn.autocommit = False
                 try:
                     await cursor.execute(
                         "UPDATE Sales SET Status = ?, UpdatedAt = GETDATE() WHERE SaleID = ?", 
@@ -1156,7 +1175,7 @@ async def update_order_status(
                         detail=f"Failed to save cancellation to DB: {str(db_exc)}"
                     )
                 finally:
-                    conn.autocommit = True  # ✅ FIXED: Set as property, not call as method
+                    conn.autocommit = True
             else:
                 # Handle all other status updates
                 try:
@@ -1176,17 +1195,36 @@ async def update_order_status(
 
             # Step 4: Schedule the blockchain log with the detailed description
             try:
+                # 🆕 NEW: Fetch actor's full name for blockchain logging
+                try:
+                    async with httpx.AsyncClient() as client:
+                        response = await client.get(
+                            f"http://127.0.0.1:4000/users/employee_name",
+                            params={"username": actor},
+                            headers={"Authorization": f"Bearer {current_user['access_token']}"},
+                            timeout=5.0
+                        )
+                        
+                        if response.status_code == 200:
+                            data = response.json()
+                            actor_full_name = data.get("employee_name") or actor
+                        else:
+                            actor_full_name = actor
+                except Exception as e:
+                    logger.error(f"Error fetching employee name for actor: {e}")
+                    actor_full_name = actor
+
                 background_tasks.add_task(
                     log_to_blockchain,
                     service_identifier="POS_SALES",
                     action=action_type,
                     entity_type="Sale",
                     entity_id=parsed_id,
-                    actor_username=actor,
+                    actor_username=actor_full_name,  # 🆕 Now using full name instead of username
                     change_description=detailed_description,
                     data={
-                        "old_status": old_status, 
-                        "new_status": request.newStatus, 
+                        "old_status": old_status,
+                        "new_status": request.newStatus,
                         "manager_authorizer": request.cancelDetails.managerUsername if request.newStatus == 'cancelled' else None
                     },
                     token=current_user['access_token']
@@ -1325,24 +1363,48 @@ async def update_pos_status_for_online_order(
             
             await conn.commit()
             
-            # Schedule blockchain logging
-            background_tasks.add_task(
-                log_to_blockchain,
-                service_identifier="PURCHASE_ORDER_SERVICE",
-                action="UPDATE",
-                entity_type="PurchaseOrder",
-                entity_id=existing_order.SaleID,
-                actor_username=actor,
-                change_description=detailed_description,
-                data={
-                    "old_status": old_status,
-                    "new_status": request.newStatus,
-                    "reference_number": reference_number,
-                    "cashier_updated_to": cashier_to_update,
-                    "session_id": new_session_id
-                },
-                token=current_user['access_token']
-            )
+            # 🆕 NEW: Fetch actor's full name for blockchain logging
+            try:
+                async with httpx.AsyncClient() as client:
+                    response = await client.get(
+                        f"http://127.0.0.1:4000/users/employee_name",
+                        params={"username": actor},
+                        headers={"Authorization": f"Bearer {current_user['access_token']}"},
+                        timeout=5.0
+                    )
+                    
+                    if response.status_code == 200:
+                        data = response.json()
+                        actor_full_name = data.get("employee_name") or actor
+                    else:
+                        actor_full_name = actor
+            except Exception as e:
+                logger.error(f"Error fetching employee name for actor: {e}")
+                actor_full_name = actor
+            
+            # 🆕 NEW: Add blockchain logging
+            try:
+                background_tasks.add_task(
+                    log_to_blockchain,
+                    service_identifier="PURCHASE_ORDER_SERVICE",
+                    action="UPDATE",
+                    entity_type="PurchaseOrder",
+                    entity_id=existing_order.SaleID,
+                    actor_username=actor_full_name,  # 🆕 Now using full name
+                    change_description=detailed_description,
+                    data={
+                        "reference_number": reference_number,
+                        "sale_id": existing_order.SaleID,
+                        "old_status": old_status,
+                        "new_status": request.newStatus,
+                        "cashier_name": cashier_to_update,
+                        "session_id": new_session_id
+                    },
+                    token=current_user['access_token']
+                )
+            except Exception as blockchain_exc:
+                logger.error(f"Failed to schedule blockchain logging: {blockchain_exc}", exc_info=True)
+                # Don't fail the request if blockchain logging fails
             
             logger.info(
                 f"✅ Successfully updated POS status for reference '{reference_number}' "
@@ -1372,6 +1434,197 @@ async def update_pos_status_for_online_order(
         raise HTTPException(
             status_code=500, 
             detail=f"Failed to update the order status in the POS: {str(e)}"
+        )
+    finally:
+        if conn:
+            await conn.close()
+
+
+# This endpoint is PUBLIC - no authentication required for customer viewing
+@router_purchase_order.get(
+    "/receipt/{sale_id}",
+    status_code=status.HTTP_200_OK,
+    summary="Get receipt data for customer view (PUBLIC)"
+)
+async def get_receipt_for_customer(sale_id: int):
+    """
+    PUBLIC endpoint - No authentication required.
+    Returns only customer-facing receipt information.
+    Does NOT expose sensitive business data.
+    """
+    conn = None
+    try:
+        conn = await get_db_connection()
+        async with conn.cursor() as cursor:
+            # Get sale header information (limited fields for security)
+            sale_query = """
+                SELECT 
+                    s.SaleID,
+                    s.OrderType,
+                    s.PaymentMethod,
+                    s.CreatedAt,
+                    s.TotalDiscountAmount,
+                    s.PromotionalDiscountAmount,
+                    s.Status,
+                    cs.CashierName
+                FROM Sales s
+                LEFT JOIN CashierSessions cs ON s.SessionID = cs.SessionID
+                WHERE s.SaleID = ? AND s.Status IN ('completed', 'processing')
+            """
+            await cursor.execute(sale_query, sale_id)
+            sale_row = await cursor.fetchone()
+            
+            if not sale_row:
+                raise HTTPException(
+                    status_code=404, 
+                    detail=f"Receipt not found or not available for viewing"
+                )
+            
+            # Security check - only allow viewing of completed or processing orders
+            if sale_row.Status not in ['completed', 'processing']:
+                raise HTTPException(
+                    status_code=403,
+                    detail="This receipt is not available for public viewing"
+                )
+            
+            # Get receipt configuration
+            config_query = "SELECT TOP 1 StoreName, Address1, Address2 FROM ReceiptConfig ORDER BY ConfigID DESC"
+            await cursor.execute(config_query)
+            config_row = await cursor.fetchone()
+            
+            store_name = config_row.StoreName if config_row else "BLEU BEAN CAFE"
+            address1 = config_row.Address1 if config_row else "Don Fabian St., Commonwealth"
+            address2 = config_row.Address2 if config_row else "Quezon City, Philippines"
+            
+            # Get sale items
+            items_query = """
+                SELECT 
+                    si.SaleItemID,
+                    si.ItemName,
+                    si.Quantity,
+                    si.UnitPrice
+                FROM SaleItems si
+                WHERE si.SaleID = ?
+            """
+            await cursor.execute(items_query, sale_id)
+            items_rows = await cursor.fetchall()
+            
+            items = []
+            subtotal = Decimal('0.0')
+            
+            for item_row in items_rows:
+                item_id = item_row.SaleItemID
+                item_name = item_row.ItemName
+                item_qty = item_row.Quantity
+                item_price = Decimal(str(item_row.UnitPrice))
+                
+                # Calculate item subtotal
+                item_subtotal = item_price * item_qty
+                subtotal += item_subtotal
+                
+                # Get addons for this item
+                addons_query = """
+                    SELECT 
+                        a.AddonName,
+                        a.Price,
+                        sia.Quantity
+                    FROM SaleItemAddons sia
+                    JOIN Addons a ON sia.AddonID = a.AddonID
+                    WHERE sia.SaleItemID = ?
+                """
+                await cursor.execute(addons_query, item_id)
+                addons_rows = await cursor.fetchall()
+                
+                addons = []
+                for addon_row in addons_rows:
+                    addon_price = Decimal(str(addon_row.Price))
+                    addon_qty = addon_row.Quantity
+                    addon_total = addon_price * addon_qty
+                    subtotal += addon_total
+                    
+                    addons.append({
+                        "name": addon_row.AddonName,
+                        "price": float(addon_price),
+                        "quantity": addon_qty
+                    })
+                
+                # Get item-level discounts
+                discounts_query = """
+                    SELECT 
+                        d.name AS DiscountName,
+                        sid.DiscountAmount
+                    FROM SaleItemDiscounts sid
+                    JOIN discounts d ON sid.DiscountID = d.id
+                    WHERE sid.SaleItemID = ?
+                """
+                await cursor.execute(discounts_query, item_id)
+                discounts_rows = await cursor.fetchall()
+                
+                discounts = []
+                for disc_row in discounts_rows:
+                    discounts.append({
+                        "name": disc_row.DiscountName,
+                        "amount": float(disc_row.DiscountAmount)
+                    })
+                
+                # Get item-level promotions
+                promotions_query = """
+                    SELECT 
+                        p.name AS PromotionName,
+                        sip.PromotionAmount
+                    FROM SaleItemPromotions sip
+                    JOIN promotions p ON sip.PromotionID = p.id
+                    WHERE sip.SaleItemID = ?
+                """
+                await cursor.execute(promotions_query, item_id)
+                promotions_rows = await cursor.fetchall()
+                
+                for promo_row in promotions_rows:
+                    discounts.append({
+                        "name": promo_row.PromotionName,
+                        "amount": float(promo_row.PromotionAmount)
+                    })
+                
+                items.append({
+                    "name": item_name,
+                    "quantity": item_qty,
+                    "price": float(item_price),
+                    "addons": addons,
+                    "discounts": discounts
+                })
+            
+            # Calculate totals
+            manual_discount = Decimal(str(sale_row.TotalDiscountAmount or 0))
+            promo_discount = Decimal(str(sale_row.PromotionalDiscountAmount or 0))
+            total_discount = manual_discount + promo_discount
+            final_total = subtotal - total_discount
+            
+            # Format date
+            created_at = sale_row.CreatedAt
+            formatted_date = created_at.strftime("%B %d, %Y - %I:%M %p")
+            
+            # Return only customer-safe information
+            return {
+                "saleId": sale_id,
+                "storeName": store_name,
+                "address": f"{address1}, {address2}",
+                "date": formatted_date,
+                "cashier": sale_row.CashierName or "Staff",
+                "items": items,
+                "subtotal": float(subtotal),
+                "promotionalDiscount": float(promo_discount),
+                "manualDiscount": float(manual_discount),
+                "total": float(final_total),
+                "paymentMethod": sale_row.PaymentMethod
+            }
+            
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error fetching receipt for sale {sale_id}: {e}", exc_info=True)
+        raise HTTPException(
+            status_code=500,
+            detail="Failed to fetch receipt data"
         )
     finally:
         if conn:

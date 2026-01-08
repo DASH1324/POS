@@ -13,7 +13,7 @@ import os
 from dotenv import load_dotenv
 load_dotenv()
 
-from database import get_db_connection
+from database import get_blockchain_db_connection
 
 # Configure logging
 logging.basicConfig(level=logging.INFO)
@@ -25,8 +25,8 @@ oauth2_scheme = OAuth2PasswordBearer(tokenUrl="http://localhost:4000/auth/token"
 # --- Auth Configuration ---
 USER_SERVICE_ME_URL = "http://localhost:4000/auth/users/me"
 
-BUILDBEAR_RPC_URL = os.getenv("BUILDBEAR_RPC_URL", "https://rpc.buildbear.io/severe-electro-aed9ddc9")
-PRIVATE_KEY = os.getenv("PRIVATE_KEY", "af6fcd3bc55a8580b646553fd164cea8d25a9746b3fab9c1bdd363d73cc6b29e")
+BUILDBEAR_RPC_URL = os.getenv("BUILDBEAR_RPC_URL", "https://rpc.buildbear.io/screeching-yondu-eb2d9143")
+PRIVATE_KEY = os.getenv("PRIVATE_KEY", "dedafa3f5b97959588c0565254045bc36aa52aceef5838b50437d5d5d336345f")
 CONTRACT_ADDRESS = os.getenv("CONTRACT_ADDRESS", "0x14B5BB91Ea29056F2BECEC93fFeCEcaA26AC467B")
 
 # Matches the solidity smart contract
@@ -151,7 +151,12 @@ except Exception as e:
     logger.error(f"❌ Failed to initialize Web3: {e}")
 
 
-# PYDANTIC MODELS
+# HELPER FUNCTIONS
+def generate_data_hash(data: Dict[str, Any]) -> str:
+    """Generate SHA-256 hash of the data"""
+    data_string = json.dumps(data, sort_keys=True, default=str)
+    return hashlib.sha256(data_string.encode()).hexdigest()
+
 class ActivityLogRequest(BaseModel):
     service_identifier: str = Field(..., description="Service name (e.g., 'POS_SALES', 'DISCOUNTS', 'PROMOTIONS')")
     action: str = Field(..., description="Action type: CREATE, UPDATE, DELETE")
@@ -214,12 +219,6 @@ async def get_current_active_user(token: str = Depends(oauth2_scheme)):
                 detail="Could not connect to the authentication service."
             )
 
-# HELPER FUNCTIONS
-def generate_data_hash(data: Dict[str, Any]) -> str:
-    """Generate SHA-256 hash of the data"""
-    data_string = json.dumps(data, sort_keys=True, default=str)
-    return hashlib.sha256(data_string.encode()).hexdigest()
-
 async def save_to_database(
     blockchain_log_id: int,
     tx_hash: str,
@@ -228,34 +227,51 @@ async def save_to_database(
     actor_address: str,
     data_hash: str
 ):
-    """Save blockchain log reference to SQL database"""
-    conn = await get_db_connection()
+    """Save blockchain log reference to BlockchainAudit database using direct INSERT"""
+    conn = await get_blockchain_db_connection()
     try:
         async with conn.cursor() as cursor:
+            # Direct INSERT statement instead of stored procedure
             sql = """
                 INSERT INTO BlockchainActivityLogs (
-                    BlockchainLogID, TransactionHash, BlockNumber,
-                    ServiceIdentifier, Action, EntityType, EntityID,
-                    ActorUsername, ActorAddress, ChangeDescription, DataHash
-                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                    BlockchainLogID,
+                    TransactionHash,
+                    BlockNumber,
+                    ServiceIdentifier,
+                    Action,
+                    EntityType,
+                    EntityID,
+                    ActorUsername,
+                    ActorAddress,
+                    ChangeDescription,
+                    DataHash,
+                    CreatedAt
+                )
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, GETDATE())
             """
             await cursor.execute(
                 sql,
-                blockchain_log_id, tx_hash, block_number,
-                log_data.service_identifier, log_data.action,
-                log_data.entity_type, log_data.entity_id,
-                log_data.actor_username, actor_address,
-                log_data.change_description, data_hash
+                blockchain_log_id,
+                tx_hash,
+                block_number,
+                log_data.service_identifier,
+                log_data.action,
+                log_data.entity_type,
+                log_data.entity_id,
+                log_data.actor_username,
+                actor_address,
+                log_data.change_description,
+                data_hash
             )
             await conn.commit()
-            logger.info(f"✅ Saved blockchain log to database: LogID {blockchain_log_id}")
+            logger.info(f"✅ Saved blockchain log to BlockchainAudit database: LogID {blockchain_log_id}")
     except Exception as e:
-        logger.error(f"❌ Failed to save to database: {e}")
+        logger.error(f"❌ Failed to save to BlockchainAudit database: {e}")
         raise
     finally:
         await conn.close()
 
-# BLOCKCHAIN INTERACTION FUNCTIONS - 
+# BLOCKCHAIN INTERACTION FUNCTIONS
 
 async def log_to_blockchain(log_data: ActivityLogRequest) -> ActivityLogResponse:
     """Send activity log to BuildBear blockchain"""
@@ -324,7 +340,7 @@ async def log_to_blockchain(log_data: ActivityLogRequest) -> ActivityLogResponse
             log_id = contract.functions.logCount().call() - 1
             logger.info(f"Log ID from logCount: {log_id}")
         
-        # Save to database
+        # Save to BlockchainAudit database
         await save_to_database(
             blockchain_log_id=log_id,
             tx_hash=tx_hash.hex(),
@@ -384,16 +400,16 @@ async def get_activity_logs(
     action: Optional[str] = None,
     start_date: Optional[str] = None,
     end_date: Optional[str] = None,
-    limit: Optional[int] = None,  # Changed: Make it Optional instead of default 50
+    limit: Optional[int] = None,
     current_user: dict = Depends(get_current_active_user)
 ):
     """
-    Query activity logs from the database.
+    Query activity logs from the BlockchainAudit database.
     Filters: service, entity_type, actor_username, action, start_date, end_date
     Date format: YYYY-MM-DD (e.g., 2025-01-15)
     If limit is not specified, returns all records.
     """
-    conn = await get_db_connection()
+    conn = await get_blockchain_db_connection()
     try:
         async with conn.cursor() as cursor:
             # Build dynamic query
@@ -469,11 +485,11 @@ async def get_activity_logs(
                     block_number=row.BlockNumber
                 ))
             
-            logger.info(f"✅ Retrieved {len(results)} logs (limit: {limit or 'none'})")
+            logger.info(f"✅ Retrieved {len(results)} logs from BlockchainAudit DB (limit: {limit or 'none'})")
             return results
     
     except Exception as e:
-        logger.error(f"❌ Failed to query logs: {e}", exc_info=True)
+        logger.error(f"❌ Failed to query logs from BlockchainAudit DB: {e}", exc_info=True)
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Failed to retrieve logs: {str(e)}"
@@ -497,8 +513,8 @@ async def get_activity_log_by_id(
         # Query from blockchain using the getLog function
         log_data = contract.functions.getLog(log_id).call()
         
-        # Query transaction details from database
-        conn = await get_db_connection()
+        # Query transaction details from BlockchainAudit database
+        conn = await get_blockchain_db_connection()
         try:
             async with conn.cursor() as cursor:
                 await cursor.execute(
@@ -575,7 +591,7 @@ async def verify_log_integrity(
 
 @router.get("/status")
 async def blockchain_status():
-    """Check blockchain connection status"""
+    """Check blockchain connection status and database connectivity"""
     if not w3 or not account:
         return {
             "status": "disconnected",
@@ -596,6 +612,21 @@ async def blockchain_status():
             except Exception as e:
                 logger.warning(f"Could not get log count: {e}")
         
+        # Check database connectivity
+        db_status = "unknown"
+        db_log_count = None
+        try:
+            conn = await get_blockchain_db_connection()
+            async with conn.cursor() as cursor:
+                await cursor.execute("SELECT COUNT(*) as count FROM BlockchainActivityLogs")
+                row = await cursor.fetchone()
+                db_log_count = row.count if row else 0
+                db_status = "connected"
+            await conn.close()
+        except Exception as e:
+            db_status = f"error: {str(e)}"
+            logger.error(f"Database status check failed: {e}")
+        
         return {
             "status": "connected" if is_connected else "disconnected",
             "connected": is_connected,
@@ -606,7 +637,10 @@ async def blockchain_status():
             "latest_block": block_number,
             "contract_address": CONTRACT_ADDRESS if contract else None,
             "contract_deployed": bool(contract),
-            "total_logs": log_count
+            "total_logs_blockchain": log_count,
+            "database_status": db_status,
+            "total_logs_database": db_log_count,
+            "database_name": "BlockchainAudit"
         }
     except Exception as e:
         return {
@@ -614,3 +648,17 @@ async def blockchain_status():
             "connected": False,
             "error": str(e)
         }
+    
+@router.get("/network-info")
+async def get_network_info():
+    """Get blockchain network information for explorer links"""
+    # Extract network ID from RPC URL
+    # Format: https://rpc.buildbear.io/{network_id}
+    network_id = BUILDBEAR_RPC_URL.split('/')[-1] if BUILDBEAR_RPC_URL else None
+    
+    return {
+        "rpc_url": BUILDBEAR_RPC_URL,
+        "network_id": network_id,
+        "explorer_base_url": f"https://explorer.buildbear.io/{network_id}" if network_id else None,
+        "contract_address": CONTRACT_ADDRESS
+    }

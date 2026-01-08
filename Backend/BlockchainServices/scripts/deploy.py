@@ -16,8 +16,8 @@ print("🚀 DEPLOYING ACTIVITYLOGGER CONTRACT")
 print("="*70 + "\n")
 
 # Configuration - Load from .env
-BUILDBEAR_RPC_URL = os.getenv("BUILDBEAR_RPC_URL", "https://rpc.buildbear.io/severe-electro-aed9ddc9")
-PRIVATE_KEY = os.getenv("PRIVATE_KEY", "af6fcd3bc55a8580b646553fd164cea8d25a9746b3fab9c1bdd363d73cc6b29e")
+BUILDBEAR_RPC_URL = os.getenv("BUILDBEAR_RPC_URL", "https://rpc.buildbear.io/screeching-yondu-eb2d9143")
+PRIVATE_KEY = os.getenv("PRIVATE_KEY", "dedafa3f5b97959588c0565254045bc36aa52aceef5838b50437d5d5d336345f")
 
 # Read contract source from file
 with open('contracts/ActivityLogger.sol', 'r') as f:

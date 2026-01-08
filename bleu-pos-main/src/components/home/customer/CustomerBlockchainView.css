@@ -1,0 +1,271 @@
+/* Customer Blockchain View Custom Styles */
+
+/* Root container */
+.min-h-screen {
+  background: linear-gradient(135deg, #e0f2f1 0%, #e3f2fd 100%);
+}
+
+/* Main container */
+.max-w-4xl {
+  max-width: 600px;
+}
+
+/* Header card - Transaction Verified */
+.bg-white.rounded-2xl:first-of-type {
+  background: white;
+  border-radius: 12px;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.08);
+  padding: 2rem;
+  margin-bottom: 1.5rem;
+}
+
+.bg-teal-100.p-4.rounded-full {
+  background-color: #e0f2f1;
+  padding: 1.5rem;
+  border-radius: 50%;
+  display: inline-flex;
+  margin-bottom: 1rem;
+}
+
+.text-3xl.font-bold.text-gray-900 {
+  font-size: 1.5rem;
+  font-weight: 700;
+  color: #1a1a1a;
+  margin-bottom: 0.5rem;
+}
+
+/* Receipt Details card */
+.bg-white.rounded-2xl.shadow-xl.p-8.mb-6:nth-of-type(2) {
+  background: white;
+  border-radius: 12px;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.08);
+  padding: 2rem;
+  margin-bottom: 1.5rem;
+}
+
+/* Receipt header with icon */
+.text-2xl.font-bold.text-gray-900.mb-6 {
+  font-size: 1.125rem;
+  font-weight: 700;
+  color: #1a1a1a;
+  margin-bottom: 1.5rem;
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+/* Store name and address */
+.text-xl.font-bold.text-gray-900 {
+  font-size: 1.125rem;
+  font-weight: 700;
+  text-align: center;
+  margin-bottom: 0.25rem;
+}
+
+.text-sm.text-gray-600 {
+  font-size: 0.813rem;
+  color: #666;
+  text-align: center;
+}
+
+/* Grid info section */
+.grid.grid-cols-2.gap-4 {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 1rem;
+  margin-top: 1rem;
+}
+
+.grid.grid-cols-2.gap-4 > div {
+  display: flex;
+  flex-direction: column;
+}
+
+.grid.grid-cols-2.gap-4 .text-gray-500 {
+  font-size: 0.75rem;
+  color: #999;
+  margin-bottom: 0.25rem;
+}
+
+.grid.grid-cols-2.gap-4 .font-semibold.text-gray-900 {
+  font-size: 0.813rem;
+  font-weight: 600;
+  color: #1a1a1a;
+}
+
+/* Item rows */
+.space-y-3 .border-b {
+  padding-bottom: 0.75rem;
+  margin-bottom: 0.75rem;
+  border-bottom: 1px solid #f0f0f0;
+}
+
+.space-y-3 .font-semibold.text-gray-900 {
+  font-size: 0.875rem;
+  font-weight: 600;
+  color: #1a1a1a;
+}
+
+/* Discount text */
+.text-sm.text-green-600 {
+  font-size: 0.813rem;
+  color: #4caf50;
+}
+
+/* Totals section */
+.border-t.border-gray-200.pt-4 {
+  border-top: 1px solid #e0e0e0;
+  padding-top: 1rem;
+}
+
+.flex.justify-between.text-gray-600 {
+  display: flex;
+  justify-content: space-between;
+  font-size: 0.875rem;
+  color: #666;
+  margin-bottom: 0.5rem;
+}
+
+.flex.justify-between.text-green-600 {
+  display: flex;
+  justify-content: space-between;
+  font-size: 0.875rem;
+  color: #4caf50;
+  margin-bottom: 0.5rem;
+}
+
+.flex.justify-between.text-xl.font-bold {
+  font-size: 1.125rem;
+  font-weight: 700;
+  color: #1a1a1a;
+  margin-top: 0.5rem;
+  padding-top: 0.5rem;
+  border-top: 1px solid #e0e0e0;
+}
+
+/* Blockchain History section */
+.bg-white.rounded-2xl.shadow-xl.p-8:last-of-type {
+  background: white;
+  border-radius: 12px;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.08);
+  padding: 2rem;
+}
+
+/* Transaction log items */
+.border.border-gray-200.rounded-lg {
+  border: 1px solid #e0e0e0;
+  border-radius: 8px;
+  overflow: hidden;
+  margin-bottom: 1rem;
+}
+
+.border.border-gray-200.rounded-lg .p-4 {
+  padding: 1rem;
+  cursor: pointer;
+  transition: background-color 0.2s;
+}
+
+.border.border-gray-200.rounded-lg .p-4:hover {
+  background-color: #fafafa;
+}
+
+/* Action badges */
+.bg-green-100.text-green-800 {
+  background-color: #e8f5e9;
+  color: #2e7d32;
+  padding: 0.375rem 0.75rem;
+  border-radius: 12px;
+  font-size: 0.75rem;
+  font-weight: 600;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.375rem;
+}
+
+.bg-blue-100.text-blue-800 {
+  background-color: #e3f2fd;
+  color: #1976d2;
+  padding: 0.375rem 0.75rem;
+  border-radius: 12px;
+  font-size: 0.75rem;
+  font-weight: 600;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.375rem;
+}
+
+/* Block number */
+.text-sm.text-gray-500 {
+  font-size: 0.75rem;
+  color: #999;
+}
+
+/* Expanded section */
+.bg-gray-50.border-t {
+  background-color: #f9f9f9;
+  border-top: 1px solid #e0e0e0;
+  padding: 1rem;
+}
+
+/* Transaction hash and data boxes */
+.bg-white.rounded.px-3.py-2 {
+  background-color: white;
+  border-radius: 6px;
+  padding: 0.75rem;
+  margin-top: 0.5rem;
+}
+
+.bg-white.rounded.px-3.py-2.font-mono {
+  font-family: 'Courier New', monospace;
+  font-size: 0.75rem;
+  color: #666;
+  word-break: break-all;
+}
+
+/* Info box at bottom */
+.bg-teal-50.rounded-lg {
+  background-color: #e0f2f1;
+  border-radius: 8px;
+  padding: 1rem;
+  margin-top: 1.5rem;
+}
+
+.bg-teal-50.rounded-lg p {
+  font-size: 0.813rem;
+  color: #424242;
+  text-align: center;
+  margin: 0;
+}
+
+/* Footer */
+.text-center.mt-8 {
+  text-align: center;
+  margin-top: 2rem;
+  font-size: 0.813rem;
+  color: #999;
+}
+
+/* Verification checkmark */
+.text-green-600 {
+  color: #4caf50;
+}
+
+/* Chevron icons */
+.text-gray-400 {
+  color: #bdbdbd;
+}
+
+/* Responsive adjustments */
+@media (max-width: 640px) {
+  .max-w-4xl {
+    max-width: 100%;
+  }
+  
+  .bg-white.rounded-2xl {
+    padding: 1.5rem;
+  }
+  
+  .text-3xl.font-bold.text-gray-900 {
+    font-size: 1.25rem;
+  }
+}

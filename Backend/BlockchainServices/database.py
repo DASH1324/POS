@@ -2,13 +2,13 @@ import aioodbc
 
 # database config
 server = 'DESKTOP-TVGCI2U\\SQLEXPRESS'
-database = 'POS'
+database = 'BlockchainAudit'
 username = 'ranjel'
 password = 'rnjl27'
 driver = 'ODBC Driver 17 for SQL Server'
 
 # async function to get db connection
-async def get_db_connection():
+async def get_blockchain_db_connection():
     dsn = (
         f"DRIVER={{{driver}}};"
         f"SERVER={server};"

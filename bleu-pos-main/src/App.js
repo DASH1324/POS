@@ -25,6 +25,7 @@ import CashierSales from './components/cashier/cashierSales';
 import ClosedSessionSummary from './components/cashier/ClosedSessionSummary';
 
 import ActivityLogs from './components/home/activityLogs/activityLogs';
+import CustomerBlockchainView from './components/home/customer/CustomerBlockchainView';
 
 
 function RedirectToLoginSystem() {
@@ -211,6 +212,9 @@ function App() {
           <Route path="/cashier-session-summary" element={<ClosedSessionSummary />} />
           <Route path="/cashier/cashierSales" element={<CashierSales />} />
           <Route path="/home/activityLogs" element={<ActivityLogs />} />
+
+          {/*Customer Blockchain View*/}
+          <Route path="/blockchain" element={<CustomerBlockchainView />} />
 
         </Routes>
 

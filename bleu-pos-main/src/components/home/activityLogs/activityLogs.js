@@ -18,6 +18,7 @@ import {
   FaUndo,
   FaBan,
   FaUser,
+  FaExternalLinkAlt,
 } from "react-icons/fa";
 import axios from "axios";
 import CustomDateModal from "../shared/customDateModal";
@@ -87,9 +88,27 @@ function BlockchainActivityLogs() {
   const [currentPeriodText, setCurrentPeriodText] = useState(getPeriodText("all"));
   const [groupedLogs, setGroupedLogs] = useState([]);
   const [error, setError] = useState(null);
+  const [networkInfo, setNetworkInfo] = useState(null);
 
   // State to store the mapping of username -> FullName
   const [actorNameMap, setActorNameMap] = useState({});
+
+  // Fetch network info on component mount
+  useEffect(() => {
+    const fetchNetworkInfo = async () => {
+      try {
+        const token = localStorage.getItem("authToken");
+        const response = await axios.get(`${BLOCKCHAIN_API_URL}/network-info`, {
+          headers: { Authorization: `Bearer ${token}` }
+        });
+        setNetworkInfo(response.data);
+        console.log("Network Info:", response.data);
+      } catch (err) {
+        console.error("Failed to fetch network info:", err);
+      }
+    };
+    fetchNetworkInfo();
+  }, []);
 
   // Update the period display text when the date filter or custom range changes
   useEffect(() => {
@@ -433,6 +452,15 @@ function BlockchainActivityLogs() {
     setIsCustomModalOpen(false);
   };
 
+  const getBlockchainExplorerUrl = (transactionHash) => {
+    if (!networkInfo || !networkInfo.network_id) {
+      console.warn("Network info not available");
+      return `https://explorer.buildbear.io/tx/0x${transactionHash}`;
+    }
+    // BuildBear Explorer URL format: /tx/ not /transaction/
+    return `https://explorer.buildbear.io/${networkInfo.network_id}/tx/0x${transactionHash}`;
+  };
+
   const getServiceIcon = (service) => {
     switch (service) {
       case "DISCOUNTS_SERVICE":
@@ -632,6 +660,18 @@ function BlockchainActivityLogs() {
                   <div className="activityLogs-event-content">
                     <div className="activityLogs-event-timestamp">
                       {formatTimestamp(event.created_at)}
+                      {event.transaction_hash && (
+                        <a
+                          href={getBlockchainExplorerUrl(event.transaction_hash)}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="activityLogs-blockchain-link"
+                          title={`View transaction ${event.transaction_hash} on BuildBear Explorer`}
+                        >
+                          <FaExternalLinkAlt style={{ marginRight: '4px', fontSize: '10px' }} />
+                          View on Explorer
+                        </a>
+                      )}
                     </div>
                     <div
                       className={`activityLogs-event-message ${getActionClass(

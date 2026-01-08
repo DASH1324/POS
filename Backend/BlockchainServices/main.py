@@ -10,6 +10,8 @@ from contextlib import asynccontextmanager
 
 # Import blockchain router (this will now have access to .env variables)
 from routers.blockchain import router as blockchain_router
+from routers.blockchain_logs_router import router_blockchain_logs as BlockchainLogsRouter
+
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
@@ -35,6 +37,7 @@ app = FastAPI(
 
 # Include blockchain router
 app.include_router(blockchain_router, prefix="/blockchain", tags=["Blockchain Logging"])
+app.include_router(BlockchainLogsRouter, prefix="/blockchain-logs", tags=["Blockchain Logs"])
 
 # CORS Configuration
 app.add_middleware(

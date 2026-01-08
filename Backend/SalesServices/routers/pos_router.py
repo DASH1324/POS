@@ -648,17 +648,38 @@ async def create_sale(
         products, merchandise = separate_cart_items_by_type(sale.cartItems)
         background_tasks.add_task(process_inventory_deductions_background, products, merchandise, current_user['access_token'])
         
+        
+        # NEW: Fetch employee full name before blockchain logging
+        try:
+            async with httpx.AsyncClient() as client:
+                response = await client.get(
+                    f"http://127.0.0.1:4000/users/employee_name",
+                    params={"username": cashier_name},
+                    headers={"Authorization": f"Bearer {current_user['access_token']}"},
+                    timeout=5.0
+                )
+                
+                if response.status_code == 200:
+                    data = response.json()
+                    actor_full_name = data.get("employee_name") or cashier_name  # Changed to "employee_name"
+                else:
+                    actor_full_name = cashier_name
+        except Exception as e:
+            logger.error(f"Error fetching employee name: {e}")
+            actor_full_name = cashier_name
+
         background_tasks.add_task(
             log_to_blockchain,
             service_identifier="POS_SALES",
             action="CREATE",
             entity_type="Sale",
             entity_id=sale_id,
-            actor_username=cashier_name,
+            actor_username=actor_full_name,
             change_description=detailed_description,
             data=blockchain_data,
             token=current_user['access_token']
         )
+
         
         return {
             "saleId": sale_id,
