@@ -59,34 +59,31 @@ async def validate_token_and_roles(token: str, allowed_roles: List[str]):
 # =============================================================================
 class ReceiptConfigCreate(BaseModel):
     storeName: str = Field(..., max_length=255)
-    vatRegTin: str = Field(..., max_length=50)
     address1: str = Field(..., max_length=255)
     address2: str = Field(..., max_length=255)
     telephone: str = Field(..., max_length=50)
     showQR: bool = True
     qrType: Optional[str] = Field(None, max_length=20)  # 'link' or 'image'
     qrLink: Optional[str] = Field(None, max_length=500)
-    qrImagePath: Optional[str] = Field(None, max_length=500)
+    qrImagePath: Optional[str] = Field(None)
     qrText: Optional[str] = Field(None, max_length=255)
     additionalText: Optional[str] = Field(None, max_length=1000)
 
 class ReceiptConfigUpdate(BaseModel):
     storeName: Optional[str] = Field(None, max_length=255)
-    vatRegTin: Optional[str] = Field(None, max_length=50)
     address1: Optional[str] = Field(None, max_length=255)
     address2: Optional[str] = Field(None, max_length=255)
     telephone: Optional[str] = Field(None, max_length=50)
     showQR: Optional[bool] = None
     qrType: Optional[str] = Field(None, max_length=20)
     qrLink: Optional[str] = Field(None, max_length=500)
-    qrImagePath: Optional[str] = Field(None, max_length=500)
+    qrImagePath: Optional[str] = Field(None)
     qrText: Optional[str] = Field(None, max_length=255)
     additionalText: Optional[str] = Field(None, max_length=1000)
 
 class ReceiptConfigOut(BaseModel):
     configID: int
     storeName: str
-    vatRegTin: str
     address1: str
     address2: str
     telephone: str
@@ -132,15 +129,14 @@ async def create_receipt_config(
         # Insert new configuration
         sql_insert = """
             INSERT INTO ReceiptConfig 
-            (StoreName, VATRegTIN, Address1, Address2, Telephone, ShowQR, QRType, QRLink, QRImagePath, QRText, AdditionalText)
+            (StoreName, Address1, Address2, Telephone, ShowQR, QRType, QRLink, QRImagePath, QRText, AdditionalText)
             OUTPUT INSERTED.ConfigID, INSERTED.CreatedAt
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         """
         
         await cursor.execute(
             sql_insert,
             config_data.storeName,
-            config_data.vatRegTin,
             config_data.address1,
             config_data.address2,
             config_data.telephone,
@@ -160,7 +156,6 @@ async def create_receipt_config(
         return ReceiptConfigOut(
             configID=new_id,
             storeName=config_data.storeName,
-            vatRegTin=config_data.vatRegTin,
             address1=config_data.address1,
             address2=config_data.address2,
             telephone=config_data.telephone,
@@ -202,7 +197,7 @@ async def get_receipt_config(token: str = Depends(oauth2_scheme)):
         cursor = await conn.cursor()
         
         await cursor.execute("""
-            SELECT ConfigID, StoreName, VATRegTIN, Address1, Address2, Telephone, 
+            SELECT ConfigID, StoreName, Address1, Address2, Telephone, 
                    ShowQR, QRType, QRLink, QRImagePath, QRText, AdditionalText,
                    CreatedAt, UpdatedAt
             FROM ReceiptConfig
@@ -219,18 +214,17 @@ async def get_receipt_config(token: str = Depends(oauth2_scheme)):
         return ReceiptConfigOut(
             configID=row[0],
             storeName=row[1],
-            vatRegTin=row[2],
-            address1=row[3],
-            address2=row[4],
-            telephone=row[5],
-            showQR=row[6],
-            qrType=row[7],
-            qrLink=row[8],
-            qrImagePath=row[9],
-            qrText=row[10],
-            additionalText=row[11],
-            createdAt=row[12].isoformat() if row[12] else None,
-            updatedAt=row[13].isoformat() if row[13] else None
+            address1=row[2],
+            address2=row[3],
+            telephone=row[4],
+            showQR=row[5],
+            qrType=row[6],
+            qrLink=row[7],
+            qrImagePath=row[8],
+            qrText=row[9],
+            additionalText=row[10],
+            createdAt=row[11].isoformat() if row[11] else None,
+            updatedAt=row[12].isoformat() if row[12] else None
         )
         
     except HTTPException:
@@ -282,10 +276,6 @@ async def update_receipt_config(
         if config_data.storeName is not None:
             update_fields.append("StoreName = ?")
             update_values.append(config_data.storeName)
-        
-        if config_data.vatRegTin is not None:
-            update_fields.append("VATRegTIN = ?")
-            update_values.append(config_data.vatRegTin)
         
         if config_data.address1 is not None:
             update_fields.append("Address1 = ?")
@@ -344,7 +334,7 @@ async def update_receipt_config(
         
         # Fetch updated config
         await cursor.execute("""
-            SELECT ConfigID, StoreName, VATRegTIN, Address1, Address2, Telephone, 
+            SELECT ConfigID, StoreName, Address1, Address2, Telephone, 
                    ShowQR, QRType, QRLink, QRImagePath, QRText, AdditionalText,
                    CreatedAt, UpdatedAt
             FROM ReceiptConfig
@@ -356,18 +346,17 @@ async def update_receipt_config(
         return ReceiptConfigOut(
             configID=row[0],
             storeName=row[1],
-            vatRegTin=row[2],
-            address1=row[3],
-            address2=row[4],
-            telephone=row[5],
-            showQR=row[6],
-            qrType=row[7],
-            qrLink=row[8],
-            qrImagePath=row[9],
-            qrText=row[10],
-            additionalText=row[11],
-            createdAt=row[12].isoformat() if row[12] else None,
-            updatedAt=row[13].isoformat() if row[13] else None
+            address1=row[2],
+            address2=row[3],
+            telephone=row[4],
+            showQR=row[5],
+            qrType=row[6],
+            qrLink=row[7],
+            qrImagePath=row[8],
+            qrText=row[9],
+            additionalText=row[10],
+            createdAt=row[11].isoformat() if row[11] else None,
+            updatedAt=row[12].isoformat() if row[12] else None
         )
         
     except HTTPException:

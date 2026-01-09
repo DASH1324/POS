@@ -1,10 +1,10 @@
 import aioodbc
 
 # database config
-server = 'DESKTOP-TVGCI2U\\SQLEXPRESS'
+server = 'Heart\SQLEXPRESS'
 database = 'BlockchainAudit'
-username = 'ranjel'
-password = 'rnjl27'
+username = 'sa'
+password = 'Nikcole123'
 driver = 'ODBC Driver 17 for SQL Server'
 
 # async function to get db connection

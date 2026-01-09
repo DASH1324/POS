@@ -134,13 +134,20 @@ function Receipt() {
   const handleImageUpload = async (e) => {
     const file = e.target.files[0];
     if (file) {
+      // Validate file size (e.g., max 2MB)
+      if (file.size > 2 * 1024 * 1024) {
+        alert('Image size should be less than 2MB');
+        return;
+      }
+      
       const reader = new FileReader();
       reader.onloadend = () => {
-        setQrImagePreview(reader.result);
+        const base64String = reader.result; // This includes the data:image/png;base64, prefix
+        setQrImagePreview(base64String);
+        // Store the full base64 string instead of just filename
+        handleInputChange('qrImagePath', base64String);
       };
       reader.readAsDataURL(file);
-      
-      handleInputChange('qrImagePath', file.name);
     }
   };
 
@@ -186,8 +193,18 @@ function Receipt() {
       await fetchReceiptConfig();
     } catch (err) {
       console.error('Error saving receipt config:', err);
-      setError(err.response?.data?.detail || 'Failed to save receipt configuration');
-      alert(`Error: ${err.response?.data?.detail || 'Failed to save receipt configuration'}`);
+      let errorMessage = 'Failed to save receipt configuration';
+      if (err.response?.data?.detail) {
+        if (Array.isArray(err.response.data.detail)) {
+          errorMessage = err.response.data.detail.map(err => `${err.loc?.slice(-1)?.[0] || 'Field'}: ${err.msg}`).join('; ');
+        } else if (typeof err.response.data.detail === 'string') {
+          errorMessage = err.response.data.detail;
+        } else {
+          errorMessage = JSON.stringify(err.response.data.detail);
+        }
+      }
+      setError(errorMessage);
+      alert(`Error: ${errorMessage}`);
     } finally {
       setSaving(false);
     }

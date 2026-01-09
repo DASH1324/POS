@@ -1,0 +1,6 @@
+- [x] Remove vatRegTin from ReceiptConfigCreate model
+- [ ] Remove vatRegTin from ReceiptConfigUpdate model
+- [ ] Remove vatRegTin from ReceiptConfigOut model
+- [ ] Update create_receipt_config: remove from INSERT and VALUES, remove from return
+- [ ] Update get_receipt_config: remove from SELECT, adjust indices in return
+- [ ] Update update_receipt_config: remove vatRegTin update logic, remove from SELECT, adjust indices in return

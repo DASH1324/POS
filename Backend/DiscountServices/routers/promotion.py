@@ -403,6 +403,70 @@ async def get_bogo_promotions(token: str = Depends(oauth2_scheme)):
         raise HTTPException(status_code=500, detail=f"Database error on get BOGO promotions: {e}")
     finally:
         if conn: await conn.close()
+
+@promotions_router.get("/active", response_model=List[PromotionDetailOut])
+async def get_active_promotions_public(token: str = Depends(oauth2_scheme)):
+    """
+    PUBLIC endpoint for OOS and other services.
+    Requires user authentication.
+    """
+    await validate_token_and_roles(token, allowed_roles=["user"])
+    conn = await get_db_connection()
+    try:
+        await auto_expire_promotions(conn)
+
+        async with conn.cursor() as cursor:
+            await cursor.execute("""
+                SELECT *
+                FROM promotions
+                WHERE status = 'active'
+                  AND isDeleted = 0
+                  AND valid_from <= CAST(GETDATE() AS DATE)
+                  AND valid_to >= CAST(GETDATE() AS DATE)
+            """)
+
+            rows = await cursor.fetchall()
+            results = []
+
+            for row in rows:
+                # Fetch related products
+                await cursor.execute(
+                    "SELECT product_name FROM promotion_applicable_products WHERE promotion_id=?",
+                    row.id
+                )
+                products = [r.product_name for r in await cursor.fetchall()]
+
+                # Fetch related categories
+                await cursor.execute(
+                    "SELECT category_name FROM promotion_applicable_categories WHERE promotion_id=?",
+                    row.id
+                )
+                categories = [r.category_name for r in await cursor.fetchall()]
+
+                results.append(PromotionDetailOut(
+                    id=row.id,
+                    promotionName=row.name,
+                    description=row.description,
+                    applicationType=row.application_type,
+                    selectedProducts=products,
+                    selectedCategories=categories,
+                    promotionType=row.promotion_type,
+                    promotionValue=row.promotion_value,
+                    buyQuantity=row.buy_quantity,
+                    getQuantity=row.get_quantity,
+                    bogoDiscountType=row.bogo_discount_type,
+                    bogoDiscountValue=row.bogo_discount_value,
+                    bogoPromotionImage=row.bogo_promotion_image,
+                    minQuantity=row.min_quantity,
+                    validFrom=row.valid_from.date() if isinstance(row.valid_from, datetime) else row.valid_from,
+                    validTo=row.valid_to.date() if isinstance(row.valid_to, datetime) else row.valid_to,
+                    status=row.status
+                ))
+
+            return results
+    finally:
+        if conn:
+            await conn.close()
         
 @promotions_router.get("/{promotion_id}", response_model=PromotionDetailOut)
 async def get_promotion(promotion_id: int, token: str = Depends(oauth2_scheme)):
@@ -565,4 +629,3 @@ async def delete_promotion(
 
 
 router.include_router(promotions_router)
-
