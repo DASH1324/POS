@@ -30,6 +30,7 @@ function Receipt() {
   const [configExists, setConfigExists] = useState(false);
   const [qrImagePreview, setQrImagePreview] = useState(null);
   const [generatedQRCode, setGeneratedQRCode] = useState(null);
+  const [blockchainQRCode, setBlockchainQRCode] = useState(null);
 
   // Get token from localStorage
   const getToken = () => {
@@ -43,16 +44,20 @@ function Receipt() {
     fetchReceiptConfig();
   }, []);
 
-  // Generate QR code when link changes
+  // Generate QR codes when link changes
   useEffect(() => {
     if (receiptData.qrType === 'link' && receiptData.qrLink) {
-      generateQRCode(receiptData.qrLink);
+      generateQRCode(receiptData.qrLink, setGeneratedQRCode);
     } else {
       setGeneratedQRCode(null);
     }
+    
+    // Always generate blockchain QR code for preview
+    const blockchainUrl = `${window.location.origin}/blockchain?SAMPLE123`;
+    generateQRCode(blockchainUrl, setBlockchainQRCode);
   }, [receiptData.qrType, receiptData.qrLink]);
 
-  const generateQRCode = async (url) => {
+  const generateQRCode = async (url, setQRCodeState) => {
     try {
       const qrDataUrl = await QRCode.toDataURL(url, {
         width: 200,
@@ -62,10 +67,10 @@ function Receipt() {
           light: '#FFFFFF'
         }
       });
-      setGeneratedQRCode(qrDataUrl);
+      setQRCodeState(qrDataUrl);
     } catch (err) {
       console.error('Error generating QR code:', err);
-      setGeneratedQRCode(null);
+      setQRCodeState(null);
     }
   };
 
@@ -142,9 +147,8 @@ function Receipt() {
       
       const reader = new FileReader();
       reader.onloadend = () => {
-        const base64String = reader.result; // This includes the data:image/png;base64, prefix
+        const base64String = reader.result;
         setQrImagePreview(base64String);
-        // Store the full base64 string instead of just filename
         handleInputChange('qrImagePath', base64String);
       };
       reader.readAsDataURL(file);
@@ -453,6 +457,7 @@ function Receipt() {
                       <div>DATE: {dayjs().format("MM/DD/YYYY")}</div>
                       <div>TIME: {dayjs().format("hh:mm A")}</div>
                       <div>CASHIER: SAMPLE CASHIER</div>
+                      <div>ORDER TYPE: DINE IN</div>
                     </div>
                   </div>
 
@@ -509,37 +514,58 @@ function Receipt() {
 
                     <div style={{ textAlign: 'center', margin: '10px 0', fontSize: '11px', fontWeight: 'bold', lineHeight: '1.6' }}>
                       <div>THANK YOU FOR YOUR PURCHASE!</div>
-                      <div>PLEASE COME AGAIN 😊</div>
+                      <div>PLEASE COME AGAIN</div>
                     </div>
                   </div>
 
-                  {receiptData.showQR && (
-                    <div className="editReceipt-receipt-footer">
-                      <div className="editReceipt-qr-section">
-                        {receiptData.qrType === 'image' && qrImagePreview ? (
+                  {/* Dual QR Code Section - Same as OrderModal */}
+                  <div className="editReceipt-receipt-footer">
+                    <div className="editReceipt-dual-qr-section">
+                      {/* First QR Code - Feedback/OOS */}
+                      {receiptData.showQR && (
+                        <div className="editReceipt-qr-item">
+                          {receiptData.qrType === 'image' && qrImagePreview ? (
+                            <img 
+                              src={qrImagePreview} 
+                              alt="QR Code" 
+                              className="editReceipt-qr-image" 
+                            />
+                          ) : receiptData.qrType === 'link' && generatedQRCode ? (
+                            <img 
+                              src={generatedQRCode} 
+                              alt="Feedback QR Code" 
+                              className="editReceipt-qr-image" 
+                            />
+                          ) : (
+                            <div className="editReceipt-qr-placeholder">QR CODE</div>
+                          )}
+                          <div className="editReceipt-qr-text">
+                            {receiptData.qrText || 'SCAN FOR FEEDBACK'}
+                          </div>
+                        </div>
+                      )}
+                      
+                      {/* Second QR Code - Blockchain Transaction */}
+                      <div className="editReceipt-qr-item">
+                        {blockchainQRCode ? (
                           <img 
-                            src={qrImagePreview} 
-                            alt="QR Code" 
-                            className="editReceipt-qr-image" 
-                          />
-                        ) : receiptData.qrType === 'link' && generatedQRCode ? (
-                          <img 
-                            src={generatedQRCode} 
-                            alt="QR Code" 
+                            src={blockchainQRCode} 
+                            alt="Blockchain Transaction QR Code" 
                             className="editReceipt-qr-image" 
                           />
                         ) : (
                           <div className="editReceipt-qr-placeholder">QR CODE</div>
                         )}
-                        {receiptData.qrText && (
-                          <div className="editReceipt-qr-text">{receiptData.qrText}</div>
-                        )}
-                        {receiptData.additionalText && (
-                          <div className="editReceipt-additional-text">{receiptData.additionalText}</div>
-                        )}
+                        <div className="editReceipt-qr-text">
+                          Verify Blockchain Transaction
+                        </div>
                       </div>
                     </div>
-                  )}
+                    
+                    {receiptData.additionalText && (
+                      <div className="editReceipt-additional-text">{receiptData.additionalText}</div>
+                    )}
+                  </div>
                 </div>
               </div>
             </div>

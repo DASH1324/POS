@@ -347,7 +347,7 @@ body {
     font-weight: bold;
     text-transform: uppercase;
     letter-spacing: 0.5px;
-    margin: 4px 0 2px 0;
+    margin: 4px 0 10px 0;
 }
 
 .editReceipt-qr-image {
@@ -356,6 +356,7 @@ body {
     border: 1px solid #000;
     padding: 4px;
     background: #fff;
+    margin-bottom: 10px;
 }
 
 .editReceipt-qr-placeholder {

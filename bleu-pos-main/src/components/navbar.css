@@ -84,7 +84,7 @@
 }
 
 .navbar-date {
-  font-size: 15px;
+  font-size: 16px;
   font-weight: 600;
   color: #4B929D;
   margin-right: 25px;
@@ -113,14 +113,14 @@
 }
 
 .nav-profile-role {
-  font-size: 12px;
+  font-size: 14px;
   color: #888;
 }
 
 .nav-profile-name {
   font-weight: bold;
   color: #4B929D;
-  font-size: 15px;
+  font-size: 18px;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -170,7 +170,7 @@
 
 .nav-profile-dropdown li {
   padding: 10px 20px;
-  font-size: 14px;
+  font-size: 16px;
   cursor: pointer;
   color: #666;
 }
@@ -209,7 +209,7 @@
 .notification-dropdown {
   position: absolute;
   top: calc(100% + 10px);
-  right: 0;
+  right: -15px;
   background: white;
   border-radius: 8px;
   box-shadow: 0 4px 20px rgba(0, 0, 0, 0.15);
@@ -237,7 +237,7 @@
   content: '';
   position: absolute;
   top: -8px;
-  right: 10px;
+  right: 25px;
   width: 0;
   height: 0;
   border-left: 8px solid transparent;
@@ -255,7 +255,7 @@
 
 .notification-dropdown-header h3 {
   margin: 0;
-  font-size: 16px;
+  font-size: 18px;
   font-weight: 600;
   color: #333;
 }
@@ -325,7 +325,7 @@
 
 .notification-message {
   margin: 0 0 4px 0;
-  font-size: 14px;
+  font-size: 16px;
   color: #333;
   line-height: 1.4;
   word-wrap: break-word;

@@ -296,6 +296,8 @@ class OnlineSaleItem(BaseModel):
     price: float
     category: Optional[str] = None
     addons: List[OnlineAddonItem] = []
+    promo_name: Optional[str] = None 
+    discount: Optional[float] = 0.0   
 
 class OnlineOrderRequest(BaseModel):
     online_order_id: Optional[int] = None
@@ -615,18 +617,109 @@ async def save_online_order(
             except Exception as session_error:
                 logger.warning(f"Could not fetch session: {session_error}")
 
+            # ✅ NEW: Build appliedPromotions in POS format
+            applied_promotions_for_pos = []
+            promotion_map = {}  # promotionId -> promotion data
+            
+            logger.info(f"🔍 Processing {len(order_data.items)} items for promotions...")
+            
+            for idx, item in enumerate(order_data.items):
+                logger.info(f"  Item {idx}: {item.name}")
+                logger.info(f"    - promo_name: {getattr(item, 'promo_name', None)}")
+                logger.info(f"    - discount: {getattr(item, 'discount', None)}")
+                
+                if item.promo_name and item.discount and item.discount > 0:
+
+                    
+                    logger.info(f"    ✅ Item has promotion: {item.promo_name} (-₱{item.discount})")
+                    
+                    # Find or create promotion in database
+                    await cursor.execute(
+                        "SELECT id, name FROM promotions WHERE name = ?", 
+                        item.promo_name
+                    )
+                    promo_row = await cursor.fetchone()
+                    
+                    if promo_row:
+                        promo_id = promo_row.id
+                    else:
+                        # ✅ FIX: Using columns that actually exist in your SQL Schema
+                        logger.info(f"    📝 Creating new promotion record: {item.promo_name}")
+                        try:
+                            sql_create_promo = """
+                                INSERT INTO promotions (
+                                    name, promotion_type, promotion_value, 
+                                    status, application_type, isDeleted, 
+                                    valid_from, valid_to, created_at
+                                )
+                                OUTPUT INSERTED.id
+                                VALUES (?, 'fixed', ?, 'active', 'all_products', 0, GETDATE(), DATEADD(year, 1, GETDATE()), GETDATE());
+                            """
+                            # We use the item's discount as the promotion_value for this record
+                            await cursor.execute(sql_create_promo, item.promo_name, item.discount)
+                            promo_id_row = await cursor.fetchone()
+                            promo_id = promo_id_row[0]
+                        except Exception as promo_error:
+                            logger.warning(f"Fallback promotion creation: {promo_error}")
+                            sql_fallback = """
+                                INSERT INTO promotions (name, promotion_type, promotion_value, status, application_type, isDeleted, valid_from, valid_to)
+                                VALUES (?, 'fixed', ?, 'active', 'all_products', 0, GETDATE(), DATEADD(year, 1, GETDATE()));
+                                SELECT CAST(@@IDENTITY AS INT);
+                            """
+                            await cursor.execute(sql_fallback, item.promo_name, item.discount)
+                            promo_id_row = await cursor.fetchone()
+                            promo_id = promo_id_row[0]
+                        
+                        if not promo_id:
+                            await conn.rollback()
+                            raise Exception(f"Failed to create promotion: {item.promo_name}")
+                        
+                        logger.info(f"    ✅ Created promotion '{item.promo_name}' with ID: {promo_id}")
+                    
+                    # Add to promotion_map
+                    if promo_id not in promotion_map:
+                        promotion_map[promo_id] = {
+                            'promotionId': promo_id,
+                            'promotionName': item.promo_name,
+                            'itemPromotions': []
+                        }
+                    
+                    # Add item promotion details
+                    promotion_map[promo_id]['itemPromotions'].append({
+                        'itemIndex': idx,
+                        'quantity': item.quantity,
+                        'promotionAmount': item.discount
+                    })
+                    
+                    logger.info(f"    ✅ Added to promotion map: itemIndex={idx}, qty={item.quantity}, amount=₱{item.discount}")
+                else:
+                    logger.info(f"    ℹ️ No promotion for this item")
+            
+            # Convert to list format
+            applied_promotions_for_pos = list(promotion_map.values())
+            
+            # Calculate total promotional discount
+            total_promotional_discount = Decimal('0.0')
+            for promo in applied_promotions_for_pos:
+                for item_promo in promo['itemPromotions']:
+                    total_promotional_discount += Decimal(str(item_promo['promotionAmount']))
+            
+            logger.info(f"📊 Promotion Summary:")
+            logger.info(f"  - Total promotions: {len(applied_promotions_for_pos)}")
+            logger.info(f"  - Total promotional discount: ₱{total_promotional_discount}")
+            logger.info(f"  - Applied promotions: {applied_promotions_for_pos}")
+
             try:
-                # ✅ UPDATED SQL - Remove CashierName, add SessionID
                 sql_insert_sale = """
                     SET NOCOUNT ON;
                     DECLARE @InsertedSaleID TABLE (SaleID INT);
                     
                     INSERT INTO Sales (
                         OrderType, PaymentMethod, SessionID, CustomerName, 
-                        TotalDiscountAmount, Status, GCashReferenceNumber
+                        TotalDiscountAmount, PromotionalDiscountAmount, Status, GCashReferenceNumber
                     )
                     OUTPUT INSERTED.SaleID INTO @InsertedSaleID
-                    VALUES (?, ?, ?, ?, ?, ?, ?);
+                    VALUES (?, ?, ?, ?, ?, ?, ?, ?);
                     
                     SELECT SaleID FROM @InsertedSaleID;
                 """
@@ -638,6 +731,7 @@ async def save_online_order(
                     session_id,
                     order_data.customer_name,
                     discount_amount,
+                    total_promotional_discount,  # ✅ Now properly calculated
                     pos_order_status, 
                     final_reference_number
                 )
@@ -649,13 +743,12 @@ async def save_online_order(
                 logger.warning(f"OUTPUT method failed: {output_error}. Trying @@IDENTITY method.")
                 await conn.rollback()
                 
-                # ✅ UPDATED FALLBACK SQL
                 sql_insert_sale_fallback = """
                     INSERT INTO Sales (
                         OrderType, PaymentMethod, SessionID, CustomerName, 
-                        TotalDiscountAmount, Status, GCashReferenceNumber
+                        TotalDiscountAmount, PromotionalDiscountAmount, Status, GCashReferenceNumber
                     )
-                    VALUES (?, ?, ?, ?, ?, ?, ?);
+                    VALUES (?, ?, ?, ?, ?, ?, ?, ?);
                     SELECT @@IDENTITY AS SaleID;
                 """
                 
@@ -666,6 +759,7 @@ async def save_online_order(
                     session_id,
                     order_data.customer_name,
                     discount_amount,
+                    total_promotional_discount,  # ✅ Now properly calculated
                     pos_order_status,
                     final_reference_number
                 )
@@ -679,8 +773,9 @@ async def save_online_order(
             
             logger.info(f"✅ Created Sale with auto-generated SaleID: {new_sale_id}")
 
-            # Rest of the function remains the same...
-            for item in order_data.items:
+            # Process each item and track for promotion application
+            items_data = []
+            for idx, item in enumerate(order_data.items):
                 raw_category = (item.category or '').strip().lower()
                 
                 if raw_category in ['all items', 'allitems']:
@@ -711,6 +806,16 @@ async def save_online_order(
                 
                 logger.info(f"✅ Created SaleItem '{item.name}' with auto-generated SaleItemID: {new_sale_item_id}")
                 
+                # Track for promotion application
+                items_data.append({
+                    'sale_item_id': new_sale_item_id,
+                    'item_index': idx,
+                    'name': item.name,
+                    'quantity': item.quantity,
+                    'price': float(item.price)
+                })
+                
+                # Process addons
                 for addon in item.addons:
                     await cursor.execute("SELECT AddonID FROM Addons WHERE AddonName = ?", addon.addon_name)
                     addon_id_row = await cursor.fetchone()
@@ -768,8 +873,79 @@ async def save_online_order(
                     await cursor.execute(sql_insert_sale_item_addon, new_sale_item_id, correct_pos_addon_id, 1)
                     logger.info(f"✅ Linked addon '{addon.addon_name}' (ID: {correct_pos_addon_id}) to SaleItem {new_sale_item_id}")
 
+            # ✅ NEW: Apply item-level promotions
+            if applied_promotions_for_pos:
+                logger.info(f"💾 Saving promotions to database...")
+                
+                for promo_data in applied_promotions_for_pos:
+                    promo_id = promo_data['promotionId']
+                    promo_name = promo_data['promotionName']
+                    
+                    # Calculate total amount for this promotion
+                    total_promo_amount = sum(
+                        Decimal(str(item_promo['promotionAmount'])) 
+                        for item_promo in promo_data['itemPromotions']
+                    )
+                    
+                    # Insert into SalePromotions (sale-level)
+                    sql_sale_promo = """
+                        INSERT INTO SalePromotions (SaleID, PromotionID, DiscountApplied) 
+                        VALUES (?, ?, ?)
+                    """
+                    await cursor.execute(
+                        sql_sale_promo, 
+                        new_sale_id, 
+                        promo_id, 
+                        total_promo_amount
+                    )
+                    logger.info(
+                        f"  ✅ Inserted SalePromotion: SaleID={new_sale_id}, "
+                        f"PromotionID={promo_id}, Name='{promo_name}', Amount=₱{total_promo_amount:.2f}"
+                    )
+                    
+                    # Insert into SaleItemPromotions (item-level)
+                    for item_promo in promo_data['itemPromotions']:
+                        item_index = item_promo['itemIndex']
+                        quantity_promoted = item_promo['quantity']
+                        promo_amount = item_promo['promotionAmount']
+                        
+                        # Find the corresponding sale_item_id
+                        matching_item = next(
+                            (item for item in items_data if item['item_index'] == item_index), 
+                            None
+                        )
+                        
+                        if not matching_item:
+                            logger.error(f"    ❌ Could not find item at index {item_index}")
+                            continue
+                        
+                        sale_item_id = matching_item['sale_item_id']
+                        item_name = matching_item['name']
+                        
+                        sql_item_promo = """
+                            INSERT INTO SaleItemPromotions 
+                            (SaleItemID, PromotionID, QuantityPromoted, PromotionAmount)
+                            VALUES (?, ?, ?, ?)
+                        """
+                        await cursor.execute(
+                            sql_item_promo,
+                            sale_item_id,
+                            promo_id,
+                            quantity_promoted,
+                            Decimal(str(promo_amount))
+                        )
+                        logger.info(
+                            f"    ✅ Applied promotion '{promo_name}' to {quantity_promoted} "
+                            f"units of '{item_name}' (SaleItemID: {sale_item_id}), amount: ₱{promo_amount:.2f}"
+                        )
+                
+                logger.info(f"✅ Successfully saved all promotions!")
+            else:
+                logger.info(f"ℹ️ No promotions to save for this order")
+
             await conn.commit()
 
+            # Get customer full name for blockchain logging
             customer_full_name = await get_full_name_from_username(
                 order_data.customer_name, 
                 current_user['access_token']
@@ -789,9 +965,14 @@ async def save_online_order(
             
             friendly_order_type = order_data.order_type.replace('-', ' ').title()
             
+            # ✅ Include discount info in blockchain description if promotions were applied
+            discount_info = ""
+            if total_promotional_discount > 0:
+                discount_info = f" (Promotions: -₱{total_promotional_discount})"
+            
             blockchain_description = (
                 f"created: Received an Online Order: "
-                f"\"{items_text}\" - {friendly_order_type}"
+                f"\"{items_text}\"{discount_info} - {friendly_order_type}"
             )
             
             blockchain_payload = {
@@ -805,10 +986,20 @@ async def save_online_order(
                 "reference_number": final_reference_number,
                 "total_items": len(order_data.items),
                 "total_amount": float(order_data.total_amount),
-                "session_id": session_id
+                "promotional_discount": float(total_promotional_discount),
+                "session_id": session_id,
+                "has_promotions": len(applied_promotions_for_pos) > 0,
+                "applied_promotions": [
+                    {
+                        "promotion_name": p['promotionName'],
+                        "promotion_id": p['promotionId'],
+                        "item_count": len(p['itemPromotions'])
+                    }
+                    for p in applied_promotions_for_pos
+                ]
             }
 
-            # 🆕 NEW: Fetch actor's full name (cashier) for blockchain logging
+            # Fetch actor's full name (cashier) for blockchain logging
             try:
                 async with httpx.AsyncClient() as client:
                     response = await client.get(
@@ -833,7 +1024,7 @@ async def save_online_order(
                 action="CREATE",
                 entity_type="PurchaseOrder",
                 entity_id=new_sale_id,
-                actor_username=actor_full_name,  # 🆕 Now using full name instead of username
+                actor_username=actor_full_name,
                 change_description=blockchain_description,
                 data=blockchain_payload,
                 token=current_user['access_token']
@@ -843,6 +1034,8 @@ async def save_online_order(
             if order_data.online_order_id:
                 log_msg += f" (OOS ID: {order_data.online_order_id})"
             log_msg += f" as POS SaleID {new_sale_id} with status '{pos_order_status}'"
+            if total_promotional_discount > 0:
+                log_msg += f" with ₱{total_promotional_discount} promotional discount"
             logger.info(log_msg)
             
             order_type_lower = order_data.order_type.lower()
@@ -869,7 +1062,9 @@ async def save_online_order(
                 "message": f"Online order successfully saved to POS with status '{pos_order_status}'",
                 "pos_sale_id": new_sale_id,
                 "status": pos_order_status,
-                "reference_number": final_reference_number
+                "reference_number": final_reference_number,
+                "promotional_discount_applied": float(total_promotional_discount),
+                "promotions_count": len(applied_promotions_for_pos)
             }
             
     except Exception as e:

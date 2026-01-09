@@ -19,13 +19,14 @@ const PromotionModal = ({
   const [errors, setErrors] = useState({});
   const [imagePreview, setImagePreview] = useState(null);
   const [imageFile, setImageFile] = useState(null);
+  const [productSearchTerm, setProductSearchTerm] = useState("");
 
-  // Clear errors and image when modal closes
   useEffect(() => {
     if (!showModal) {
       setErrors({});
       setImagePreview(null);
       setImageFile(null);
+      setProductSearchTerm(""); // Add this line
     }
   }, [showModal]);
 
@@ -209,6 +210,11 @@ const PromotionModal = ({
   };
 
   const isBogoType = form.promotionType === "bogo";
+
+  // Filter products based on search term
+  const filteredProducts = availableProducts.filter(product =>
+    product.ProductName.toLowerCase().includes(productSearchTerm.toLowerCase())
+  );
 
   return (
     <div className="mngDiscounts-modal-overlay" onClick={onClose}>
@@ -440,18 +446,45 @@ const PromotionModal = ({
                   Select 1 product for "Buy 1 take 1 same product" or 2 products for "Buy product A, get product B"
                 </span>
               </label>
-              <div className={`mngDiscounts-checkbox-group ${errors.selectedProducts ? "mngDiscounts-error-field" : ""}`}>
-                {availableProducts.map(product => (
-                  <label key={product.ProductName} className="mngDiscounts-checkbox-label">
-                    <input
-                      type="checkbox"
-                      checked={(form.selectedProducts || []).includes(product.ProductName)}
-                      onChange={(e) => handleCheckboxChange(e, product.ProductName, 'selectedProducts', form.selectedProducts || [])}
-                      disabled={(form.selectedProducts || []).length >= 2 && !(form.selectedProducts || []).includes(product.ProductName)}
-                    />
-                    {product.ProductName}
-                  </label>
-                ))}
+              
+              {/* Search Input */}
+              <input
+                type="text"
+                placeholder="Search products..."
+                value={productSearchTerm}
+                onChange={(e) => setProductSearchTerm(e.target.value)}
+                style={{
+                  width: '100%',
+                  padding: '10px 14px',
+                  marginBottom: '12px',
+                  border: '1px solid #e0e0e0',
+                  borderRadius: '8px',
+                  fontSize: '14px',
+                  boxSizing: 'border-box'
+                }}
+              />
+              
+              <div 
+                className={`mngDiscounts-checkbox-group ${errors.selectedProducts ? "mngDiscounts-error-field" : ""}`}
+                style={{ maxHeight: '250px', overflowY: 'auto' }}
+              >
+                {filteredProducts.length > 0 ? (
+                  filteredProducts.map(product => (
+                    <label key={product.ProductName} className="mngDiscounts-checkbox-label">
+                      <input
+                        type="checkbox"
+                        checked={(form.selectedProducts || []).includes(product.ProductName)}
+                        onChange={(e) => handleCheckboxChange(e, product.ProductName, 'selectedProducts', form.selectedProducts || [])}
+                        disabled={(form.selectedProducts || []).length >= 2 && !(form.selectedProducts || []).includes(product.ProductName)}
+                      />
+                      {product.ProductName}
+                    </label>
+                  ))
+                ) : (
+                  <p style={{ padding: '10px', color: '#666', textAlign: 'center' }}>
+                    No products found matching "{productSearchTerm}"
+                  </p>
+                )}
               </div>
               {errors.selectedProducts && (
                 <p className="mngDiscounts-error-message">{errors.selectedProducts}</p>
@@ -499,17 +532,44 @@ const PromotionModal = ({
               <label>
                 Select Products <span className="mngDiscounts-required">*</span>
               </label>
-              <div className={`mngDiscounts-checkbox-group ${errors.selectedProducts ? "mngDiscounts-error-field" : ""}`}>
-                {availableProducts.map(product => (
-                  <label key={product.ProductName} className="mngDiscounts-checkbox-label">
-                    <input
-                      type="checkbox"
-                      checked={(form.selectedProducts || []).includes(product.ProductName)}
-                      onChange={(e) => handleCheckboxChange(e, product.ProductName, 'selectedProducts', form.selectedProducts || [])}
-                    />
-                    {product.ProductName}
-                  </label>
-                ))}
+              
+              {/* Search Input */}
+              <input
+                type="text"
+                placeholder="Search products..."
+                value={productSearchTerm}
+                onChange={(e) => setProductSearchTerm(e.target.value)}
+                style={{
+                  width: '100%',
+                  padding: '10px 14px',
+                  marginBottom: '12px',
+                  border: '1px solid #e0e0e0',
+                  borderRadius: '8px',
+                  fontSize: '14px',
+                  boxSizing: 'border-box'
+                }}
+              />
+              
+              <div 
+                className={`mngDiscounts-checkbox-group ${errors.selectedProducts ? "mngDiscounts-error-field" : ""}`}
+                style={{ maxHeight: '250px', overflowY: 'auto' }}
+              >
+                {filteredProducts.length > 0 ? (
+                  filteredProducts.map(product => (
+                    <label key={product.ProductName} className="mngDiscounts-checkbox-label">
+                      <input
+                        type="checkbox"
+                        checked={(form.selectedProducts || []).includes(product.ProductName)}
+                        onChange={(e) => handleCheckboxChange(e, product.ProductName, 'selectedProducts', form.selectedProducts || [])}
+                      />
+                      {product.ProductName}
+                    </label>
+                  ))
+                ) : (
+                  <p style={{ padding: '10px', color: '#666', textAlign: 'center' }}>
+                    No products found matching "{productSearchTerm}"
+                  </p>
+                )}
               </div>
               {errors.selectedProducts && (
                 <p className="mngDiscounts-error-message">{errors.selectedProducts}</p>

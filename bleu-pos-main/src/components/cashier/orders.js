@@ -191,59 +191,92 @@ function Orders() {
       }
 
       // Process online orders
-      if (onlineResponse.status === 'fulfilled' && onlineResponse.value.ok) {
-        const data = await onlineResponse.value.json();
-        const orders = Array.isArray(data) ? data : [];
-        newOnlineOrders = orders.map(order => {
-          const parsedItems = Array.isArray(order.items) ? order.items.map(item => ({
-            name: item.name,
-            quantity: item.quantity,
-            price: item.price,
-            size: item.size || 'Standard', 
-            category: item.category,
-            addons: item.addons || [],
-          })) : [];
+      // Process online orders - FIXED SECTION
+if (onlineResponse.status === 'fulfilled' && onlineResponse.value.ok) {
+  const data = await onlineResponse.value.json();
+  const orders = Array.isArray(data) ? data : [];
+  newOnlineOrders = orders.map(order => {
+    const parsedItems = Array.isArray(order.items) ? order.items.map(item => {
+      // Extract promotion information from backend
+      const itemPromotion = item.promo_name || item.applied_promo ? {
+        promotionName: item.promo_name || item.applied_promo?.promotionName || 'Promotion',
+        quantityPromoted: item.quantity,
+        promotionAmount: item.discount || 0
+      } : null;
 
-          const totalQuantity = parsedItems.reduce((sum, item) => sum + item.quantity, 0);
-          
-          const totalAddOnsCost = parsedItems.reduce((sum, item) => {
-            if (item.addons && Array.isArray(item.addons)) {
-              const itemAddOnsCost = item.addons.reduce((addonSum, addon) => {
-                return addonSum + (addon.price || addon.Price || 0);
-              }, 0);
-              return sum + itemAddOnsCost;
-            }
-            return sum;
-          }, 0);
+      return {
+        name: item.name,
+        quantity: item.quantity,
+        price: item.price,
+        size: item.size || 'Standard', 
+        category: item.category,
+        addons: item.addons || [],
+        // Add promotion data to items
+        itemPromotions: itemPromotion ? [itemPromotion] : (item.itemPromotions || []),
+        itemDiscounts: item.itemDiscounts || [],
+        // Keep original fields for compatibility
+        promo_name: item.promo_name,
+        applied_promo: item.applied_promo,
+        discount: item.discount || 0
+      };
+    }) : [];
 
-          const itemsSubtotal = parsedItems.reduce((sum, item) => {
-            return sum + (item.price * item.quantity);
-          }, 0);
-
-          return {
-            id: order.order_id,
-            customerName: order.customer_name,
-            date: new Date(order.order_date),
-            orderType: order.order_type,
-            paymentMethod: order.payment_method,
-            total: itemsSubtotal,
-            status: order.order_status ? order.order_status.toUpperCase() : 'UNKNOWN',
-            items: totalQuantity,
-            orderItems: parsedItems,
-            source: 'online',
-            discount: order.discount || order.applied_discount || 0,
-            addOns: totalAddOnsCost,
-            cashierName: order.cashier_name || 'Unknown',
-            reference_number: order.reference_number || order.gcash_reference_number || null,
-            email: order.emailAddress || order.email || null,
-            phoneNumber: order.phoneNumber || null,
-            deliveryAddress: order.deliveryAddress || null
-          };
-        });
-      } else {
-        errors.push("Failed to load online orders.");
-        console.error("Online Order Fetch Error:", onlineResponse.reason || (onlineResponse.value && onlineResponse.value.statusText));
+    const totalQuantity = parsedItems.reduce((sum, item) => sum + item.quantity, 0);
+    
+    // Calculate addons cost
+    const totalAddOnsCost = parsedItems.reduce((sum, item) => {
+      if (item.addons && Array.isArray(item.addons)) {
+        const itemAddOnsCost = item.addons.reduce((addonSum, addon) => {
+          return addonSum + (addon.price || addon.Price || 0);
+        }, 0);
+        return sum + itemAddOnsCost;
       }
+      return sum;
+    }, 0);
+
+    // Calculate base subtotal (items only, no addons)
+    const itemsSubtotal = parsedItems.reduce((sum, item) => {
+      return sum + (item.price * item.quantity);
+    }, 0);
+
+    // Calculate total promotions
+    const totalPromotions = parsedItems.reduce((sum, item) => {
+      const itemPromotions = item.itemPromotions || [];
+      return sum + itemPromotions.reduce((pSum, p) => pSum + p.promotionAmount, 0);
+    }, 0);
+
+    // SUBTOTAL = items + addons (before discounts)
+    const fullSubtotal = itemsSubtotal + totalAddOnsCost;
+    
+    // TOTAL = subtotal - promotions - discounts
+    const finalTotal = fullSubtotal - totalPromotions - (order.discount || order.applied_discount || 0);
+
+    return {
+      id: order.order_id,
+      customerName: order.customer_name,
+      date: new Date(order.order_date),
+      orderType: order.order_type,
+      paymentMethod: order.payment_method,
+      subtotal: fullSubtotal,  // Full subtotal with addons
+      total: Math.max(0, finalTotal),  // Final amount after deductions
+      status: order.order_status ? order.order_status.toUpperCase() : 'UNKNOWN',
+      items: totalQuantity,
+      orderItems: parsedItems,
+      source: 'online',
+      promotionalDiscount: totalPromotions,  // Store total promotions
+      manualDiscount: 0,  // Online orders have no manual discounts
+      addOns: totalAddOnsCost,
+      cashierName: order.cashier_name || 'Unknown',
+      reference_number: order.reference_number || order.gcash_reference_number || null,
+      email: order.emailAddress || order.email || null,
+      phoneNumber: order.phoneNumber || null,
+      deliveryAddress: order.deliveryAddress || null
+    };
+  });
+} else {
+  errors.push("Failed to load online orders.");
+  console.error("Online Order Fetch Error:", onlineResponse.reason || (onlineResponse.value && onlineResponse.value.statusText));
+}
       
       if (errors.length > 0) setError(errors.join(' '));
       

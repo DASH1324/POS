@@ -1153,69 +1153,69 @@ const confirmTransaction = async (gcashRef = null) => {
                     </div>
                   );
                 } else {
-  // Regular items - FULL RENDERING
-  const { item, index } = group.items[0];
-  return (
-    <div key={item.cartId || `${item.id}-${index}`} className="cart-item">
-      <img src={item.image} alt={item.name} />
-      <div className="item-details">
-        <div className="item-name">{item.name}</div>
-        {item.maxQuantity && item.quantity >= item.maxQuantity * 0.8 && (
-          <div className="max-qty-warning" style={{fontSize: '11px', color: '#ff9800', marginTop: '2px'}}>
-            Max: {item.maxQuantity} {item.limitedBy ? `(${item.limitedBy})` : ''}
-          </div>
-        )}
-        {item.type === 'product' && (
-          <div className="addons-link" onClick={() => openAddonsModal(index)}>Add on</div>
-        )}
-        {item.addons && item.addons.length > 0 && (
-          <div className="addons-summary">
-            {item.addons.map(addon => (
-              <span key={addon.addonId}>
-                +₱{(addon.price * addon.quantity * item.quantity).toFixed(2)} : {addon.addonName} (x{addon.quantity * item.quantity})
-              </span>
-            ))}
-          </div>
-        )}
-        {getItemDiscount(index) > 0 && (
-          <div className="promodis-summary">
-            {getCombinedItemDiscounts(index).map((discount, discIdx) => (
-              <div key={discIdx}>
-                <span>-₱{discount.totalAmount.toFixed(2)} : {discount.name} (x{discount.totalQuantity})</span>
-              </div>
-            ))}
-          </div>
-        )}
-        {getItemPromotion(index) > 0 && (
-          <div className="promodis-summary">
-            <span>-₱{getItemPromotion(index).toFixed(2)} : {getItemPromotionName(index)} (x{getItemPromotionQty(index)})</span>
-          </div>
-        )}
-        <div className="flex-spacer" />
-        <div className="qty-price">
-          <button onClick={() => updateQuantity(index, -1)}><FiMinus /></button>
-          <span>{item.quantity}</span>
-          <button
-            onClick={() => updateQuantity(index, 1)}
-            disabled={item.maxQuantity && item.quantity >= item.maxQuantity}
-            style={{
-              opacity: item.maxQuantity && item.quantity >= item.maxQuantity ? 0.5 : 1,
-              cursor: item.maxQuantity && item.quantity >= item.maxQuantity ? 'not-allowed' : 'pointer'
-            }}
-          >
-            <FiPlus />
-          </button>
-          <span className="item-price">₱{((item.price + getTotalAddonsPrice(item.addons)) * item.quantity).toFixed(0)}</span>
-        </div>
-      </div>
-      <div className="item-actions">
-        <button className="remove-item" onClick={() => removeFromCart(index)}>
-          <FontAwesomeIcon icon={faTrash} />
-        </button>
-      </div>
-    </div>
-  );
-}
+                  // Regular items - FULL RENDERING
+                  const { item, index } = group.items[0];
+                  return (
+                    <div key={item.cartId || `${item.id}-${index}`} className="cart-item">
+                      <img src={item.image} alt={item.name} />
+                      <div className="item-details">
+                        <div className="item-name">{item.name}</div>
+                        {item.maxQuantity && item.quantity >= item.maxQuantity * 0.8 && (
+                          <div className="max-qty-warning" style={{fontSize: '11px', color: '#ff9800', marginTop: '2px'}}>
+                            Max: {item.maxQuantity} {item.limitedBy ? `(${item.limitedBy})` : ''}
+                          </div>
+                        )}
+                        {item.type === 'product' && (
+                          <div className="addons-link" onClick={() => openAddonsModal(index)}>Add on</div>
+                        )}
+                        {item.addons && item.addons.length > 0 && (
+                          <div className="addons-summary">
+                            {item.addons.map(addon => (
+                              <span key={addon.addonId}>
+                                +₱{(addon.price * addon.quantity * item.quantity).toFixed(2)} : {addon.addonName} (x{addon.quantity * item.quantity})
+                              </span>
+                            ))}
+                          </div>
+                        )}
+                        {getItemDiscount(index) > 0 && (
+                          <div className="promodis-summary">
+                            {getCombinedItemDiscounts(index).map((discount, discIdx) => (
+                              <div key={discIdx}>
+                                <span>-₱{discount.totalAmount.toFixed(2)} : {discount.name} (x{discount.totalQuantity})</span>
+                              </div>
+                            ))}
+                          </div>
+                        )}
+                        {getItemPromotion(index) > 0 && (
+                          <div className="promodis-summary">
+                            <span>-₱{getItemPromotion(index).toFixed(2)} : {getItemPromotionName(index)} (x{getItemPromotionQty(index)})</span>
+                          </div>
+                        )}
+                        <div className="flex-spacer" />
+                        <div className="qty-price">
+                          <button onClick={() => updateQuantity(index, -1)}><FiMinus /></button>
+                          <span>{item.quantity}</span>
+                          <button
+                            onClick={() => updateQuantity(index, 1)}
+                            disabled={item.maxQuantity && item.quantity >= item.maxQuantity}
+                            style={{
+                              opacity: item.maxQuantity && item.quantity >= item.maxQuantity ? 0.5 : 1,
+                              cursor: item.maxQuantity && item.quantity >= item.maxQuantity ? 'not-allowed' : 'pointer'
+                            }}
+                          >
+                            <FiPlus />
+                          </button>
+                          <span className="item-price">₱{((item.price + getTotalAddonsPrice(item.addons)) * item.quantity).toFixed(0)}</span>
+                        </div>
+                      </div>
+                      <div className="item-actions">
+                        <button className="remove-item" onClick={() => removeFromCart(index)}>
+                          <FontAwesomeIcon icon={faTrash} />
+                        </button>
+                      </div>
+                    </div>
+                  );
+                }
               });
               })()
             ) : (
@@ -1227,20 +1227,6 @@ const confirmTransaction = async (gcashRef = null) => {
             <div className="discount-input-wrapper">
               <div className="discount-row">
                 <input type="text" placeholder="Discounts:" readOnly />
-                <div className="discount-tags">
-                  {autoPromotion && autoPromotion.isMultiPromotion ? (
-                    autoPromotion.promotionsUsed.map((promoName, idx) => (
-                      <span key={idx} className="discount-tag">{promoName}</span>
-                    ))
-                  ) : autoPromotion ? (
-                    <span className="discount-tag">{autoPromotion.name}</span>
-                  ) : null}
-                  {appliedDiscounts.map((discount, idx) => (
-                    <span key={idx} className="discount-tag removable" onClick={(e) => { e.stopPropagation(); removeDiscount(idx); }} title="Click to remove">
-                      {discount.discount.name} ×
-                    </span>
-                  ))}
-                </div>
               </div>
             </div>
             <div className="summary">

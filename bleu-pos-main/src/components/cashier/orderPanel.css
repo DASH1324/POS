@@ -805,6 +805,7 @@
   padding: 4px;
   background-color: #fff;
   margin: 0 auto;
+  margin-bottom: 10px;
 }
 
 .orderpanel-qr-text {
@@ -812,7 +813,7 @@
   font-weight: bold;
   text-transform: uppercase;
   letter-spacing: 0.5px;
-  margin: 4px 0 2px 0;
+  margin: 4px 0 10px 0;
   text-align: center;
 }
 

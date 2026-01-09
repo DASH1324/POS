@@ -32,10 +32,11 @@ import "./salesMonitoring.css";
 import Sidebar from "../shared/sidebar";
 import Header from "../shared/header";
 import Loading from "../shared/loading";
+import CustomDateModal from "../shared/customDateModal";
 import "../../confirmAlertCustom.css";
 
 // --- HELPER FUNCTION FOR DISPLAYING DATE RANGES ---
-const getPeriodText = (dateRange) => {
+const getPeriodText = (dateRange, customStart = null, customEnd = null) => {
   const today = new Date();
   const options = { month: "short", day: "numeric", year: "numeric" };
 
@@ -43,28 +44,27 @@ const getPeriodText = (dateRange) => {
     case "today": {
       return today.toLocaleDateString("en-US", options);
     }
-    case "week": {
-      const firstDayOfWeek = new Date(today);
-      firstDayOfWeek.setDate(today.getDate() - today.getDay());
-      const start = firstDayOfWeek.toLocaleDateString("en-US", {
-        month: "short",
-        day: "numeric",
-      });
+    case "yesterday": {
+      const yesterday = new Date(today);
+      yesterday.setDate(today.getDate() - 1);
+      return yesterday.toLocaleDateString("en-US", options);
+    }
+    case "last7days": {
+      const sevenDaysAgo = new Date(today);
+      sevenDaysAgo.setDate(today.getDate() - 7);
+      const start = sevenDaysAgo.toLocaleDateString("en-US", { month: "short", day: "numeric" });
       const end = today.toLocaleDateString("en-US", options);
       return `${start} - ${end}`;
     }
-    case "month": {
-      const firstDayOfMonth = new Date(
-        today.getFullYear(),
-        today.getMonth(),
-        1
-      );
-      const start = firstDayOfMonth.toLocaleDateString("en-US", {
-        month: "short",
-        day: "numeric",
-      });
-      const end = today.toLocaleDateString("en-US", options);
-      return `${start} - ${end}`;
+    case "custom": {
+      if (customStart && customEnd) {
+        const startDate = new Date(customStart + 'T00:00:00');
+        const endDate = new Date(customEnd + 'T00:00:00');
+        const start = startDate.toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" });
+        const end = endDate.toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" });
+        return `${start} - ${end}`;
+      }
+      return "None Selected";
     }
     default:
       return "";
@@ -86,6 +86,8 @@ function SalesMonitoring() {
   // State for cashier list and top cashier's full name
   const [allCashiers, setAllCashiers] = useState([]);
   const [topCashierFullName, setTopCashierFullName] = useState(null);
+  const [customRange, setCustomRange] = useState({ start: null, end: null });
+  const [isCustomModalOpen, setIsCustomModalOpen] = useState(false);
 
   // Fetch all cashiers for the dropdown
   useEffect(() => {
@@ -132,6 +134,39 @@ function SalesMonitoring() {
           ? null
           : selectedCategory;
 
+      // Calculate date range based on selection
+      let requestBody = {
+        selectedCategory: categoryToFetch,
+        selectedCashier: selectedCashier === "all" ? null : selectedCashier,
+      };
+
+      const today = new Date();
+      
+      if (dateRange === "today") {
+        requestBody.dateRange = "today";
+      } else if (dateRange === "yesterday") {
+        const yesterday = new Date(today);
+        yesterday.setDate(today.getDate() - 1);
+        requestBody.dateRange = "custom";
+        requestBody.startDate = formatDateForAPI(yesterday);
+        requestBody.endDate = formatDateForAPI(yesterday);
+      } else if (dateRange === "last7days") {
+        const sevenDaysAgo = new Date(today);
+        sevenDaysAgo.setDate(today.getDate() - 7);
+        requestBody.dateRange = "custom";
+        requestBody.startDate = formatDateForAPI(sevenDaysAgo);
+        requestBody.endDate = formatDateForAPI(today);
+      } else if (dateRange === "custom") {
+        if (!customRange.start || !customRange.end) {
+          setLoading(false);  // ✅ Correct
+          setError("Please select a valid custom date range.");
+          return;
+        }
+        requestBody.dateRange = "custom";
+        requestBody.startDate = customRange.start;
+        requestBody.endDate = customRange.end;
+      }
+
       const response = await fetch(
         "http://localhost:9000/auth/sales_metrics/monitoring",
         {
@@ -140,11 +175,7 @@ function SalesMonitoring() {
             "Content-Type": "application/json",
             Authorization: `Bearer ${authToken}`,
           },
-          body: JSON.stringify({
-            dateRange: dateRange,
-            selectedCategory: categoryToFetch,
-            selectedCashier: selectedCashier === "all" ? null : selectedCashier,
-          }),
+          body: JSON.stringify(requestBody),
         }
       );
 
@@ -200,8 +231,8 @@ function SalesMonitoring() {
 
   useEffect(() => {
     fetchSalesData();
-    setCurrentPeriodText(getPeriodText(dateRange));
-  }, [dateRange, selectedCategory, selectedCashier]);
+    setCurrentPeriodText(getPeriodText(dateRange, customRange.start, customRange.end));
+  }, [dateRange, selectedCategory, selectedCashier, customRange]);
 
   const processedData = useMemo(() => {
     let dataToProcess = salesData;
@@ -487,6 +518,7 @@ function SalesMonitoring() {
     setDateRange("today");
     setSelectedCategory("all");
     setSelectedCashier("all");
+    setCustomRange({ start: null, end: null });
   };
 
   const showNoDataModal = () => {
@@ -498,6 +530,22 @@ function SalesMonitoring() {
       document.body.removeChild(noDataContainer);
     };
     noDataRoot.render(<NoDataModal onClose={cleanupNoData} />);
+  };
+
+  const handleCustomApply = (startDate, endDate) => {
+    const startStr = formatDateForAPI(new Date(startDate));
+    const endStr = formatDateForAPI(new Date(endDate));
+    setCustomRange({ start: startStr, end: endStr });
+    setDateRange("custom");
+    setIsCustomModalOpen(false);
+  };
+
+  // Helper function
+  const formatDateForAPI = (date) => {
+    const year = date.getFullYear();
+    const month = String(date.getMonth() + 1).padStart(2, '0');
+    const day = String(date.getDate()).padStart(2, '0');
+    return `${year}-${month}-${day}`;
   };
 
   return (
@@ -524,12 +572,21 @@ function SalesMonitoring() {
               <span>Period:</span>
               <select
                 value={dateRange}
-                onChange={(e) => setDateRange(e.target.value)}
+                onChange={(e) => {
+                  const value = e.target.value;
+                  if (value === "custom") {
+                    setIsCustomModalOpen(true);
+                  } else {
+                    setDateRange(value);
+                    setCustomRange({ start: null, end: null });
+                  }
+                }}
                 className="salesMonSelect"
               >
                 <option value="today">Today</option>
-                <option value="week">This Week</option>
-                <option value="month">This Month</option>
+                <option value="yesterday">Yesterday</option>
+                <option value="last7days">Last 7 Days</option>
+                <option value="custom">Custom Range</option>
               </select>
             </div>
             <div className="salesMonFilterItem">
@@ -813,6 +870,12 @@ function SalesMonitoring() {
           )}
         </div>
       </div>
+      <CustomDateModal 
+        show={isCustomModalOpen} 
+        onClose={() => setIsCustomModalOpen(false)} 
+        onApply={handleCustomApply}
+        maxDays={30} // Limit to 30 days for short ranges
+      />
     </div>
   );
 }
