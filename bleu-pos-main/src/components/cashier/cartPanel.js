@@ -474,68 +474,69 @@ const CartPanel = ({
         });
 
       for (const promo of parsedPromotions) {
-        if (!Array.isArray(promo.selectedProducts)) continue;
-        
-        // ✅ FIXED: Only apply to NON-BOGO items
-        const eligibleItems = cartItems.filter((item, itemIndex) => {
-          if (item.type !== 'product') return false;
-          if (item.isFromBogo) return false; // ✅ Skip BOGO items
-          
-          if (promo.applicationType === 'all_products') {
-            return true;
-          }
-          
-          if (promo.applicationType === 'specific_categories') {
-            return promo.selectedProducts.includes(item.category);
-          }
-          
-          if (promo.applicationType === 'specific_products') {
-            const matchesProductName = promo.selectedProducts.includes(item.name);
-            const matchesCategory = promo.selectedProducts.includes(item.category);
-            return matchesProductName || matchesCategory;
-          }
-          
-          return false;
-        });
-        
-        if (!eligibleItems.length) continue;
-
-        if (promo.promotionType === 'percentage' || promo.promotionType === 'fixed') {
-          eligibleItems.forEach(item => {
-            const itemIndex = cartItems.findIndex(ci => ci === item);
-            
-            const discountedQty = appliedDiscounts.reduce((total, discountData) => {
-              const itemDiscountInfo = discountData.itemDiscounts?.find(d => d.itemIndex === itemIndex);
-              return total + (itemDiscountInfo ? itemDiscountInfo.quantity : 0);
-            }, 0);
-            
-            const eligibleQty = item.quantity - discountedQty;
-            
-            if (eligibleQty > 0) {
-              let itemPromotionAmount = 0;
-              
-              if (promo.promotionType === 'percentage') {
-                itemPromotionAmount = eligibleQty * (parseFloat(item.price) * (parseFloat(promo.promotionValue) / 100));
-              } else {
-                itemPromotionAmount = eligibleQty * Math.min(parseFloat(item.price), parseFloat(promo.promotionValue));
-              }
-              
-              const currentBest = regularItemPromotions.get(itemIndex);
-              const shouldReplace = !currentBest || itemPromotionAmount > currentBest.discount;
-              
-              if (shouldReplace) {
-                regularItemPromotions.set(itemIndex, {
-                  itemIndex: itemIndex,
-                  promo: promo,
-                  discount: itemPromotionAmount,
-                  priority: promo.priority,
-                  quantity: eligibleQty
-                });
-              }
-            }
-          });
-        }
+  if (!Array.isArray(promo.selectedProducts)) continue;
+  
+  // 1. Find all items in the cart that qualify for THIS specific promotion
+  const eligibleItemsWithIndices = cartItems
+    .map((item, index) => ({ item, index }))
+    .filter(({ item }) => {
+      if (item.type !== 'product' || item.isFromBogo) return false;
+      
+      if (promo.applicationType === 'all_products') return true;
+      if (promo.applicationType === 'specific_categories') return promo.selectedProducts.includes(item.category);
+      if (promo.applicationType === 'specific_products') {
+        return promo.selectedProducts.includes(item.name) || promo.selectedProducts.includes(item.category);
       }
+      return false;
+    });
+
+  if (!eligibleItemsWithIndices.length) continue;
+
+  // 2. Calculate the total quantity of these eligible items combined
+  const totalEligibleQtyInCart = eligibleItemsWithIndices.reduce((sum, { item }) => sum + item.quantity, 0);
+  const minQty = parseInt(promo.minimum_quantity) || 1;
+
+  // 3. THRESHOLD CHECK: If we haven't reached min qty, skip this promotion
+  if (totalEligibleQtyInCart < minQty) {
+    console.log(`Promo "${promo.name}" ignored: Needs ${minQty}, cart has ${totalEligibleQtyInCart}`);
+    continue; 
+  }
+
+  // 4. SCALING LOGIC: Apply "for every achieved minimum quantity"
+  // Example: if minQty is 2 and cart has 3 items, only 2 items (1 bundle) get discounted.
+  const numBundles = Math.floor(totalEligibleQtyInCart / minQty);
+  let totalUnitsToDiscount = numBundles * minQty;
+
+  // 5. Apply the discount across the eligible items
+  if (promo.promotionType === 'percentage' || promo.promotionType === 'fixed') {
+    // We iterate through our eligible items and "consume" the totalUnitsToDiscount
+    eligibleItemsWithIndices.forEach(({ item, index }) => {
+      if (totalUnitsToDiscount <= 0) return;
+
+      const discountedQtyForItem = Math.min(item.quantity, totalUnitsToDiscount);
+      totalUnitsToDiscount -= discountedQtyForItem;
+
+      let itemPromotionAmount = 0;
+      if (promo.promotionType === 'percentage') {
+        itemPromotionAmount = discountedQtyForItem * (parseFloat(item.price) * (parseFloat(promo.promotionValue) / 100));
+      } else {
+        itemPromotionAmount = discountedQtyForItem * Math.min(parseFloat(item.price), parseFloat(promo.promotionValue));
+      }
+
+      // Check if this is better than any previously calculated promotion for this item index
+      const currentBest = regularItemPromotions.get(index);
+      if (!currentBest || itemPromotionAmount > currentBest.discount) {
+        regularItemPromotions.set(index, {
+          itemIndex: index,
+          promo: promo,
+          discount: itemPromotionAmount,
+          priority: promo.priority,
+          quantity: discountedQtyForItem
+        });
+      }
+    });
+  }
+}
       
       // ✅ FIXED: Combine BOTH BOGO and regular promotions
       const allItemPromotions = [];
