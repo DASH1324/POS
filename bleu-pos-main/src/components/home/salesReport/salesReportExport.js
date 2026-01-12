@@ -8,9 +8,21 @@ const formatCurrency = (value) => {
   return num.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 };
 
+// Helper function to format variance type
+const formatVarianceType = (value) => {
+  if (!value || value === 0) return 'Balanced';
+  return value < 0 ? 'Shortage' : 'Overage';
+};
+
 export const generatePDFReport = async (reportData, reportTotals, activeTab, currentPeriodText, selectedCashier) => {
   try {
-    const reportDate = new Date().toLocaleString();
+    const reportDate = new Date().toLocaleString('en-US', { 
+      year: 'numeric', 
+      month: 'long', 
+      day: 'numeric',
+      hour: '2-digit',
+      minute: '2-digit'
+    });
 
     // Generate product table rows
     const productRows = (reportData || []).map((item) => {
@@ -38,173 +50,134 @@ export const generatePDFReport = async (reportData, reportTotals, activeTab, cur
       `;
     }).join('');
 
-    // Complete HTML with page-break-friendly CSS
+    const grossSales = reportTotals.totalSales || 0;
+    const totalRefunds = reportTotals.refunds || 0;
+    const netSales = grossSales - totalRefunds;
+
+    let reportTypeText = 'Sales Summary';
+    if (activeTab === 'daily' || activeTab === 'z-reading') {
+      reportTypeText = 'End-of-Day Closing (Z-Reading)';
+    } else if (activeTab === 'cashier' || selectedCashier) {
+      reportTypeText = 'Cashier Closing (X-Reading)';
+    }
+    if (selectedCashier && selectedCashier !== 'all') {
+      reportTypeText += ' / Cashier Report';
+    }
+
     const htmlContent = `
       <div id="pdfContent">
         <style>
           * { -webkit-print-color-adjust: exact !important; print-color-adjust: exact !important; color-adjust: exact !important; }
-          body { font-family: Arial, sans-serif; padding: 15px; margin: 0; font-size: 10px; }
+          body { font-family: Arial, sans-serif; padding: 20px; margin: 0; font-size: 10px; }
           
-          .export-header { 
+          .report-header { 
             text-align: center; 
-            margin-bottom: 20px; 
+            margin-bottom: 25px; 
             border-bottom: 3px solid #4B929D; 
             padding-bottom: 15px; 
           }
-          .export-header h1 { 
-            margin: 0 0 8px 0; 
-            font-size: 20px; 
+          .report-header h1 { 
+            margin: 0 0 5px 0; 
+            font-size: 22px; 
             color: #333; 
+            font-weight: bold;
           }
-          .export-header p { 
+          .report-header .business-address { 
             margin: 3px 0; 
             font-size: 10px; 
             color: #666; 
           }
-
-          .summary { 
-            margin-top: 20px;
-            margin-bottom: 20px;
-            page-break-inside: avoid; 
-          }
-          .summary h3 { 
-            margin-bottom: 10px; 
-            color: #333; 
+          .report-header .report-type { 
+            margin: 8px 0 3px 0; 
             font-size: 14px; 
-            border-bottom: 2px solid #4B929D; 
-            padding-bottom: 5px; 
-          }
-          .summary-grid {
-            display: grid;
-            grid-template-columns: repeat(2, 1fr);
-            gap: 12px;
-            margin-bottom: 20px;
-          }
-          .summary-card {
-            background: #f8fcfd;
-            border: 1px solid #4B929D;
-            border-radius: 8px;
-            padding: 12px;
-          }
-          .summary-card-label {
-            font-size: 9px;
-            color: #666;
-            text-transform: uppercase;
-            margin-bottom: 4px;
-          }
-          .summary-card-value {
-            font-size: 16px;
             font-weight: bold;
-            color: #333;
+            color: #4B929D; 
+          }
+          .report-header .period { 
+            margin: 3px 0; 
+            font-size: 10px; 
+            color: #666; 
+          }
+          .report-header .generated { 
+            margin: 8px 0 0 0; 
+            font-size: 9px; 
+            color: #999; 
+            font-style: italic;
           }
 
-          .financial-section {
-            margin-top: 20px;
-            margin-bottom: 20px;
+          .summary-section {
+            margin: 25px 0;
             page-break-inside: avoid;
           }
-          .financial-section h3 {
-            margin-bottom: 10px;
-            color: #333;
-            font-size: 14px;
-            border-bottom: 2px solid #4B929D;
-            padding-bottom: 5px;
-          }
-          .financial-grid {
-            display: grid;
-            grid-template-columns: repeat(2, 1fr);
-            gap: 8px;
-            background: #f9f9f9;
-            padding: 12px;
-            border-radius: 8px;
-          }
-          .financial-item {
-            display: flex;
-            justify-content: space-between;
-            padding: 6px 8px;
-            background: white;
-            border-radius: 4px;
-            border: 1px solid #e5e7eb;
-          }
-          .financial-label {
-            font-size: 9px;
-            color: #666;
-            font-weight: 500;
-          }
-          .financial-value {
-            font-size: 10px;
-            font-weight: bold;
-            color: #333;
-          }
-          .financial-highlight {
-            background: #fef3c7;
-            border: 2px solid #f59e0b;
-          }
-
-          .payment-section {
-            margin-top: 20px;
-            margin-bottom: 20px;
-            page-break-inside: avoid;
-          }
-          .payment-section h3 {
-            margin-bottom: 10px;
-            color: #333;
-            font-size: 14px;
-            border-bottom: 2px solid #4B929D;
-            padding-bottom: 5px;
-          }
-          .payment-cards {
-            display: grid;
-            grid-template-columns: repeat(2, 1fr);
-            gap: 12px;
-          }
-          .payment-card {
-            background: #f8fcfd;
-            border: 1px solid #4B929D;
-            border-radius: 8px;
-            padding: 12px;
-            text-align: center;
-          }
-          .payment-card-label {
-            font-size: 9px;
-            color: #666;
-            text-transform: uppercase;
-            margin-bottom: 4px;
-          }
-          .payment-card-value {
+          .summary-section h2 {
             font-size: 16px;
+            color: #333;
+            margin-bottom: 15px;
+            border-bottom: 2px solid #4B929D;
+            padding-bottom: 5px;
+          }
+          .summary-table {
+            width: 100%;
+            border-collapse: collapse;
+            margin-bottom: 20px;
+          }
+          .summary-table td {
+            padding: 10px;
+            border: 1px solid #ddd;
+            font-size: 11px;
+          }
+          .summary-table td:first-child {
+            background-color: #f8fcfd;
+            font-weight: 600;
+            width: 60%;
+            color: #333;
+          }
+          .summary-table td:last-child {
+            text-align: right;
             font-weight: bold;
             color: #333;
+            width: 40%;
+          }
+          .summary-table .net-sales td {
+            background-color: #4B929D !important;
+            color: white !important;
+            font-size: 12px;
+            font-weight: bold;
+          }
+          .summary-table .variance-shortage td:last-child {
+            color: #d32f2f;
+          }
+          .summary-table .variance-overage td:last-child {
+            color: #388e3c;
           }
 
-          .data-section {
-            margin-top: 20px;
-            page-break-before: always;
+          .breakdown-section {
+            margin-top: 30px;
           }
-          .data-section h3 {
-            margin-bottom: 10px;
+          .breakdown-section h2 {
+            font-size: 16px;
             color: #333;
-            font-size: 14px;
+            margin-bottom: 15px;
             border-bottom: 2px solid #4B929D;
             padding-bottom: 5px;
           }
 
-          table { 
+          table.breakdown-table { 
             width: 100%; 
             border-collapse: collapse; 
             margin-top: 15px; 
             font-size: 9px; 
             page-break-inside: auto; 
           }
-          thead { display: table-header-group; }
-          tbody { display: table-row-group; }
-          tr { page-break-inside: avoid; page-break-after: auto; }
-          th, td { 
+          .breakdown-table thead { display: table-header-group; }
+          .breakdown-table tbody { display: table-row-group; }
+          .breakdown-table tr { page-break-inside: avoid; page-break-after: auto; }
+          .breakdown-table th, .breakdown-table td { 
             border: 1px solid #333; 
-            padding: 6px 4px; 
+            padding: 8px 5px; 
             text-align: left; 
           }
-          th { 
+          .breakdown-table th { 
             background-color: #4B929D !important; 
             color: #fff !important; 
             font-weight: bold; 
@@ -213,116 +186,130 @@ export const generatePDFReport = async (reportData, reportTotals, activeTab, cur
             text-transform: uppercase; 
             letter-spacing: 0.3px; 
           }
-          tr:nth-child(even) { background-color: #f9f9f9 !important; }
+          .breakdown-table tr:nth-child(even) { background-color: #f9f9f9 !important; }
           
           .bold { font-weight: 700; }
           .text-center { text-align: center; }
           .text-right { text-align: right; }
 
-          .approved { 
-            margin-top: 30px; 
-            text-align: right; 
-            page-break-inside: avoid; 
+          .report-footer {
+            margin-top: 40px;
+            page-break-inside: avoid;
           }
-          .signature { 
-            margin-top: 20px; 
-            display: inline-block; 
-            border-top: 1px solid #000; 
-            padding-top: 5px; 
-            min-width: 180px; 
-            text-align: center; 
-            font-size: 10px; 
+          .signature-section {
+            margin-top: 50px;
+            text-align: left;
+          }
+          .signature-line {
+            display: inline-block;
+            border-top: 2px solid #000;
+            width: 250px;
+            margin-top: 40px;
+            text-align: center;
+            padding-top: 5px;
+          }
+          .signature-label {
+            font-size: 10px;
+            font-weight: bold;
+            margin-bottom: 10px;
           }
         </style>
 
-        <div class="export-header">
-          <h1>Sales Report</h1>
-          <p><strong>Generated On:${reportDate}</p>
-          <p>${currentPeriodText}</p>
-          ${selectedCashier && selectedCashier !== 'all' ? `<p><strong>Cashier:</strong> ${selectedCashier}</p>` : ''}
+        <!-- HEADER -->
+        <div class="report-header">
+          <h1>Bleu Bean Cafe</h1>
+          <p class="business-address">Don Fabian St., Commonwealth, Quezon City, Philippines</p>
+          <p class="report-type">${reportTypeText}</p>
+          <p class="period">Reporting Period: ${currentPeriodText}</p>
+          <p class="generated">Date Generated: ${reportDate}</p>
         </div>
 
-        <div class="summary">
-          <h3>Sales Summary</h3>
-          <div class="summary-grid">
-            <div class="summary-card">
-              <div class="summary-card-label">Total Cash Sales</div>
-              <div class="summary-card-value">₱${formatCurrency(reportTotals.totalSales)}</div>
-            </div>
-            <div class="summary-card">
-              <div class="summary-card-label">Cash in Drawer</div>
-              <div class="summary-card-value">₱${formatCurrency(reportTotals.cashInDrawer)}</div>
-            </div>
-            <div class="summary-card">
-              <div class="summary-card-label">Cash Discrepancy</div>
-              <div class="summary-card-value">₱${formatCurrency(Math.abs(reportTotals.discrepancy || 0))} ${(reportTotals.discrepancy || 0) < 0 ? 'Short' : 'Over'}</div>
-            </div>
-            <div class="summary-card">
-              <div class="summary-card-label">Total Transactions</div>
-              <div class="summary-card-value">${reportTotals.transactions ?? 0}</div>
-            </div>
-            <div class="summary-card">
-              <div class="summary-card-label">Refunds/Returns</div>
-              <div class="summary-card-value">₱${formatCurrency(reportTotals.refunds)}</div>
-            </div>
-          </div>
+        <!-- SUMMARY SECTION -->
+        <div class="summary-section">
+          <h2>Summary Section</h2>
+          <table class="summary-table">
+            <tbody>
+              <tr>
+                <td>Total Cash Sales</td>
+                <td>₱${formatCurrency(reportTotals.totalSales)}</td>
+              </tr>
+              <tr>
+                <td>Cash Drawer</td>
+                <td>₱${formatCurrency(reportTotals.cashInDrawer)}</td>
+              </tr>
+              <tr class="${(reportTotals.discrepancy || 0) < 0 ? 'variance-shortage' : (reportTotals.discrepancy || 0) > 0 ? 'variance-overage' : ''}">
+                <td>Cash Variance (${formatVarianceType(reportTotals.discrepancy)})</td>
+                <td>₱${formatCurrency(Math.abs(reportTotals.discrepancy || 0))}</td>
+              </tr>
+              <tr>
+                <td>Total Transactions</td>
+                <td>${reportTotals.transactions ?? 0}</td>
+              </tr>
+              <tr>
+                <td>Cash Payments</td>
+                <td>₱${formatCurrency(reportTotals.cashAmount || 0)}</td>
+              </tr>
+              <tr>
+                <td>GCash Payments</td>
+                <td>₱${formatCurrency(reportTotals.gcashAmount || 0)}</td>
+              </tr>
+              <tr>
+                <td>Refunds/Returns</td>
+                <td>₱${formatCurrency(reportTotals.refunds)}</td>
+              </tr>
+              <tr class="net-sales">
+                <td>Net Sales</td>
+                <td>₱${formatCurrency(netSales)}</td>
+              </tr>
+            </tbody>
+          </table>
         </div>
 
-        <div class="payment-section">
-          <h3>Payment Breakdown</h3>
-          <div class="payment-cards">
-            <div class="payment-card">
-              <div class="payment-card-label">Cash Payments</div>
-              <div class="payment-card-value">₱${formatCurrency(reportTotals.cashAmount || 0)}</div>
-            </div>
-            <div class="payment-card">
-              <div class="payment-card-label">GCash Payments</div>
-              <div class="payment-card-value">₱${formatCurrency(reportTotals.gcashAmount || 0)}</div>
-            </div>
-          </div>
+        <!-- Cash Drawer Details -->
+        <div class="summary-section">
+          <h2>Cash Drawer Details</h2>
+          <table class="summary-table">
+            <tbody>
+              <tr>
+                <td>Change Fund</td>
+                <td>₱${formatCurrency(reportTotals.cashDrawerOpening)}</td>
+              </tr>
+              <tr>
+                <td>Total Cash Sales</td>
+                <td>₱${formatCurrency(reportTotals.cashDrawerSales)}</td>
+              </tr>
+              <tr>
+                <td>Total Refunds</td>
+                <td>₱${formatCurrency(reportTotals.cashDrawerRefunds)}</td>
+              </tr>
+              <tr>
+                <td>System Cash Total</td>
+                <td>₱${formatCurrency(reportTotals.cashDrawerExpected)}</td>
+              </tr>
+              <tr>
+                <td>Actual Cash Count</td>
+                <td>₱${formatCurrency(reportTotals.cashDrawerActual)}</td>
+              </tr>
+              <tr class="net-sales ${(reportTotals.cashDrawerDiscrepancy || 0) < 0 ? 'variance-shortage' : (reportTotals.cashDrawerDiscrepancy || 0) > 0 ? 'variance-overage' : ''}">
+                <td>Cash Variance (Variance Type: ${formatVarianceType(reportTotals.cashDrawerDiscrepancy)})</td>
+                <td>₱${formatCurrency(Math.abs(reportTotals.cashDrawerDiscrepancy || 0))}</td>
+              </tr>
+              <tr>
+                <td>Reported By</td>
+                <td>${reportTotals.reportedBy || 'N/A'}</td>
+              </tr>
+              <tr>
+                <td>Verified By</td>
+                <td>${reportTotals.verifiedBy || 'N/A'}</td>
+              </tr>
+            </tbody>
+          </table>
         </div>
 
-        <div class="financial-section">
-          <h3>Cash Drawer Details</h3>
-          <div class="financial-grid">
-            <div class="financial-item">
-              <span class="financial-label">Opening Balance:</span>
-              <span class="financial-value">₱${formatCurrency(reportTotals.cashDrawerOpening)}</span>
-            </div>
-            <div class="financial-item">
-              <span class="financial-label">Total Cash Sales:</span>
-              <span class="financial-value">₱${formatCurrency(reportTotals.cashDrawerSales)}</span>
-            </div>
-            <div class="financial-item">
-              <span class="financial-label">Total Refunds:</span>
-              <span class="financial-value">₱${formatCurrency(reportTotals.cashDrawerRefunds)}</span>
-            </div>
-            <div class="financial-item">
-              <span class="financial-label">Expected Cash:</span>
-              <span class="financial-value">₱${formatCurrency(reportTotals.cashDrawerExpected)}</span>
-            </div>
-            <div class="financial-item">
-              <span class="financial-label">Actual Cash Counted:</span>
-              <span class="financial-value">₱${formatCurrency(reportTotals.cashDrawerActual)}</span>
-            </div>
-            <div class="financial-item financial-highlight">
-              <span class="financial-label">Discrepancy:</span>
-              <span class="financial-value">₱${formatCurrency(Math.abs(reportTotals.cashDrawerDiscrepancy || 0))} ${(reportTotals.cashDrawerDiscrepancy || 0) < 0 ? 'Short' : 'Over'}</span>
-            </div>
-            <div class="financial-item">
-              <span class="financial-label">Reported By:</span>
-              <span class="financial-value">${reportTotals.reportedBy || 'N/A'}</span>
-            </div>
-            <div class="financial-item">
-              <span class="financial-label">Verified By:</span>
-              <span class="financial-value">${reportTotals.verifiedBy || 'N/A'}</span>
-            </div>
-          </div>
-        </div>
-
-        <div class="data-section">
-          <h3>Product Sales Breakdown</h3>
-          <table>
+        <!-- DETAILED BREAKDOWN -->
+        <div class="breakdown-section">
+          <h2>Product Sales Breakdown</h2>
+          <table class="breakdown-table">
             <thead>
               <tr>
                 <th>PRODUCT</th>
@@ -338,9 +325,9 @@ export const generatePDFReport = async (reportData, reportTotals, activeTab, cur
         </div>
 
         ${refundRows ? `
-        <div class="data-section" style="page-break-before: auto; margin-top: 20px;">
-          <h3>Refunds & Returns</h3>
-          <table>
+        <div class="breakdown-section" style="margin-top: 20px;">
+          <h2>Refunds & Returns</h2>
+          <table class="breakdown-table">
             <thead>
               <tr>
                 <th>#</th>
@@ -358,9 +345,12 @@ export const generatePDFReport = async (reportData, reportTotals, activeTab, cur
         </div>
         ` : ''}
 
-        <div class="approved">
-          <p><strong>Approved By:</strong></p>
-          <div class="signature">Signature</div>
+        <!-- FOOTER -->
+        <div class="report-footer">
+          <div class="signature-section">
+            <p class="signature-label">Verified by:</p>
+            <div class="signature-line">Signature</div>
+          </div>
         </div>
       </div>
     `;
@@ -391,10 +381,6 @@ export const generatePDFReport = async (reportData, reportTotals, activeTab, cur
   }
 };
 
-// ============================================
-// CSV GENERATION FUNCTION
-// ============================================
-
 export const generateCSVReport = (reportData) => {
   const headers = ['Product', 'Category', 'Units Sold', 'Total Sales'];
   
@@ -407,7 +393,6 @@ export const generateCSVReport = (reportData) => {
     ];
   });
 
-  // Escape CSV values properly
   const escapeCSV = (value) => {
     if (value === null || value === undefined) return '';
     const stringValue = String(value);
@@ -434,12 +419,8 @@ export const generateCSVReport = (reportData) => {
   URL.revokeObjectURL(url);
 };
 
-// ============================================
-// MAIN EXPORT HANDLER
-// ============================================
 
 const handleSalesReportExport = (reportData, reportTotals, activeTab, currentPeriodText, selectedCashier = 'all') => {
-  // If there's no data, show the No Data modal immediately
   if (!reportData || !reportData.length) {
     const noDataContainer = document.createElement("div");
     document.body.appendChild(noDataContainer);

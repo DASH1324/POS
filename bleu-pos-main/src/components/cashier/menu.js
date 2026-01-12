@@ -4,6 +4,7 @@ import Navbar from '../navbar';
 import CartPanel from './cartPanel.js';
 import Loading from "../home/shared/loading";
 import { UnableToLoadData, NoData } from "../home/shared/exportModal";
+import { MdAccessTime } from "react-icons/md";
 import { toast } from 'react-toastify';
 import PromotionsList from './PromotionsList';
 import './menu.css';
@@ -19,6 +20,8 @@ function Menu() {
   const [cartItems, setCartItems] = useState([]);
   const [isCartOpen, setIsCartOpen] = useState(false);
   const [showInitialCashModal, setShowInitialCashModal] = useState(false);
+  const [showStoreHoursModal, setShowStoreHoursModal] = useState(false);
+  const [isOutsideStoreHours, setIsOutsideStoreHours] = useState(false);
   const [initialCash, setInitialCash] = useState('');
   const [initialCashError, setInitialCashError] = useState('');
   const [products, setProducts] = useState([]);
@@ -35,6 +38,34 @@ function Menu() {
   const [paymentMethod, setPaymentMethod] = useState('Cash');
   const [loggedInUser, setLoggedInUser] = useState(null);
   const [maxQuantityCache, setMaxQuantityCache] = useState({});
+
+  // Check store hours function
+  const checkStoreHours = useCallback(() => {
+    const now = new Date();
+    const currentHour = now.getHours();
+    
+    // Store is closed if before 10 AM or after 10 PM (22:00)
+    if (currentHour < 10 || currentHour >= 22) {
+      setIsOutsideStoreHours(true);
+      setShowStoreHoursModal(true);
+      return false;
+    }
+    
+    setIsOutsideStoreHours(false);
+    return true;
+  }, []);
+
+  // Check store hours on mount and set up interval
+  useEffect(() => {
+    checkStoreHours();
+    
+    // Check every minute
+    const interval = setInterval(() => {
+      checkStoreHours();
+    }, 60000);
+    
+    return () => clearInterval(interval);
+  }, [checkStoreHours]);
 
   const formatPromotionValue = (promo) => {
     if (promo.promotion_type === 'percentage') {
@@ -428,6 +459,13 @@ function Menu() {
   }, [cartItems]);
 
 const addToCart = useCallback(async (item, type = 'product') => {
+  // Check store hours first
+  if (isOutsideStoreHours) {
+    toast.error('Store is closed. Cannot add items to cart.');
+    setShowStoreHoursModal(true);
+    return;
+  }
+
   console.log('🛒 Adding to cart:', item.name, {
     type,
     isFromBogo: item.isFromBogo,
@@ -559,7 +597,7 @@ const addToCart = useCallback(async (item, type = 'product') => {
       }
     });
   }
-}, [checkInventoryConflicts, getDynamicMaxQuantity]);
+}, [checkInventoryConflicts, getDynamicMaxQuantity, isOutsideStoreHours]);
 
   const handleInitialCashSubmit = async (e) => {
     e.preventDefault();
@@ -589,16 +627,16 @@ const addToCart = useCallback(async (item, type = 'product') => {
 
       if (!response.ok) {
         const errorData = await response.json();
-        throw new Error(errorData.detail || 'Failed to submit initial cash.');
+        throw new Error(errorData.detail || 'Failed to submit Change Fund.');
       }
       
-      console.log(`Initial cash of ₱${amount.toFixed(2)} submitted successfully.`);
+      console.log(`Change Fund of ₱${amount.toFixed(2)} submitted successfully.`);
       setShowInitialCashModal(false);
-      toast.success(`Initial cash of ₱${amount.toFixed(2)} submitted successfully`);
+      toast.success(`Change Fund of ₱${amount.toFixed(2)} submitted successfully`);
       
     } catch (err) {
       setInitialCashError(err.message);
-      toast.error(`Failed to submit initial cash: ${err.message}`);
+      toast.error(`Failed to submit Change Fund: ${err.message}`);
     }
   };
 
@@ -628,7 +666,7 @@ const addToCart = useCallback(async (item, type = 'product') => {
             <button 
               className="menu-add-button" 
               onClick={() => addToCart(product)}
-              disabled={product.status === 'Unavailable'}
+              disabled={product.status === 'Unavailable' || isOutsideStoreHours}
             >
               Add Product
             </button>
@@ -663,7 +701,7 @@ const addToCart = useCallback(async (item, type = 'product') => {
             <button
               className="menu-add-button"
               onClick={() => addToCart(item, 'merchandise')}
-              disabled={item.Status === 'Not Available'}
+              disabled={item.Status === 'Not Available' || isOutsideStoreHours}
             >
               Add Merchandise
             </button>
@@ -726,12 +764,34 @@ const addToCart = useCallback(async (item, type = 'product') => {
     <div className="menu-page">
       <Navbar user={loggedInUser} isCartOpen={isCartOpen} />
 
+      {showStoreHoursModal && (
+        <div className="storeHours-overlay">
+          <div className="storeHours-container">
+            <div className="storeHours-icon">
+              <MdAccessTime size={32} />
+            </div>
+            <div className="storeHours-title">Store Hours Notice</div>
+            <div className="storeHours-description">
+              Store hours are 10:00 AM–10:00 PM. Please complete pending orders and proceed to cash tally.
+            </div>
+            <div className="storeHours-button-group">
+              <button 
+                onClick={() => setShowStoreHoursModal(false)} 
+                className="storeHours-button-primary"
+              >
+                Confirm
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
       {showInitialCashModal && (
         <div className="initialCash-modal-overlay">
           <div className="initialCash-modal-container">
-            <div className="initialCash-modal-title">Enter Initial Cash in Drawer</div>
+            <div className="initialCash-modal-title">Enter Change Fund</div>
             <div className="initialCash-modal-description">
-              Please input the initial amount of cash in the drawer to start your shift.
+              Please input the change fund to start your shift.
             </div>
             <form onSubmit={handleInitialCashSubmit}>
               <input
@@ -755,7 +815,7 @@ const addToCart = useCallback(async (item, type = 'product') => {
         </div>
       )}
 
-      <div className={`menu-page-content ${showInitialCashModal ? 'blurred' : ''}`}>
+      <div className={`menu-page-content ${showInitialCashModal || showStoreHoursModal ? 'blurred' : ''}`}>
         {isLoading && <Loading />}
         
         {!isLoading && (

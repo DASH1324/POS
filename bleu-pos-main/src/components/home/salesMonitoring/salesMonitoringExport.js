@@ -3,7 +3,13 @@ import html2canvas from 'html2canvas';
 
 export const generatePDFReport = async (metrics, selectedCategory, selectedCashier) => {
   try {
-    const reportDate = new Date().toLocaleString();
+    const reportDate = new Date().toLocaleString('en-US', { 
+      year: 'numeric', 
+      month: 'long', 
+      day: 'numeric',
+      hour: '2-digit',
+      minute: '2-digit'
+    });
     
     // Calculate summary statistics
     const totalTransactions = metrics.totalTransactions || 0;
@@ -79,40 +85,57 @@ export const generatePDFReport = async (metrics, selectedCategory, selectedCashi
             padding-bottom: 15px; 
           }
           .export-header h1 { 
-            margin: 0 0 8px 0; 
-            font-size: 20px; 
+            margin: 0 0 5px 0; 
+            font-size: 22px; 
             color: #333; 
+            font-weight: bold;
           }
-          .export-header p { 
+          .export-header .business-address { 
             margin: 3px 0; 
             font-size: 10px; 
             color: #666; 
           }
+          .export-header .report-type { 
+            margin: 8px 0 3px 0; 
+            font-size: 14px; 
+            font-weight: bold;
+            color: #4B929D; 
+          }
+          .export-header .filters { 
+            margin: 3px 0; 
+            font-size: 10px; 
+            color: #666; 
+          }
+          .export-header .generated { 
+            margin: 8px 0 0 0; 
+            font-size: 9px; 
+            color: #999; 
+            font-style: italic;
+          }
 
           .summary { 
-            margin-top: 20px;
-            margin-bottom: 20px;
+            margin-top: 25px;
+            margin-bottom: 25px;
             page-break-inside: avoid; 
           }
           .summary h3 { 
-            margin-bottom: 10px; 
+            margin-bottom: 15px; 
             color: #333; 
-            font-size: 14px; 
+            font-size: 16px; 
             border-bottom: 2px solid #4B929D; 
             padding-bottom: 5px; 
           }
           .summary-table { 
             border-collapse: collapse; 
-            width: 60%; 
-            margin: 0 auto; 
+            width: 100%; 
           }
           .summary-table th, .summary-table td { 
-            border: 1px solid #333; 
-            padding: 6px 8px; 
-            font-size: 10px; 
+            border: 1px solid #ddd; 
+            padding: 10px 8px; 
+            font-size: 11px; 
           }
           .summary-table th { 
-            background: #f2f2f2 !important; 
+            background-color: #f8fcfd !important;
             color: #333 !important; 
             text-align: left; 
             width: 60%; 
@@ -120,18 +143,20 @@ export const generatePDFReport = async (metrics, selectedCategory, selectedCashi
           }
           .summary-table td { 
             text-align: right; 
-            font-weight: 500; 
+            font-weight: bold;
+            color: #333;
+            width: 40%;
           }
 
           .charts-section {
-            margin-top: 20px;
-            margin-bottom: 20px;
+            margin-top: 25px;
+            margin-bottom: 25px;
             page-break-inside: avoid;
           }
           .charts-section h3 {
             margin-bottom: 15px;
             color: #333;
-            font-size: 14px;
+            font-size: 16px;
             border-bottom: 2px solid #4B929D;
             padding-bottom: 5px;
           }
@@ -165,13 +190,13 @@ export const generatePDFReport = async (metrics, selectedCategory, selectedCashi
           }
 
           .data-section {
-            margin-top: 20px;
+            margin-top: 30px;
             page-break-before: always;
           }
           .data-section h3 {
-            margin-bottom: 10px;
+            margin-bottom: 15px;
             color: #333;
-            font-size: 14px;
+            font-size: 16px;
             border-bottom: 2px solid #4B929D;
             padding-bottom: 5px;
           }
@@ -188,7 +213,7 @@ export const generatePDFReport = async (metrics, selectedCategory, selectedCashi
           tr { page-break-inside: avoid; page-break-after: auto; }
           th, td { 
             border: 1px solid #333; 
-            padding: 6px 4px; 
+            padding: 8px 5px; 
             text-align: left; 
           }
           th { 
@@ -210,36 +235,49 @@ export const generatePDFReport = async (metrics, selectedCategory, selectedCashi
           .date-line { font-weight: 500; font-size: 9px; }
           .time-line { font-size: 8px; color: #666; }
 
-          .approved { 
-            margin-top: 30px; 
-            text-align: right; 
-            page-break-inside: avoid; 
+          .report-footer {
+            margin-top: 40px;
+            page-break-inside: avoid;
           }
-          .signature { 
-            margin-top: 20px; 
-            display: inline-block; 
-            border-top: 1px solid #000; 
-            padding-top: 5px; 
-            min-width: 180px; 
-            text-align: center; 
-            font-size: 10px; 
+          .signature-section {
+            margin-top: 50px;
+            text-align: left;
+          }
+          .signature-line {
+            display: inline-block;
+            border-top: 2px solid #000;
+            width: 250px;
+            margin-top: 40px;
+            text-align: center;
+            padding-top: 5px;
+          }
+          .signature-label {
+            font-size: 10px;
+            font-weight: bold;
+            margin-bottom: 10px;
           }
         </style>
 
+        <!-- HEADER -->
         <div class="export-header">
-          <h1>Sales Monitoring Report</h1>
-          <p><strong>Generated On:</strong> ${reportDate}</p>
-          <p><strong>Category:</strong> ${selectedCategory !== 'all' ? selectedCategory : 'All Categories'} | <strong>Cashier:</strong> ${selectedCashier !== 'all' ? selectedCashier : 'All Cashiers'}</p>
+          <h1>Bleu Bean Cafe</h1>
+          <p class="business-address">Don Fabian St., Commonwealth, Quezon City, Philippines</p>
+          <p class="report-type">Sales Monitoring Report</p>
+          <p class="filters"><strong>Category:</strong> ${selectedCategory !== 'all' ? selectedCategory : 'All Categories'} | <strong>Cashier:</strong> ${selectedCashier !== 'all' ? selectedCashier : 'All Cashiers'}</p>
+          <p class="generated">Date Generated: ${reportDate}</p>
         </div>
 
+        <!-- SUMMARY SECTION -->
         <div class="summary">
           <h3>Sales Summary</h3>
           <table class="summary-table">
-            <tr><th>Total Sales</th><td>₱${totalSales.toFixed(2)}</td></tr>
-            <tr><th>Total Transactions</th><td>${totalTransactions}</td></tr>
-            <tr><th>Total Items Sold</th><td>${totalItemsSold}</td></tr>
-            <tr><th>Average Sale Value</th><td>₱${averageSaleValue.toFixed(2)}</td></tr>
-            ${topCashier ? `<tr><th>Top Cashier</th><td>${topCashier.name} (₱${topCashier.sales.toFixed(2)})</td></tr>` : ''}
+            <tbody>
+              <tr><th>Total Sales</th><td>₱${totalSales.toFixed(2)}</td></tr>
+              <tr><th>Total Transactions</th><td>${totalTransactions}</td></tr>
+              <tr><th>Total Items Sold</th><td>${totalItemsSold}</td></tr>
+              <tr><th>Average Sale Value</th><td>₱${averageSaleValue.toFixed(2)}</td></tr>
+              ${topCashier ? `<tr><th>Top Cashier</th><td>${topCashier.name} (₱${topCashier.sales.toFixed(2)})</td></tr>` : ''}
+            </tbody>
           </table>
         </div>
 
@@ -269,6 +307,7 @@ export const generatePDFReport = async (metrics, selectedCategory, selectedCashi
           </div>
         ` : ''}
 
+        <!-- DETAILED DATA SECTION -->
         <div class="data-section">
           <h3>Detailed Sales Data</h3>
           <table>
@@ -288,9 +327,12 @@ export const generatePDFReport = async (metrics, selectedCategory, selectedCashi
           </table>
         </div>
 
-        <div class="approved">
-          <p><strong>Approved By:</strong></p>
-          <div class="signature">Signature</div>
+        <!-- FOOTER -->
+        <div class="report-footer">
+          <div class="signature-section">
+            <p class="signature-label">Verified by:</p>
+            <div class="signature-line">Signature</div>
+          </div>
         </div>
       </div>
     `;

@@ -611,3 +611,116 @@ body, html {
     font-size: 14px;
   }
 }
+
+/* Store Hours Modal */
+.storeHours-overlay {
+  background: rgba(0, 0, 0, 0.5);
+  z-index: 9999;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+}
+
+.storeHours-container {
+  background: #fff;
+  border-radius: 12px;
+  padding: 30px 40px 40px 40px;
+  width: 500px;
+  box-shadow: 0 4px 20px rgba(0,0,0,0.1);
+  position: relative;
+  font-family: 'Arial', sans-serif;
+  text-align: center;
+}
+
+.storeHours-close {
+  position: absolute;
+  top: 15px;
+  right: 20px;
+  font-size: 24px;
+  color: #999;
+  cursor: pointer;
+  transition: color 0.3s ease;
+  background: none;
+  border: none;
+  line-height: 1;
+}
+
+.storeHours-close:hover {
+  color: #666;
+}
+
+.storeHours-icon {
+  width: 60px;
+  height: 60px;
+  margin: 0 auto 10px auto;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background-color: #ffe5e5;
+  color: #dc3545;
+  font-size: 32px;
+}
+
+.storeHours-icon svg {
+  width: 40px;
+  height: 40px;
+}
+
+.storeHours-title {
+  font-size: 22px;
+  font-weight: 700;
+  color: #000;
+  margin-bottom: 15px;
+}
+
+.storeHours-description {
+  font-size: 16px;
+  color: #6c757d;
+  margin-bottom: 30px;
+  line-height: 1.5;
+}
+
+.storeHours-button-group {
+  display: flex;
+  justify-content: space-between;
+  gap: 15px;
+}
+
+.storeHours-button-group button {
+  padding: 12px 24px;
+  font-size: 16px;
+  border-radius: 8px;
+  cursor: pointer;
+  border: none;
+  flex: 1;
+  transition: background 0.3s ease, color 0.3s ease, border 0.3s ease;
+  font-weight: 600;
+}
+
+/* Primary button (I Understand / Yes) */
+.storeHours-button-primary {
+  background-color: #dc3545;
+  color: white;
+}
+
+.storeHours-button-primary:hover {
+  background-color: #c82333;
+}
+
+/* Secondary button (Cancel / No) */
+.storeHours-button-secondary {
+  background-color: white;
+  color: black;
+  border: 1px solid #ccc;
+}
+
+.storeHours-button-secondary:hover {
+  background-color: #f8f9fa;
+  border-color: #999;
+}

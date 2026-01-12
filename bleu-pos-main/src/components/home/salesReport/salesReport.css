@@ -648,3 +648,9 @@ body {
     text-align: center;
   }
 }
+
+.variance-label {
+  font-weight: 700; 
+  text-transform: uppercase;
+  font-size: 16px;
+}
