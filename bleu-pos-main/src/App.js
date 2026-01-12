@@ -3,6 +3,8 @@ import { BrowserRouter as Router, Routes, Route } from 'react-router-dom';
 import { StyleSheetManager } from 'styled-components';
 import isPropValid from '@emotion/is-prop-valid';
 import NotificationModal from './components/NotificationModal';
+import NoInternetModal from './components/NoInternetModal';
+import useNetworkStatus from './hooks/useNetworkStatus';
 import { ToastContainer } from 'react-toastify';
 import 'react-toastify/dist/ReactToastify.css';
 
@@ -40,18 +42,19 @@ function App() {
   const [notifications, setNotifications] = useState([]);
   const [isModalOpen, setIsModalOpen] = useState(false);
   const wsRef = useRef(null);
-  const audioRef = useRef(null); // Add audio ref
-  const userInteractedRef = useRef(false); // Track if user has interacted
+  const audioRef = useRef(null);
+  const userInteractedRef = useRef(false);
+  
+  // Network status monitoring
+  const isOnline = useNetworkStatus();
 
   // Initialize audio on component mount
   useEffect(() => {
     audioRef.current = new Audio('/Notif.mp3');
     audioRef.current.volume = 0.8;
     
-    // Mark that user has interacted when they click anywhere
     const handleInteraction = () => {
       userInteractedRef.current = true;
-      // Try to load the audio
       audioRef.current.load();
       document.removeEventListener('click', handleInteraction);
     };
@@ -80,7 +83,6 @@ function App() {
   useEffect(() => {
     fetchNotifications();
 
-    // Establish WebSocket connection
     const ws = new WebSocket('ws://localhost:9004/ws/notifications');
     wsRef.current = ws;
 
@@ -94,10 +96,8 @@ function App() {
 
       switch (data.type) {
         case 'new_notification':
-          // Add new notification to the list
           setNotifications(prev => [data.payload, ...prev]);
           
-          // Play sound if user has interacted
           if (userInteractedRef.current && audioRef.current) {
             audioRef.current.play()
               .then(() => console.log('🔊 Notification sound played'))
@@ -108,7 +108,6 @@ function App() {
           break;
 
         case 'notification_read':
-          // Update notification as read
           setNotifications(prev =>
             prev.map(notif =>
               notif.NotificationID === data.payload.NotificationID
@@ -119,14 +118,12 @@ function App() {
           break;
 
         case 'notification_done':
-          // Remove notification marked as done
           setNotifications(prev =>
             prev.filter(notif => notif.NotificationID !== data.payload.NotificationID)
           );
           break;
 
         case 'notifications_read_all':
-          // Mark all as read
           setNotifications(prev =>
             prev.map(notif => ({ ...notif, IsRead: true }))
           );
@@ -145,7 +142,6 @@ function App() {
       console.log('WebSocket disconnected');
     };
 
-    // Cleanup on unmount
     return () => {
       if (ws.readyState === WebSocket.OPEN) {
         ws.close();
@@ -162,8 +158,6 @@ function App() {
       if (!response.ok) {
         throw new Error('Failed to mark all as read');
       }
-      
-      // WebSocket will broadcast the update
     } catch (error) {
       console.error('Error marking all as read:', error);
     }
@@ -171,7 +165,6 @@ function App() {
 
   const unreadCount = notifications.filter(n => !n.IsRead).length;
 
-  // Make these available globally for your header component
   useEffect(() => {
     window.notificationState = {
       notifications,
@@ -184,7 +177,10 @@ function App() {
   return (
     <StyleSheetManager shouldForwardProp={isPropValid}>
       <Router>
-        {/* Notification Modal - No bell here, use your existing bell */}
+        {/* Global Network Status Modal */}
+        {!isOnline && <NoInternetModal />}
+
+        {/* Notification Modal */}
         <NotificationModal
           isOpen={isModalOpen}
           onClose={() => setIsModalOpen(false)}
@@ -215,7 +211,6 @@ function App() {
 
           {/*Customer Blockchain View*/}
           <Route path="/blockchain" element={<CustomerBlockchainView />} />
-
         </Routes>
 
         <ToastContainer

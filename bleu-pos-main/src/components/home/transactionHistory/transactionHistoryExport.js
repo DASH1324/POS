@@ -1,5 +1,4 @@
 import html2pdf from 'html2pdf.js';
-import logo from "../../../assets/logo.png";
 
 // Helper function to format currency
 const formatCurrency = (value) => {
@@ -9,14 +8,13 @@ const formatCurrency = (value) => {
 
 export const generatePDFReport = async (filteredTransactions, activeTab, statusFilter, exportedBy, dateFilter, cashiersMap = {}) => {
   try {
-    // Convert logo to base64
-    const logoBase64 = await fetch(logo)
-      .then(res => res.blob())
-      .then(blob => new Promise((resolve) => {
-        const reader = new FileReader();
-        reader.onloadend = () => resolve(reader.result);
-        reader.readAsDataURL(blob);
-      }));
+    const reportDate = new Date().toLocaleString('en-US', { 
+      year: 'numeric', 
+      month: 'long', 
+      day: 'numeric',
+      hour: '2-digit',
+      minute: '2-digit'
+    });
 
     // Calculate summary statistics
     const totalTransactions = filteredTransactions.length;
@@ -62,12 +60,12 @@ export const generatePDFReport = async (filteredTransactions, activeTab, statusF
             </div>
           </td>
           <td>${cashierName}</td>
-          <td>${t.orderType || "—"}</td>
+          <td class="text-center">${t.orderType || "—"}</td>
           <td class="items-cell">${t.items?.map(item => item.name).join(', ') || "—"}</td>
           <td class="text-center">${totalQty}</td>
-          <td class="bold">₱${formatCurrency(t.subtotal)}</td>
-          <td class="${refundClass}">₱${formatCurrency(refundAmount)}</td>
-          <td>₱${formatCurrency(totalDiscount)}</td>
+          <td class="text-right bold">₱${formatCurrency(t.subtotal)}</td>
+          <td class="text-right ${refundClass}">₱${formatCurrency(refundAmount)}</td>
+          <td class="text-right">₱${formatCurrency(totalDiscount)}</td>
           <td>
             <div class="payment-cell">
               <div class="payment-amount bold">₱${formatCurrency(paymentAmount)}</div>
@@ -79,36 +77,149 @@ export const generatePDFReport = async (filteredTransactions, activeTab, statusF
       `;
     }).join('');
 
-    // Complete HTML with page-break-friendly CSS
     const htmlContent = `
       <div id="pdfContent">
         <style>
           * { -webkit-print-color-adjust: exact !important; print-color-adjust: exact !important; color-adjust: exact !important; }
-          body { font-family: Arial, sans-serif; padding: 15px; margin: 0; font-size: 10px; }
-          .export-header { display: flex; align-items: flex-start; margin-bottom: 15px; border-bottom: 2px solid #4B929D; padding-bottom: 10px; }
-          .export-header img { height: 60px; margin-right: 15px; }
-          .header-details { flex: 1; }
-          .header-details h1 { margin: 0 0 8px 0; font-size: 18px; color: #333; }
-          .header-details p { margin: 2px 0; font-size: 10px; color: #666; }
+          body { font-family: Arial, sans-serif; padding: 20px; margin: 0; font-size: 10px; }
+          
+          .report-header { 
+            text-align: center; 
+            margin-bottom: 25px; 
+            border-bottom: 3px solid #4B929D; 
+            padding-bottom: 15px; 
+          }
+          .report-header h1 { 
+            margin: 0 0 5px 0; 
+            font-size: 22px; 
+            color: #333; 
+            font-weight: bold;
+          }
+          .report-header .business-address { 
+            margin: 3px 0; 
+            font-size: 10px; 
+            color: #666; 
+          }
+          .report-header .report-type { 
+            margin: 8px 0 3px 0; 
+            font-size: 14px; 
+            font-weight: bold;
+            color: #4B929D; 
+          }
+          .report-header .period { 
+            margin: 3px 0; 
+            font-size: 10px; 
+            color: #666; 
+          }
+          .report-header .generated { 
+            margin: 8px 0 0 0; 
+            font-size: 9px; 
+            color: #999; 
+            font-style: italic;
+          }
 
-          table { width: 100%; border-collapse: collapse; margin-top: 10px; font-size: 9px; page-break-inside: auto; }
-          thead { display: table-header-group; }
-          tbody { display: table-row-group; }
-          tr { page-break-inside: avoid; page-break-after: auto; }
-          th, td { border: 1px solid #333; padding: 6px 4px; text-align: left; }
-          th { background-color: #4B929D !important; color: #fff !important; font-weight: bold; text-align: center; font-size: 8px; text-transform: uppercase; letter-spacing: 0.3px; }
-          tr:nth-child(even) { background-color: #f9f9f9 !important; }
+          .summary-section {
+            margin: 25px 0;
+            page-break-inside: avoid;
+          }
+          .summary-section h2 {
+            font-size: 16px;
+            color: #333;
+            margin-bottom: 15px;
+            border-bottom: 2px solid #4B929D;
+            padding-bottom: 5px;
+          }
+          .summary-table {
+            width: 100%;
+            border-collapse: collapse;
+            margin-bottom: 20px;
+          }
+          .summary-table td {
+            padding: 10px;
+            border: 1px solid #ddd;
+            font-size: 11px;
+          }
+          .summary-table td:first-child {
+            background-color: #f8fcfd;
+            font-weight: 600;
+            width: 60%;
+            color: #333;
+          }
+          .summary-table td:last-child {
+            text-align: right;
+            font-weight: bold;
+            color: #333;
+            width: 40%;
+          }
+          .summary-table .highlight-row td {
+            background-color: #4B929D !important;
+            color: white !important;
+            font-size: 12px;
+            font-weight: bold;
+          }
+
+          .breakdown-section {
+            margin-top: 30px;
+          }
+          .breakdown-section h2 {
+            font-size: 16px;
+            color: #333;
+            margin-bottom: 15px;
+            border-bottom: 2px solid #4B929D;
+            padding-bottom: 5px;
+          }
+
+          table.breakdown-table { 
+            width: 100%; 
+            border-collapse: collapse; 
+            margin-top: 15px; 
+            font-size: 9px; 
+            page-break-inside: auto; 
+          }
+          .breakdown-table thead { display: table-header-group; }
+          .breakdown-table tbody { display: table-row-group; }
+          .breakdown-table tr { page-break-inside: avoid; page-break-after: auto; }
+          .breakdown-table th, .breakdown-table td { 
+            border: 1px solid #333; 
+            padding: 8px 5px; 
+            text-align: left; 
+          }
+          .breakdown-table th { 
+            background-color: #4B929D !important; 
+            color: #fff !important; 
+            font-weight: bold; 
+            text-align: center; 
+            font-size: 8px; 
+            text-transform: uppercase; 
+            letter-spacing: 0.3px; 
+          }
+          .breakdown-table tr:nth-child(even) { background-color: #f9f9f9 !important; }
+          
           .bold { font-weight: 700; }
           .text-center { text-align: center; }
-          .date-cell { line-height: 1.3; }
-          .date-line { font-weight: 500; font-size: 9px; }
-          .time-line { font-size: 8px; color: #666; }
-          .items-cell { font-size: 8px; }
-          .payment-cell { line-height: 1.3; }
-          .payment-amount { font-size: 9px; }
-          .payment-method { font-size: 8px; color: #666; }
-          .has-refund { color: #dc3545 !important; font-weight: 600; }
-          .status-badge { display: inline-block; padding: 3px 6px; border-radius: 3px; font-size: 8px; font-weight: bold; text-align: center; }
+          .text-right { text-align: right; }
+          
+          .date-cell { line-height: 1.4; }
+          .date-line { font-weight: 600; font-size: 9px; color: #333; }
+          .time-line { font-size: 8px; color: #666; margin-top: 2px; }
+          
+          .items-cell { font-size: 8px; line-height: 1.3; }
+          
+          .payment-cell { line-height: 1.4; }
+          .payment-amount { font-size: 9px; color: #333; }
+          .payment-method { font-size: 8px; color: #666; margin-top: 2px; }
+          
+          .has-refund { color: #dc3545 !important; font-weight: 700; }
+          
+          .status-badge { 
+            display: inline-block; 
+            padding: 4px 8px; 
+            border-radius: 4px; 
+            font-size: 7px; 
+            font-weight: bold; 
+            text-align: center;
+            letter-spacing: 0.5px;
+          }
           .status-completed { background-color: #d4edda !important; color: #28a745 !important; border: 1px solid #c3e6cb !important; }
           .status-cancelled { background-color: #e2e3e5 !important; color: #6c757d !important; border: 1px solid #d6d8db !important; }
           .status-processing { background-color: #fff3cd !important; color: #856404 !important; border: 1px solid #ffeaa7 !important; }
@@ -116,49 +227,101 @@ export const generatePDFReport = async (filteredTransactions, activeTab, statusF
           .status-forpickup { background-color: #d1ecf1 !important; color: #0c5460 !important; border: 1px solid #bee5eb !important; }
           .status-request { background-color: #e3f2fd !important; color: #0d6efd !important; border: 1px solid #90caf9 !important; }
 
-          .summary { margin-top: 20px; page-break-inside: avoid; }
-          .summary h3 { margin-bottom: 10px; color: #333; font-size: 14px; border-bottom: 2px solid #4B929D; padding-bottom: 5px; }
-          .summary-table { border-collapse: collapse; width: 50%; margin: 0 auto; }
-          .summary-table th, .summary-table td { border: 1px solid #333; padding: 6px 8px; font-size: 10px; }
-          .summary-table th { background: #f2f2f2 !important; color: #333 !important; text-align: left; width: 60%; font-weight: 600; }
-          .summary-table td { text-align: right; font-weight: 500; }
-
-          .approved { margin-top: 30px; text-align: right; page-break-inside: avoid; }
-          .signature { margin-top: 20px; display: inline-block; border-top: 1px solid #000; padding-top: 5px; min-width: 180px; text-align: center; font-size: 10px; }
+          .report-footer {
+            margin-top: 40px;
+            page-break-inside: avoid;
+          }
+          .signature-section {
+            margin-top: 50px;
+            text-align: left;
+          }
+          .signature-line {
+            display: inline-block;
+            border-top: 2px solid #000;
+            width: 250px;
+            margin-top: 40px;
+            text-align: center;
+            padding-top: 5px;
+          }
+          .signature-label {
+            font-size: 10px;
+            font-weight: bold;
+            margin-bottom: 10px;
+          }
         </style>
 
-        <div class="export-header">
-          <img src="${logoBase64}" alt="Logo" />
-          <div class="header-details">
-            <h1>Transaction History - ${activeTab}</h1>
-            <p><strong>Generated On:</strong> ${new Date().toLocaleString()}</p>
-            <p><strong>Generated By:</strong> ${exportedBy || "System"}</p>
-            <p><strong>Transaction Period:</strong> ${dateFilter || "All"}</p>
-            <p><strong>Status Filter:</strong> ${statusFilter || "All"}</p>
-          </div>
+        <!-- HEADER -->
+        <div class="report-header">
+          <h1>Bleu Bean Cafe</h1>
+          <p class="business-address">Don Fabian St., Commonwealth, Quezon City, Philippines</p>
+          <p class="report-type">Transaction History Report - ${activeTab}</p>
+          <p class="period">Transaction Period: ${dateFilter || "All Dates"}</p>
+          <p class="period">Status Filter: ${statusFilter || "All Statuses"}</p>
+          <p class="generated">Date Generated: ${reportDate}</p>
+          <p class="generated">Generated By: ${exportedBy || "System"}</p>
         </div>
 
-        <div class="summary">
-          <h3>Summary</h3>
+        <!-- SUMMARY SECTION -->
+        <div class="summary-section">
+          <h2>Transaction Summary</h2>
           <table class="summary-table">
-            <tr><th>Total Transactions</th><td>${totalTransactions}</td></tr>
-            <tr><th>Completed Transactions</th><td>${completedTransactions}</td></tr>
-            <tr><th>Cancelled Transactions</th><td>${cancelledTransactions}</td></tr>
-            <tr><th>Refunded Transactions</th><td>${refundedTransactions}</td></tr>
-            <tr><th>Total Sales</th><td>₱${formatCurrency(totalSales)}</td></tr>
-            <tr><th>Total Items Sold</th><td>${totalItemsSold}</td></tr>
-            <tr><th>Total Refunds</th><td>₱${formatCurrency(totalRefunds)}</td></tr>
-            <tr><th>Cash Sales</th><td>₱${formatCurrency(cashSales)}</td></tr>
-            <tr><th>GCash Sales</th><td>₱${formatCurrency(gcashSales)}</td></tr>
+            <tbody>
+              <tr>
+                <td>Total Transactions</td>
+                <td>${totalTransactions}</td>
+              </tr>
+              <tr>
+                <td>Completed Transactions</td>
+                <td>${completedTransactions}</td>
+              </tr>
+              <tr>
+                <td>Cancelled Transactions</td>
+                <td>${cancelledTransactions}</td>
+              </tr>
+              <tr>
+                <td>Refunded Transactions</td>
+                <td>${refundedTransactions}</td>
+              </tr>
+              <tr>
+                <td>Total Items Sold</td>
+                <td>${totalItemsSold}</td>
+              </tr>
+            </tbody>
           </table>
         </div>
 
-        <div class="summary">
-          <h3>Transactions </h3>
-          <table>
+        <!-- SALES SUMMARY -->
+        <div class="summary-section">
+          <h2>Sales Summary</h2>
+          <table class="summary-table">
+            <tbody>
+              <tr>
+                <td>Cash Payments</td>
+                <td>₱${formatCurrency(cashSales)}</td>
+              </tr>
+              <tr>
+                <td>GCash Payments</td>
+                <td>₱${formatCurrency(gcashSales)}</td>
+              </tr>
+              <tr>
+                <td>Total Refunds</td>
+                <td>₱${formatCurrency(totalRefunds)}</td>
+              </tr>
+              <tr class="highlight-row">
+                <td>Total Sales</td>
+                <td>₱${formatCurrency(totalSales)}</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+
+        <!-- DETAILED BREAKDOWN -->
+        <div class="breakdown-section">
+          <h2>Transaction Details</h2>
+          <table class="breakdown-table">
             <thead>
               <tr>
-                <th>ORDER</th>
+                <th>ORDER ID</th>
                 <th>DATE & TIME</th>
                 <th>CASHIER</th>
                 <th>ORDER TYPE</th>
@@ -177,9 +340,12 @@ export const generatePDFReport = async (filteredTransactions, activeTab, statusF
           </table>
         </div>
 
-        <div class="approved">
-          <p><strong>Approved By:</strong></p>
-          <div class="signature">Signature</div>
+        <!-- FOOTER -->
+        <div class="report-footer">
+          <div class="signature-section">
+            <p class="signature-label">Approved by:</p>
+            <div class="signature-line">Signature</div>
+          </div>
         </div>
       </div>
     `;
@@ -211,7 +377,6 @@ export const generatePDFReport = async (filteredTransactions, activeTab, statusF
 };
 
 export const generateCSVReport = (filteredTransactions, cashiersMap = {}) => {
-  // CSV headers matching the UI
   const headers = [
     "ORDER",
     "DATE",
@@ -241,11 +406,7 @@ export const generateCSVReport = (filteredTransactions, cashiersMap = {}) => {
     const totalQty = t.items?.reduce((sum, item) => sum + (item.quantity || 0), 0) || 0;
     const refundAmount = parseFloat(t.refundInfo?.totalRefundAmount || 0);
     const totalDiscount = (parseFloat(t.discount || 0) + parseFloat(t.promotionalDiscount || 0));
-    
-    // Payment amount - show 0.00 if refunded
-    const paymentAmount = t.status.toLowerCase() === "refunded" 
-      ? 0 
-      : parseFloat(t.total);
+    const paymentAmount = t.status.toLowerCase() === "refunded" ? 0 : parseFloat(t.total);
 
     return [
       t.id,
@@ -264,7 +425,6 @@ export const generateCSVReport = (filteredTransactions, cashiersMap = {}) => {
     ];
   });
 
-  // Escape CSV values properly
   const escapeCSV = (value) => {
     if (value === null || value === undefined) return '';
     const stringValue = String(value);

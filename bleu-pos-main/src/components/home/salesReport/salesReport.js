@@ -423,10 +423,21 @@ function SalesReport() {
                 <div className="aSalesRep-stat-card">
                   <div className="aSalesRep-card-icon aSalesRep-icon-red"><FaBalanceScale /></div>
                   <div className="aSalesRep-card-content">
-                    <div className="aSalesRep-card-label">CASH DISCREPANCY</div>
-                    <div className={`aSalesRep-card-value ${(reportData.summary?.discrepancy || 0) < 0 ? 'aSalesRep-negative' : ''}`}>
-                      ₱{formatCurrency(Math.abs(reportData.summary?.discrepancy || 0))} {(reportData.summary?.discrepancy || 0) < 0 ? 'Short' : 'Over'}
-                    </div>
+                    <div className="aSalesRep-card-label">CASH VARIANCE</div>
+                      <div
+                        className={`aSalesRep-card-value ${
+                          (reportData.summary?.discrepancy || 0) < 0 ? 'aSalesRep-negative' : ''
+                        }`}
+                      >
+                        ₱{formatCurrency(Math.abs(reportData.summary?.discrepancy || 0))}
+                        {(() => {
+                          const discrepancy = reportData.summary?.discrepancy || 0;
+
+                          if (discrepancy < 0) return <span className="variance-label"> SHORTAGE</span>;
+                          if (discrepancy > 0) return <span className="variance-label"> OVERAGE</span>;
+                          return <span className="variance-label"> BALANCED</span>;
+                        })()}
+                      </div>
                   </div>
                 </div>
 
@@ -472,7 +483,7 @@ function SalesReport() {
                   {financialTab === 'cashDrawer' ? (
                     <div className="aSalesRep-cash-drawer-grid">
                       <div className="aSalesRep-cash-item">
-                        <span className="aSalesRep-cash-label">Opening Balance:</span>
+                        <span className="aSalesRep-cash-label">Change Fund:</span>
                         <span className="aSalesRep-cash-value">₱{formatCurrency(reportData.cashDrawer?.opening)}</span>
                       </div>
                       <div className="aSalesRep-cash-item">
@@ -484,7 +495,7 @@ function SalesReport() {
                         <span className="aSalesRep-cash-value">₱{formatCurrency(reportData.cashDrawer?.refunds)}</span>
                       </div>
                       <div className="aSalesRep-cash-item">
-                        <span className="aSalesRep-cash-label">Expected Cash:</span>
+                        <span className="aSalesRep-cash-label">System Cash Total:</span>
                         <span className="aSalesRep-cash-value">₱{formatCurrency(reportData.cashDrawer?.expected)}</span>
                       </div>
                       <div className="aSalesRep-cash-item">
@@ -492,9 +503,20 @@ function SalesReport() {
                         <span className="aSalesRep-cash-value">₱{formatCurrency(reportData.cashDrawer?.actual)}</span>
                       </div>
                       <div className="aSalesRep-cash-item aSalesRep-cash-highlight">
-                        <span className="aSalesRep-cash-label">Discrepancy:</span>
-                        <span className={`aSalesRep-cash-value ${(reportData.cashDrawer?.discrepancy || 0) < 0 ? 'aSalesRep-negative' : ''}`}>
-                          ₱{formatCurrency(Math.abs(reportData.cashDrawer?.discrepancy || 0))} {(reportData.cashDrawer?.discrepancy || 0) < 0 ? 'Short' : 'Over'}
+                        <span className="aSalesRep-cash-label">Cash Variance:</span>
+                        <span
+                          className={`aSalesRep-cash-value ${
+                            (reportData.cashDrawer?.discrepancy || 0) < 0 ? 'aSalesRep-negative' : ''
+                          }`}
+                        >
+                          ₱{formatCurrency(Math.abs(reportData.cashDrawer?.discrepancy || 0))}
+                          {(() => {
+                            const discrepancy = reportData.cashDrawer?.discrepancy || 0;
+
+                            if (discrepancy < 0) return ' Shortage';
+                            if (discrepancy > 0) return ' Overage';
+                            return ' Balanced';
+                          })()}
                         </span>
                       </div>
                       <div className="aSalesRep-cash-item">
