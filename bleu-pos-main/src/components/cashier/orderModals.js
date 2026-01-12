@@ -279,11 +279,14 @@ const OrderModals = ({
                   <div className="orderpanel-store-contact">TEL #: {receiptConfig.telephone}</div>
                 </div>
 
+                <div className="orderpanel-receipt-divider">----------------------------------------</div>
+
                 <div className="orderpanel-receipt-info">
                   <div className="orderpanel-receipt-info-left">
                     <div>DATE: {dayjs(order.date).format("MM/DD/YYYY")}</div>
                     <div>TIME: {dayjs(order.date).format("hh:mm A")}</div>
                     <div>CASHIER: {cashierFullName || cashierName || 'STAFF'}</div>
+                    <div>ORDER TYPE: {order.orderType?.toUpperCase() || order.order_type?.toUpperCase() || 'DINE IN'}</div>
                   </div>
                 </div>
 
@@ -295,17 +298,38 @@ const OrderModals = ({
                     const addonsTotal = item.addons?.reduce((sum, addon) => sum + ((addon.price || 0) * (addon.quantity || 1) * (item.quantity || 1)), 0) || 0;
                     const fullItemTotal = itemTotal + addonsTotal;
                     
-                    const itemDiscounts = (item.itemDiscounts || []).map(d => ({ name: d.discountName, quantity: d.quantityDiscounted, amount: d.discountAmount }));
-                    const itemPromotions = (item.itemPromotions || []).map(p => ({ name: p.promotionName, quantity: p.quantityPromoted, amount: p.promotionAmount }));
+                    // Separate discounts and promotions for clarity
+                    const itemDiscounts = (item.itemDiscounts || []).map(d => ({ 
+                      name: d.discountName, 
+                      quantity: d.quantityDiscounted, 
+                      amount: d.discountAmount,
+                      type: 'discount'
+                    }));
                     
-                    const combinedDiscounts = {};
-                    [...itemDiscounts, ...itemPromotions].forEach(d => {
-                      if (!combinedDiscounts[d.name]) combinedDiscounts[d.name] = { name: d.name, totalQuantity: 0, totalAmount: 0 };
-                      combinedDiscounts[d.name].totalQuantity += d.quantity;
-                      combinedDiscounts[d.name].totalAmount += d.amount;
-                    });
+                    const itemPromotions = (item.itemPromotions || []).map(p => ({ 
+                      name: p.promotionName, 
+                      quantity: p.quantityPromoted, 
+                      amount: p.promotionAmount,
+                      type: 'promotion'
+                    }));
                     
-                    const totalItemDiscount = Object.values(combinedDiscounts).reduce((sum, d) => sum + d.totalAmount, 0);
+                    // For online orders, check if promo info exists in different format
+                    const hasOnlinePromo = item.promo_name || item.applied_promo;
+                    
+                    // Combine all reductions
+                    const allReductions = [...itemDiscounts, ...itemPromotions];
+                    
+                    // If online order with promo but no itemPromotions, add it manually
+                    if (!isStore && hasOnlinePromo && allReductions.length === 0 && item.discount > 0) {
+                      allReductions.push({
+                        name: item.promo_name || item.applied_promo?.promotionName || 'Promotion Applied',
+                        quantity: 1,
+                        amount: item.discount,
+                        type: 'promotion'
+                      });
+                    }
+                    
+                    const totalReductions = allReductions.reduce((sum, r) => sum + r.amount, 0);
                     
                     return (
                       <div key={i} className="orderpanel-receipt-item">
@@ -316,18 +340,28 @@ const OrderModals = ({
                           <span>{item.price.toFixed(2)} x {item.quantity}</span>
                           <span>{itemTotal.toFixed(2)}</span>
                         </div>
+                        
+                        {/* Addons */}
                         {item.addons?.length > 0 && item.addons.map((addon, idx) => (
                           <div key={idx} className="orderpanel-receipt-line orderpanel-receipt-qty-price">
                             <span>{addon.addon_name || addon.addonName || addon.name} {addon.price.toFixed(2)} x {(addon.quantity || 1) * (item.quantity || 1)}</span>
                             <span>{((addon.price || 0) * (addon.quantity || 1) * (item.quantity || 1)).toFixed(2)}</span>
                           </div>
                         ))}
-                        {Object.values(combinedDiscounts).map((discount, discIdx) => (
-                          <div key={discIdx} className="orderpanel-receipt-line orderpanel-receipt-qty-price">
-                            <span>{discount.name}{discount.totalQuantity > 1 ? ` (x${discount.totalQuantity})` : ''}</span>
-                            <span>-{discount.totalAmount.toFixed(2)}</span>
-                          </div>
-                        ))}
+                        
+                        {/* Show all reductions (discounts and promotions) */}
+                        {allReductions.map((reduction, idx) => (
+                        <div
+                          key={`reduction-${idx}`}
+                          className="orderpanel-receipt-line orderpanel-receipt-qty-price"
+                        >
+                          <span>
+                            {reduction.name}
+                            {reduction.quantity > 1 ? ` (x${reduction.quantity})` : ''}
+                          </span>
+                          <span>-{reduction.amount.toFixed(2)}</span>
+                        </div>
+                      ))}
                       </div>
                     );
                   })}
@@ -387,7 +421,7 @@ const OrderModals = ({
 
                         <div style={{ textAlign: 'center', margin: '10px 0', fontSize: '11px', fontWeight: 'bold', lineHeight: '1.6' }}>
                           <div>THANK YOU FOR YOUR PURCHASE!</div>
-                          <div>PLEASE COME AGAIN 😊</div>
+                          <div>PLEASE COME AGAIN</div>
                         </div>
                       </>
                     );
@@ -397,7 +431,7 @@ const OrderModals = ({
                 {/* Dual QR Code Section */}
                 <div className="orderpanel-receipt-footer">
                   <div className="orderpanel-dual-qr-section">
-                    {/* First QR Code - Existing functionality (OOS/Feedback) */}
+                    {/* First QR Code - Feedback/OOS (only if enabled) */}
                     {receiptConfig.showQR && (
                       <div className="orderpanel-qr-item">
                         {receiptConfig.qrType === 'image' && receiptConfig.qrImagePath ? (
@@ -415,13 +449,13 @@ const OrderModals = ({
                         ) : (
                           <div className="orderpanel-qr-placeholder">QR CODE</div>
                         )}
-                        <div className="orderpanel-qr-label">
+                        <div className="orderpanel-qr-text">
                           {receiptConfig.qrText || 'SCAN FOR FEEDBACK'}
                         </div>
                       </div>
                     )}
                     
-                    {/* Second QR Code - Blockchain Transaction */}
+                    {/* Second QR Code - Blockchain Transaction (always shown) */}
                     <div className="orderpanel-qr-item">
                       {blockchainQRCode ? (
                         <img 
@@ -432,8 +466,8 @@ const OrderModals = ({
                       ) : (
                         <div className="orderpanel-qr-placeholder">QR CODE</div>
                       )}
-                      <div className="orderpanel-qr-label">
-                        SCAN TO VIEW TRANSACTION
+                      <div className="orderpanel-qr-text">
+                        Verify Blockchain Transaction
                       </div>
                     </div>
                   </div>

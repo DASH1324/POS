@@ -122,10 +122,11 @@ class SalesReportResponse(BaseModel):
 
 # --- Pydantic model for the INCOMING REQUEST ---
 class AlignedSalesReportRequest(BaseModel):
-    reportType: Literal['today', 'yesterday', 'custom']
-    startDate: Optional[date] = None
-    endDate: Optional[date] = None
-    cashierName: Optional[str] = None  # Added cashier filter
+     reportType: Literal['daily', 'weekly', 'monthly', 'quarterly', 'custom'] # FIXED: Align with frontend
+     startDate: Optional[date] = None
+     endDate: Optional[date] = None
+     cashierName: Optional[str] = None
+
 
 # --- Pydantic Models for the OUTGOING RESPONSE ---
 class SalesReportSummary(BaseModel):
@@ -183,9 +184,11 @@ class AlignedSalesReportResponse(BaseModel):
     refundsList: List[RefundItem]
 
 class SalesMonitoringRequest(BaseModel):
-    dateRange: Literal['today', 'week', 'month']
+    dateRange: Literal['today', 'week', 'month', 'custom'] 
     selectedCashier: Optional[str] = 'all'
     selectedCategory: Optional[str] = 'all'
+    startDate: Optional[date] = None
+    endDate: Optional[date] = None
 
 class ProductSalesDetail(BaseModel):
     id: int
@@ -647,6 +650,8 @@ async def get_sales_metrics_by_date(
     finally:
         if conn: await conn.close()
 
+# FILE: sales.py (~Line 553)
+
 @router_sales_metrics.post(
     "/report",
     response_model=AlignedSalesReportResponse,
@@ -661,15 +666,31 @@ async def get_sales_report(
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Permission denied.")
 
     start_date, end_date = None, None
-    if request.reportType == 'today':
-        start_date = end_date = date.today()
-    elif request.reportType == 'yesterday':
-        start_date = end_date = date.today() - timedelta(days=1)
+    today = date.today() # Use standard Python date objects for calculation
+
+    # FIXED: Logic updated to handle 'daily', 'weekly', 'monthly', 'quarterly'
+    if request.reportType == 'daily':
+        start_date = end_date = today
+    elif request.reportType == 'weekly':
+        # Calculate start of the week (assuming Monday start, weekday() is 0=Mon, 6=Sun)
+        days_to_subtract = today.weekday()
+        start_date = today - timedelta(days=days_to_subtract)
+        end_date = today
+    elif request.reportType == 'monthly':
+        # Start of the month
+        start_date = today.replace(day=1)
+        end_date = today
+    elif request.reportType == 'quarterly':
+        # Calculate the start of the current quarter (Jan, Apr, Jul, Oct)
+        current_month = today.month
+        quarter_start_month = 3 * ((current_month - 1) // 3) + 1
+        start_date = today.replace(month=quarter_start_month, day=1)
+        end_date = today
     elif request.reportType == 'custom':
         start_date, end_date = request.startDate, request.endDate
 
     if not start_date or not end_date:
-        raise HTTPException(status_code=400, detail="A valid date range is required for this report.")
+        raise HTTPException(status_code=400, detail="A valid date range is required for the 'custom' report type or could not be determined.")
 
     # Build cashier filter condition
     cashier_condition = ""
@@ -1008,6 +1029,7 @@ async def get_sales_report(
         if conn: 
             await conn.close()
 
+
 @router_sales_metrics.post(
     "/monitoring",
     response_model=SalesMonitoringResponse,
@@ -1025,24 +1047,39 @@ async def get_sales_monitoring_data(
         conn = await get_db_connection()
         async with conn.cursor() as cursor:
             date_condition = ""
+            params = []
+            
+            # --- FIXED/IMPROVED DATE LOGIC ---
             if request.dateRange == 'today':
                 date_condition = "AND CAST(s.CreatedAt AS DATE) = CAST(GETDATE() AS DATE)"
             elif request.dateRange == 'week':
+                # SQL Server: DATEPART(weekday, GETDATE()) returns 1 (Sunday) to 7 (Saturday)
+                # This correctly calculates the start of the week (Sunday for this standard logic)
                 date_condition = "AND s.CreatedAt >= DATEADD(day, -DATEPART(weekday, GETDATE()) + 1, CAST(GETDATE() AS DATE))"
             elif request.dateRange == 'month':
                 date_condition = "AND s.CreatedAt >= DATEADD(day, 1 - DAY(GETDATE()), CAST(GETDATE() AS DATE))"
+            elif request.dateRange == 'custom' and request.startDate and request.endDate:
+                # FIXED: Handle custom range (used by yesterday/last7days in frontend)
+                date_condition = "AND CAST(s.CreatedAt AS DATE) BETWEEN ? AND ?"
+                params.append(request.startDate)
+                params.append(request.endDate)
+            # ---------------------------------
             
             cashier_condition = ""
             category_condition = ""
-            params = []
             
+            cashier_params = []
             if request.selectedCashier and request.selectedCashier != 'all':
                 cashier_condition = "AND cs.CashierName = ?"
-                params.append(request.selectedCashier)
+                cashier_params.append(request.selectedCashier)
             
+            category_params = []
             if request.selectedCategory and request.selectedCategory != 'all':
                 category_condition = "AND si.Category = ?"
-                params.append(request.selectedCategory)
+                category_params.append(request.selectedCategory)
+                
+            # Combine params: Date range parameters must come first for the SQL query
+            params = params + cashier_params + category_params
             
             # Use the SAME logic as dashboard.py - item-level discounts/promotions FIRST, then refunds
             sql = f"""
@@ -1148,6 +1185,7 @@ async def get_sales_monitoring_data(
             total_quantity = 0
             
             # Get transaction count
+            # Use the same date/cashier/category filters for transaction count
             count_sql = f"""
                 SELECT COUNT(DISTINCT s.SaleID)
                 FROM Sales s
@@ -1189,6 +1227,7 @@ async def get_sales_monitoring_data(
     
     except Exception as e:
         logger.error(f"Error fetching sales monitoring data: {e}", exc_info=True)
+        # Detailed error message to help debugging
         raise HTTPException(status_code=500, detail=f"Failed to fetch sales monitoring data: {str(e)}")
     finally:
         if conn:

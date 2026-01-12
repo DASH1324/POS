@@ -30,7 +30,7 @@ import CustomerBlockchainView from './components/home/customer/CustomerBlockchai
 
 function RedirectToLoginSystem() {
   useEffect(() => {
-    window.location.href = 'http://localhost:4002/';
+    window.location.href = 'https://bleu-auth.vercel.app/';
   }, []);
 
   return null;

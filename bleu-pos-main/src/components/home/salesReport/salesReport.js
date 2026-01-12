@@ -30,12 +30,27 @@ const formatDateForAPI = (date) => {
 const getPeriodText = (tab, customStart = null, customEnd = null) => {
   const today = new Date();
   switch (tab) {
-    case "today":
+    case "daily":
       return `Date: ${today.toLocaleDateString('en-US', { year: 'numeric', month: 'short', day: 'numeric' })}`;
-    case "yesterday": {
-      const yesterday = new Date(today);
-      yesterday.setDate(today.getDate() - 1);
-      return `Date: ${yesterday.toLocaleDateString('en-US', { year: 'numeric', month: 'short', day: 'numeric' })}`;
+    case "weekly": {
+      const firstDayOfWeek = new Date(today);
+      firstDayOfWeek.setDate(today.getDate() - today.getDay());
+      const start = firstDayOfWeek.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+      const end = today.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
+      return `Week: ${start} - ${end}`;
+    }
+    case "monthly": {
+      const firstDayOfMonth = new Date(today.getFullYear(), today.getMonth(), 1);
+      const start = firstDayOfMonth.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+      const end = today.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
+      return `Month: ${start} - ${end}`;
+    }
+    case "quarterly": {
+      const quarter = Math.floor(today.getMonth() / 3);
+      const firstDayOfQuarter = new Date(today.getFullYear(), quarter * 3, 1);
+      const start = firstDayOfQuarter.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+      const end = today.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
+      return `Q${quarter + 1}: ${start} - ${end}`;
     }
     case "custom": {
       if (customStart && customEnd) {
@@ -54,7 +69,7 @@ const getPeriodText = (tab, customStart = null, customEnd = null) => {
 
 function SalesReport() {
   // --- STATE MANAGEMENT ---
-  const [activeTab, setActiveTab] = useState("today");
+  const [activeTab, setActiveTab] = useState("daily");
   const [selectedCashier, setSelectedCashier] = useState("all");
   const [cashiersList, setCashiersList] = useState([]);
   const [isCashiersLoading, setIsCashiersLoading] = useState(true);
@@ -63,7 +78,7 @@ function SalesReport() {
   const [isFilterOpen, setIsFilterOpen] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState(null);
-  const [currentPeriodText, setCurrentPeriodText] = useState(getPeriodText("today"));
+  const [currentPeriodText, setCurrentPeriodText] = useState(getPeriodText("daily"));
   const [customRange, setCustomRange] = useState({ start: null, end: null });
   const [reportData, setReportData] = useState(null);
   const [processedRefundsList, setProcessedRefundsList] = useState([]);
@@ -342,9 +357,11 @@ function SalesReport() {
                   }
                 }}
               >
-                <option value="today">Today</option>
-                <option value="yesterday">Yesterday</option>
-                <option value="custom">Custom</option>
+                <option value="daily">Daily</option>
+                <option value="weekly">Weekly</option>
+                <option value="monthly">Monthly</option>
+                <option value="quarterly">Quarterly</option>
+                <option value="custom">Custom Range</option>
               </select>
             </div>
 

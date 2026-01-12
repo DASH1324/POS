@@ -785,18 +785,48 @@ function OrderPanel({ order, onClose, isOpen, isStore, onUpdateStatus, onFullRef
       </div>
       <div className="orderpanel-summary">
         <div className="orderpanel-calculation">
-          {isStore && ( <div className="orderpanel-calc-row"><span className="orderpanel-calc-label">Subtotal:</span><span className="orderpanel-calc-value">₱{subtotal.toFixed(2)}</span></div> )}
-          {(hasRefunds || (refundMode && hasSelectedItems)) && ( <div className="orderpanel-calc-row orderpanel-refund-row"><span className="orderpanel-calc-value orderpanel-refund-amount">{refundMode ? "Est. Refund Amount:" : "Refunded Amount:"}</span><span className="orderpanel-calc-value orderpanel-refund-amount">-₱{refundMode ? estimatedPendingRefund.toFixed(2) : netHistoricalRefund.toFixed(2)}</span></div> )}
-          {(order.promotionalDiscount > 0) && (
-            <div className="orderpanel-calc-row orderpanel-promo-row">
-              <span className="orderpanel-calc-label">Promotion:</span>
-              <span className="orderpanel-calc-value">
-                -₱{order.promotionalDiscount.toFixed(2)}
+          <div className="orderpanel-calc-row">
+            <span className="orderpanel-calc-label">Subtotal:</span>
+            <span className="orderpanel-calc-value">₱{subtotal.toFixed(2)}</span>
+          </div>
+          
+          {(hasRefunds || (refundMode && hasSelectedItems)) && ( 
+            <div className="orderpanel-calc-row orderpanel-refund-row">
+              <span className="orderpanel-calc-value orderpanel-refund-amount">
+                {refundMode ? "Est. Refund Amount:" : "Refunded Amount:"}
               </span>
-            </div>
+              <span className="orderpanel-calc-value orderpanel-refund-amount">
+                -₱{refundMode ? estimatedPendingRefund.toFixed(2) : netHistoricalRefund.toFixed(2)}
+              </span>
+            </div> 
           )}
+          
+            {(() => {
+            // Calculate total promotions from items
+            let totalItemPromotions = 0;
+            order.orderItems.forEach(item => {
+              const itemPromotions = item.itemPromotions || [];
+              totalItemPromotions += itemPromotions.reduce((sum, p) => sum + p.promotionAmount, 0);
+              
+              // For online orders, also check for promo in different format
+              if (!isStore && item.discount > 0 && itemPromotions.length === 0) {
+                totalItemPromotions += item.discount;
+              }
+            });
+            
+            const finalPromoDiscount = order.promotionalDiscount || totalItemPromotions;
+            
+            return finalPromoDiscount > 0 && (
+              <div className="orderpanel-calc-row orderpanel-promo-row">
+                <span className="orderpanel-calc-label">Promotion:</span>
+                <span className="orderpanel-calc-value">
+                  -₱{finalPromoDiscount.toFixed(2)}
+                </span>
+              </div>
+            );
+          })()}
 
-          {(order.manualDiscount > 0) && (
+          {isStore && (order.manualDiscount > 0) && (
             <div className="orderpanel-calc-row orderpanel-discount-row">
               <span className="orderpanel-calc-label">Discount:</span>
               <span className="orderpanel-calc-value">
@@ -816,11 +846,27 @@ function OrderPanel({ order, onClose, isOpen, isStore, onUpdateStatus, onFullRef
             <span className="orderpanel-calc-value">
               ₱{(() => {
                 let total = subtotal;
+                
+                // Calculate total promotions
+                let totalItemPromotions = 0;
+                order.orderItems.forEach(item => {
+                  const itemPromotions = item.itemPromotions || [];
+                  totalItemPromotions += itemPromotions.reduce((sum, p) => sum + p.promotionAmount, 0);
+                  
+                  if (!isStore && item.discount > 0 && itemPromotions.length === 0) {
+                    totalItemPromotions += item.discount;
+                  }
+                });
+                
+                const finalPromoDiscount = order.promotionalDiscount || totalItemPromotions;
+                
                 total -= (order.manualDiscount || 0);
-                total -= (order.promotionalDiscount || 0);
+                total -= finalPromoDiscount;
+                
                 if (hasRefunds) {
                   total -= netHistoricalRefund;
                 }
+                
                 return Math.max(0, total).toFixed(2);
               })()}
             </span>

@@ -1,271 +1,531 @@
-/* Customer Blockchain View Custom Styles */
+/* Customer Blockchain View Styles */
 
-/* Root container */
-.min-h-screen {
+/* Container */
+.custReceipt-container {
+  height: 100vh;
   background: linear-gradient(135deg, #e0f2f1 0%, #e3f2fd 100%);
+  padding: 32px 16px;
+  overflow-y: auto;
+  overflow-x: hidden;
 }
 
-/* Main container */
-.max-w-4xl {
+.custReceipt-content {
   max-width: 600px;
+  margin: 0 auto;
 }
 
-/* Header card - Transaction Verified */
-.bg-white.rounded-2xl:first-of-type {
-  background: white;
-  border-radius: 12px;
-  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.08);
-  padding: 2rem;
-  margin-bottom: 1.5rem;
+/* Loading State */
+.custReceipt-loading {
+  text-align: center;
 }
 
-.bg-teal-100.p-4.rounded-full {
-  background-color: #e0f2f1;
-  padding: 1.5rem;
+.custReceipt-spinner {
+  width: 64px;
+  height: 64px;
+  border: 4px solid #009688;
+  border-top: 4px solid transparent;
   border-radius: 50%;
-  display: inline-flex;
-  margin-bottom: 1rem;
+  animation: custReceipt-spin 1s linear infinite;
+  margin: 0 auto 16px;
 }
 
-.text-3xl.font-bold.text-gray-900 {
-  font-size: 1.5rem;
-  font-weight: 700;
-  color: #1a1a1a;
-  margin-bottom: 0.5rem;
+@keyframes custReceipt-spin {
+  to {
+    transform: rotate(360deg);
+  }
 }
 
-/* Receipt Details card */
-.bg-white.rounded-2xl.shadow-xl.p-8.mb-6:nth-of-type(2) {
+.custReceipt-loading-text {
+  color: #666;
+}
+
+/* Error State */
+.custReceipt-error-card {
+  max-width: 600px;
   background: white;
   border-radius: 12px;
   box-shadow: 0 2px 8px rgba(0, 0, 0, 0.08);
-  padding: 2rem;
-  margin-bottom: 1.5rem;
+  padding: 32px;
+  text-align: center;
 }
 
-/* Receipt header with icon */
-.text-2xl.font-bold.text-gray-900.mb-6 {
-  font-size: 1.125rem;
-  font-weight: 700;
-  color: #1a1a1a;
-  margin-bottom: 1.5rem;
+.custReceipt-error-icon-wrapper {
   display: flex;
   align-items: center;
-  gap: 0.5rem;
+  justify-content: center;
+  margin-bottom: 16px;
 }
 
-/* Store name and address */
-.text-xl.font-bold.text-gray-900 {
-  font-size: 1.125rem;
-  font-weight: 700;
-  text-align: center;
-  margin-bottom: 0.25rem;
+.custReceipt-error-icon-wrapper > div {
+  background-color: #ffebee;
+  padding: 16px;
+  border-radius: 50%;
 }
 
-.text-sm.text-gray-600 {
-  font-size: 0.813rem;
-  color: #666;
-  text-align: center;
+.custReceipt-error-icon {
+  width: 48px;
+  height: 48px;
+  color: #d32f2f;
 }
 
-/* Grid info section */
-.grid.grid-cols-2.gap-4 {
-  display: grid;
-  grid-template-columns: repeat(2, 1fr);
-  gap: 1rem;
-  margin-top: 1rem;
-}
-
-.grid.grid-cols-2.gap-4 > div {
-  display: flex;
-  flex-direction: column;
-}
-
-.grid.grid-cols-2.gap-4 .text-gray-500 {
-  font-size: 0.75rem;
-  color: #999;
-  margin-bottom: 0.25rem;
-}
-
-.grid.grid-cols-2.gap-4 .font-semibold.text-gray-900 {
-  font-size: 0.813rem;
-  font-weight: 600;
-  color: #1a1a1a;
-}
-
-/* Item rows */
-.space-y-3 .border-b {
-  padding-bottom: 0.75rem;
-  margin-bottom: 0.75rem;
-  border-bottom: 1px solid #f0f0f0;
-}
-
-.space-y-3 .font-semibold.text-gray-900 {
-  font-size: 0.875rem;
-  font-weight: 600;
-  color: #1a1a1a;
-}
-
-/* Discount text */
-.text-sm.text-green-600 {
-  font-size: 0.813rem;
-  color: #4caf50;
-}
-
-/* Totals section */
-.border-t.border-gray-200.pt-4 {
-  border-top: 1px solid #e0e0e0;
-  padding-top: 1rem;
-}
-
-.flex.justify-between.text-gray-600 {
-  display: flex;
-  justify-content: space-between;
-  font-size: 0.875rem;
-  color: #666;
-  margin-bottom: 0.5rem;
-}
-
-.flex.justify-between.text-green-600 {
-  display: flex;
-  justify-content: space-between;
-  font-size: 0.875rem;
-  color: #4caf50;
-  margin-bottom: 0.5rem;
-}
-
-.flex.justify-between.text-xl.font-bold {
-  font-size: 1.125rem;
+.custReceipt-error-title {
+  font-size: 24px;
   font-weight: 700;
   color: #1a1a1a;
-  margin-top: 0.5rem;
-  padding-top: 0.5rem;
-  border-top: 1px solid #e0e0e0;
+  margin-bottom: 8px;
 }
 
-/* Blockchain History section */
-.bg-white.rounded-2xl.shadow-xl.p-8:last-of-type {
+.custReceipt-error-message {
+  color: #666;
+  margin-bottom: 16px;
+}
+
+.custReceipt-retry-btn {
+  background-color: #009688;
+  color: white;
+  padding: 12px 24px;
+  border-radius: 8px;
+  border: none;
+  cursor: pointer;
+  font-size: 14px;
+  font-weight: 600;
+}
+
+.custReceipt-retry-btn:hover {
+  background-color: #00796b;
+}
+
+/* Header Card */
+.custReceipt-header-card {
   background: white;
   border-radius: 12px;
   box-shadow: 0 2px 8px rgba(0, 0, 0, 0.08);
-  padding: 2rem;
+  padding: 32px;
+  margin-bottom: 24px;
 }
 
-/* Transaction log items */
-.border.border-gray-200.rounded-lg {
+.custReceipt-shield-wrapper {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  margin-bottom: 24px;
+}
+
+.custReceipt-shield-wrapper > div {
+  background-color: #e0f2f1;
+  padding: 24px;
+  border-radius: 50%;
+  display: inline-flex;
+}
+
+.custReceipt-shield-icon {
+  width: 48px;
+  height: 48px;
+  color: #009688;
+}
+
+.custReceipt-main-title {
+  font-size: 24px;
+  font-weight: 700;
+  color: #1a1a1a;
+  text-align: center;
+  margin-bottom: 8px;
+}
+
+.custReceipt-subtitle {
+  color: #666;
+  text-align: center;
+  margin-bottom: 16px;
+  font-size: 14px;
+}
+
+.custReceipt-verified-badge {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  font-size: 14px;
+  color: #999;
+}
+
+.custReceipt-check-icon {
+  width: 16px;
+  height: 16px;
+  color: #4caf50;
+}
+
+/* Receipt Card */
+.custReceipt-receipt-card {
+  background: white;
+  border-radius: 12px;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.08);
+  padding: 24px;
+  margin-bottom: 24px;
+}
+
+.custReceipt-receipt-paper {
+  background: white;
+  font-family: 'Courier New', monospace;
+  font-size: 13px;
+  line-height: 1.4;
+}
+
+.custReceipt-receipt-top {
+  text-align: center;
+  margin-bottom: 16px;
+}
+
+.custReceipt-store-name {
+  font-size: 18px;
+  font-weight: 700;
+  color: #1a1a1a;
+  margin-bottom: 4px;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+.custReceipt-store-address {
+  font-size: 12px;
+  color: #666;
+  margin-bottom: 8px;
+}
+
+.custReceipt-receipt-divider {
+  border-top: 0.5px dashed #999;
+  margin: 12px 0;
+}
+
+.custReceipt-receipt-divider-bold {
+  border-top: 2px solid #333;
+  margin: 8px 0;
+}
+
+.custReceipt-receipt-meta {
+  margin-bottom: 8px;
+}
+
+.custReceipt-meta-row {
+  display: flex;
+  justify-content: space-between;
+  font-size: 12px;
+  color: #333;
+  margin-bottom: 4px;
+}
+
+.custReceipt-meta-row span:first-child {
+  font-weight: 600;
+}
+
+/* Items List */
+.custReceipt-items-list {
+  margin-bottom: 8px;
+}
+
+.custReceipt-item {
+  margin-bottom: 12px;
+}
+
+.custReceipt-item-line {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  font-weight: 600;
+  color: #1a1a1a;
+  margin-bottom: 2px;
+}
+
+.custReceipt-item-name {
+  flex: 1;
+  padding-right: 8px;
+}
+
+.custReceipt-item-total {
+  white-space: nowrap;
+}
+
+.custReceipt-item-subline {
+  font-size: 11px;
+  color: #666;
+  margin-bottom: 4px;
+}
+
+.custReceipt-addon {
+  display: flex;
+  justify-content: space-between;
+  font-size: 11px;
+  color: #666;
+  margin-bottom: 2px;
+}
+
+.custReceipt-discount {
+  display: flex;
+  justify-content: space-between;
+  font-size: 11px;
+  color: #2e7d32;
+  margin-bottom: 2px;
+}
+
+/* Totals */
+.custReceipt-totals {
+  margin-top: 8px;
+}
+
+.custReceipt-total-row {
+  display: flex;
+  justify-content: space-between;
+  font-size: 13px;
+  color: #333;
+  margin-bottom: 4px;
+}
+
+.custReceipt-discount-row {
+  color: #2e7d32;
+}
+
+.custReceipt-grand-total {
+  font-size: 16px;
+  font-weight: 700;
+  color: #1a1a1a;
+  margin: 8px 0;
+}
+
+.custReceipt-receipt-bottom {
+  text-align: center;
+  margin-top: 16px;
+  font-size: 12px;
+  color: #666;
+}
+
+.custReceipt-receipt-bottom p {
+  margin: 4px 0;
+}
+
+/* Blockchain Card */
+.custReceipt-blockchain-card {
+  background: white;
+  border-radius: 12px;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.08);
+  padding: 32px;
+}
+
+.custReceipt-section-title {
+  font-size: 18px;
+  font-weight: 700;
+  color: #1a1a1a;
+  margin-bottom: 24px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.custReceipt-title-icon {
+  width: 24px;
+  height: 24px;
+  color: #009688;
+}
+
+.custReceipt-no-logs {
+  text-align: center;
+  padding: 32px;
+  color: #999;
+}
+
+.custReceipt-no-logs-subtitle {
+  font-size: 13px;
+  margin-top: 8px;
+}
+
+/* Blockchain Logs */
+.custReceipt-logs-list {
+  margin-bottom: 16px;
+}
+
+.custReceipt-log-item {
   border: 1px solid #e0e0e0;
   border-radius: 8px;
+  margin-bottom: 16px;
   overflow: hidden;
-  margin-bottom: 1rem;
 }
 
-.border.border-gray-200.rounded-lg .p-4 {
-  padding: 1rem;
+.custReceipt-log-header {
+  padding: 16px;
   cursor: pointer;
   transition: background-color 0.2s;
 }
 
-.border.border-gray-200.rounded-lg .p-4:hover {
+.custReceipt-log-header:hover {
   background-color: #fafafa;
 }
 
-/* Action badges */
-.bg-green-100.text-green-800 {
+.custReceipt-log-header-content {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  margin-bottom: 8px;
+}
+
+.custReceipt-log-badges {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.custReceipt-action-badge {
+  padding: 6px 12px;
+  border-radius: 12px;
+  font-size: 12px;
+  font-weight: 600;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.custReceipt-action-create {
   background-color: #e8f5e9;
   color: #2e7d32;
-  padding: 0.375rem 0.75rem;
-  border-radius: 12px;
-  font-size: 0.75rem;
-  font-weight: 600;
-  display: inline-flex;
-  align-items: center;
-  gap: 0.375rem;
 }
 
-.bg-blue-100.text-blue-800 {
+.custReceipt-action-update {
   background-color: #e3f2fd;
   color: #1976d2;
-  padding: 0.375rem 0.75rem;
-  border-radius: 12px;
-  font-size: 0.75rem;
-  font-weight: 600;
-  display: inline-flex;
-  align-items: center;
-  gap: 0.375rem;
 }
 
-/* Block number */
-.text-sm.text-gray-500 {
-  font-size: 0.75rem;
+.custReceipt-action-cancel {
+  background-color: #ffebee;
+  color: #c62828;
+}
+
+.custReceipt-action-refund {
+  background-color: #fff3e0;
+  color: #e65100;
+}
+
+.custReceipt-icon {
+  width: 16px;
+  height: 16px;
+}
+
+.custReceipt-block-number {
+  font-size: 12px;
   color: #999;
 }
 
-/* Expanded section */
-.bg-gray-50.border-t {
+.custReceipt-chevron {
+  width: 20px;
+  height: 20px;
+  color: #bdbdbd;
+}
+
+.custReceipt-log-description {
+  font-size: 14px;
+  color: #424242;
+  margin: 8px 0;
+}
+
+.custReceipt-log-meta {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  font-size: 12px;
+  color: #999;
+}
+
+.custReceipt-log-timestamp {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.custReceipt-clock-icon {
+  width: 12px;
+  height: 12px;
+}
+
+/* Log Details */
+.custReceipt-log-details {
   background-color: #f9f9f9;
   border-top: 1px solid #e0e0e0;
-  padding: 1rem;
+  padding: 16px;
 }
 
-/* Transaction hash and data boxes */
-.bg-white.rounded.px-3.py-2 {
+.custReceipt-hash-section {
+  margin-bottom: 12px;
+}
+
+.custReceipt-hash-label {
+  font-size: 12px;
+  font-weight: 600;
+  color: #424242;
+  margin-bottom: 4px;
+}
+
+.custReceipt-hash-value {
   background-color: white;
   border-radius: 6px;
-  padding: 0.75rem;
-  margin-top: 0.5rem;
-}
-
-.bg-white.rounded.px-3.py-2.font-mono {
+  padding: 12px;
   font-family: 'Courier New', monospace;
-  font-size: 0.75rem;
+  font-size: 12px;
   color: #666;
   word-break: break-all;
 }
 
-/* Info box at bottom */
-.bg-teal-50.rounded-lg {
-  background-color: #e0f2f1;
-  border-radius: 8px;
-  padding: 1rem;
-  margin-top: 1.5rem;
+.custReceipt-verified-indicator {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 12px;
+  color: #4caf50;
 }
 
-.bg-teal-50.rounded-lg p {
-  font-size: 0.813rem;
+.custReceipt-verified-icon {
+  width: 16px;
+  height: 16px;
+}
+
+/* Info Box */
+.custReceipt-info-box {
+  background-color: #e0f2f1;
+  border-radius: 8px;
+  padding: 16px;
+  margin-top: 24px;
+}
+
+.custReceipt-info-box p {
+  font-size: 13px;
   color: #424242;
   text-align: center;
   margin: 0;
 }
 
 /* Footer */
-.text-center.mt-8 {
+.custReceipt-footer {
   text-align: center;
-  margin-top: 2rem;
-  font-size: 0.813rem;
+  margin-top: 32px;
+  font-size: 13px;
   color: #999;
 }
 
-/* Verification checkmark */
-.text-green-600 {
-  color: #4caf50;
+.custReceipt-footer-subtitle {
+  margin-top: 8px;
 }
 
-/* Chevron icons */
-.text-gray-400 {
-  color: #bdbdbd;
-}
-
-/* Responsive adjustments */
+/* Responsive */
 @media (max-width: 640px) {
-  .max-w-4xl {
+  .custReceipt-content {
     max-width: 100%;
   }
   
-  .bg-white.rounded-2xl {
-    padding: 1.5rem;
+  .custReceipt-header-card,
+  .custReceipt-receipt-card,
+  .custReceipt-blockchain-card {
+    padding: 24px;
   }
   
-  .text-3xl.font-bold.text-gray-900 {
-    font-size: 1.25rem;
+  .custReceipt-main-title {
+    font-size: 20px;
+  }
+  
+  .custReceipt-info-grid {
+    grid-template-columns: 1fr;
   }
 }
