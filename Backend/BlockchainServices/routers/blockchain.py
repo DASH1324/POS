@@ -25,9 +25,9 @@ oauth2_scheme = OAuth2PasswordBearer(tokenUrl="http://localhost:4000/auth/token"
 # --- Auth Configuration ---
 USER_SERVICE_ME_URL = "http://localhost:4000/auth/users/me"
 
-BUILDBEAR_RPC_URL = os.getenv("BUILDBEAR_RPC_URL", "https://rpc.buildbear.io/screeching-yondu-eb2d9143")
-PRIVATE_KEY = os.getenv("PRIVATE_KEY", "dedafa3f5b97959588c0565254045bc36aa52aceef5838b50437d5d5d336345f")
-CONTRACT_ADDRESS = os.getenv("CONTRACT_ADDRESS", "0x14B5BB91Ea29056F2BECEC93fFeCEcaA26AC467B")
+BUILDBEAR_RPC_URL = os.getenv("BUILDBEAR_RPC_URL", "https://rpc.buildbear.io/deaf-warlock-ac333142")
+PRIVATE_KEY = os.getenv("PRIVATE_KEY", "dbcaeb0e881cca9574bd5c6c50447fd5c1e6c0cfaf48cd0f48be6538eca9c9c6")
+CONTRACT_ADDRESS = os.getenv("CONTRACT_ADDRESS", "0x5d82f15140657Ae236FC24C1DB715f6f0A6144b1")
 
 # Matches the solidity smart contract
 ACTIVITY_LOG_ABI = [
