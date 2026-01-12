@@ -22,6 +22,7 @@ const sendOrderEmail = async (order, emailType, token) => {
 
     const emailPayload = {
       customer_name: order.customerName,
+      customer_email: order.email || null,  
       order_id: String(order.id),
       order_type: order.orderType,
       status: order.status,
