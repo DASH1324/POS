@@ -511,13 +511,38 @@ if (onlineResponse.status === 'fulfilled' && onlineResponse.value.ok) {
           cartItems: merchandiseItems
         };
 
+        // --- NEW: Prepare the full item list with promotions for potential synchronization ---
+        const orderItemsForSync = orderToUpdate.orderItems.map(item => ({
+            name: item.name,
+            quantity: item.quantity,
+            price: item.price,
+            category: item.category,
+            addons: item.addons || [],
+            // Include promotion/discount data
+            discount: item.discount || 0.0,
+            promo_name: item.promo_name || (item.itemPromotions && item.itemPromotions[0]?.promotionName) || null,
+            itemPromotions: item.itemPromotions || [],
+            itemDiscounts: item.itemDiscounts || []
+        }));
+
+        // The POS status update payload for acceptance
+        const posUpdatePayload = {
+            newStatus: 'processing',
+            cashier_name: username,
+            // ✅ ADDED: Include the items and promotion data in the payload
+            items: orderItemsForSync
+        };
+        // --- END NEW ---
+
         const criticalUpdates = [];
 
         criticalUpdates.push(
           fetch(`${SALES_API_BASE_URL}/auth/purchase_orders/online/${encodeURIComponent(referenceNumber)}/status`, {
             method: 'PATCH',
             headers,
-            body: JSON.stringify({ newStatus: 'processing' })
+            // ⚠️ WARNING: The existing backend's UpdateOrderStatusRequest Pydantic model
+            // will likely reject the 'items' field. This requires a backend change to work.
+            body: JSON.stringify(posUpdatePayload)
           })
         );
 
