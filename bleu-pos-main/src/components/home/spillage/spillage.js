@@ -208,11 +208,13 @@ function Spillage() {
 
   const filteredData = useMemo(() => {
     const [start, end] = getDateRange();
+    
+    const normalizedSearch = searchTerm.trim().toLowerCase();
+    
     return spillageData.filter((item) => {
       const productName = item.product_name || "";
-      const matchesSearch = productName
-        .toLowerCase()
-        .includes(searchTerm.toLowerCase());
+      const matchesSearch = normalizedSearch === "" || 
+        productName.toLowerCase().includes(normalizedSearch);
       
       const category = item.category || "";
       const matchesCategory =
@@ -230,7 +232,6 @@ function Spillage() {
     });
   }, [spillageData, searchTerm, categoryFilter, dateRange, customStart, customEnd, userRole, loggedByName]);
 
-  // Calculate summary statistics
   const summary = useMemo(() => {
     const totalReports = filteredData.length;
     
