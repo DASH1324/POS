@@ -26,23 +26,43 @@ const sendOrderEmail = async (order, emailType, token) => {
       order_id: String(order.id),
       order_type: order.orderType,
       status: order.status,
-      items: order.orderItems.map(item => ({
-        name: item.name,
-        quantity: item.quantity,
-        price: item.price,
-        addons: (item.addons || []).map(addon => ({
-          addon_id: addon.addon_id || addon.AddonID || 0,
-          addon_name: addon.addon_name || addon.AddonName || addon.name || '',
-          price: addon.price || addon.Price || 0
-        }))
-      })),
+      items: order.orderItems.map(item => {
+        // Build item object with promo information
+        const itemObj = {
+          name: item.name,
+          quantity: item.quantity,
+          price: item.price,
+          addons: (item.addons || []).map(addon => ({
+            addon_id: addon.addon_id || addon.AddonID || 0,
+            addon_name: addon.addon_name || addon.AddonName || addon.name || '',
+            price: addon.price || addon.Price || 0
+          }))
+        };
+        // Add promo information if available
+        if (item.promo_name) {
+          itemObj.promo_name = item.promo_name;
+        }
+        if (item.applied_promo) {
+          itemObj.promo_type = item.applied_promo.promotionType;
+          itemObj.promo_value = item.applied_promo.promotionValue;
+        }
+        if (item.discount && item.discount > 0) {
+          itemObj.promo_discount = item.discount;
+        }
+        return itemObj;
+      }),
       total: order.total,
       payment_method: order.paymentMethod,
       delivery_address: order.deliveryAddress || null,
       phone_number: order.phoneNumber || null,
-      reference_number: order.reference_number || null
+      reference_number: order.reference_number || null,
+      delivery_fee: order.deliveryFee || null  // Include actual delivery fee from order
     };
+    // Only include customer_id if it exists
 
+    if (order.customerId) {
+      emailPayload.customer_id = order.customerId;
+    }
     console.log('📧 Email Payload:', JSON.stringify(emailPayload, null, 2));
 
     const endpoint = emailType === 'accepted' 
@@ -180,7 +200,8 @@ function Orders() {
               cashierName: order.cashierName || 'Unknown',
               reference_number: order.gcashReference || order.GCashReferenceNumber || null,
               updatedAt: order.updatedAt || order.date,
-              email: order.email || order.customer_email || null
+              email: order.email || order.customer_email || null,
+              deliveryFee: order.deliveryFee || 0
             };
           }).filter(o => o.orderType === 'Dine in' || o.orderType === 'Take out');
           
@@ -271,7 +292,8 @@ if (onlineResponse.status === 'fulfilled' && onlineResponse.value.ok) {
       reference_number: order.reference_number || order.gcash_reference_number || null,
       email: order.emailAddress || order.email || null,
       phoneNumber: order.phoneNumber || null,
-      deliveryAddress: order.deliveryAddress || null
+      deliveryAddress: order.deliveryAddress || null,
+      deliveryFee: order.deliveryFee || (order.order_type && order.order_type.toLowerCase() === 'delivery' ? 50.0 : 0)
     };
   });
 } else {
