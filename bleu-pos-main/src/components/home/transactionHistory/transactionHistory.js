@@ -22,6 +22,7 @@ import { MdPayments } from "react-icons/md";
 import { generatePDFReport, generateCSVReport } from "./transactionHistoryExport";
 import { ExportModal, NoDataModal, UnableToLoadData, NoData, RefundReasonModal } from "../shared/exportModal";
 import Loading from "../shared/loading";
+import { toast } from 'react-toastify';
 import '../../confirmAlertCustom.css';
 
 const getAuthToken = () => {
@@ -397,7 +398,7 @@ function TransactionHistory() {
       const managerUsername = localStorage.getItem("username");
       
       if (!managerUsername) {
-        alert("Authorization failed. Username not found. Please log in again.");
+        toast.error("Authorization failed. Username not found. Please log in again.");
         return;
       }
       
@@ -426,7 +427,7 @@ function TransactionHistory() {
       
       const result = await response.json();
       
-      alert(
+      toast.success(
         `${result.message}\n\n` +
         `Order ID: ${result.order_id}\n` +
         `Refunded By: ${result.refunded_by}\n` +
@@ -438,7 +439,7 @@ function TransactionHistory() {
       
     } catch (error) {
       console.error("Full refund error:", error);
-      alert(`Error processing full refund: ${error.message}`);
+      toast.error(`Error processing full refund: ${error.message}`);
     }
   };
 
@@ -454,7 +455,7 @@ function TransactionHistory() {
       const managerUsername = localStorage.getItem("username");
       
       if (!managerUsername) {
-        alert("Authorization failed. Username not found. Please log in again.");
+        toast.error("Authorization failed. Username not found. Please log in again.");
         return;
       }
       
@@ -494,7 +495,7 @@ function TransactionHistory() {
       const result = await response.json();
       
       if (result.total_refund_amount !== undefined && result.refunded_items) {
-        alert(
+        toast.success(
           `${result.message}\n\n` +
           `Refund Type: ${result.refund_type}\n` +
           `Total Refund Amount: ₱${result.total_refund_amount.toFixed(2)}\n\n` +
@@ -507,7 +508,7 @@ function TransactionHistory() {
           sum + (item.unitPrice * item.refundQuantity), 0
         );
         
-        alert(
+        toast.success(
           `${result.message}\n\n` +
           `Order ID: ${result.order_id}\n` +
           `Total Refund Amount: ₱${totalRefundAmount.toFixed(2)}\n\n` +
@@ -522,36 +523,39 @@ function TransactionHistory() {
       
     } catch (error) {
       console.error("Partial refund error:", error);
-      alert(`Error processing partial refund: ${error.message}`);
+      toast.error(`Error processing partial refund: ${error.message}`);
     }
   };
 
   const filteredTransactions = useMemo(() => {
     const [start, end] = getDateRange();
+    
+    // Trim and normalize search term
+    const normalizedSearch = searchTerm.trim().toLowerCase();
+    
     return transactions.filter((transaction) => {
       const matchesTab = transaction.type === activeTab;
       
-      const searchLower = searchTerm.toLowerCase();
       const cashierFullName = cashiersMap[transaction.cashierName] || transaction.cashierName || "";
       const itemNames = (transaction.items || []).map(item => item.name || "").join(" ");
       const date = new Date(transaction.date);
       const formattedDate = date.toLocaleDateString('en-CA');
       const formattedTime = date.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', hour12: true });
       
-      const matchesSearch = searchTerm === "" || 
-        (transaction.id || "").toString().toLowerCase().includes(searchLower) ||
-        formattedDate.toLowerCase().includes(searchLower) ||
-        formattedTime.toLowerCase().includes(searchLower) ||
-        cashierFullName.toLowerCase().includes(searchLower) ||
-        (transaction.cashierName || "").toLowerCase().includes(searchLower) ||
-        (transaction.orderType || "").toLowerCase().includes(searchLower) ||
-        itemNames.toLowerCase().includes(searchLower) ||
-        (transaction.subtotal || "").toString().toLowerCase().includes(searchLower) ||
-        (transaction.discount || "").toString().toLowerCase().includes(searchLower) ||
-        (transaction.total || "").toString().toLowerCase().includes(searchLower) ||
-        (transaction.paymentMethod || "").toLowerCase().includes(searchLower) ||
-        (transaction.status || "").toLowerCase().includes(searchLower) ||
-        (transaction.GCashReferenceNumber || "").toLowerCase().includes(searchLower);
+      const matchesSearch = normalizedSearch === "" || 
+        (transaction.id || "").toString().toLowerCase().includes(normalizedSearch) ||
+        formattedDate.toLowerCase().includes(normalizedSearch) ||
+        formattedTime.toLowerCase().includes(normalizedSearch) ||
+        cashierFullName.toLowerCase().includes(normalizedSearch) ||
+        (transaction.cashierName || "").toLowerCase().includes(normalizedSearch) ||
+        (transaction.orderType || "").toLowerCase().includes(normalizedSearch) ||
+        itemNames.toLowerCase().includes(normalizedSearch) ||
+        (transaction.subtotal || "").toString().toLowerCase().includes(normalizedSearch) ||
+        (transaction.discount || "").toString().toLowerCase().includes(normalizedSearch) ||
+        (transaction.total || "").toString().toLowerCase().includes(normalizedSearch) ||
+        (transaction.paymentMethod || "").toLowerCase().includes(normalizedSearch) ||
+        (transaction.status || "").toLowerCase().includes(normalizedSearch) ||
+        (transaction.GCashReferenceNumber || "").toLowerCase().includes(normalizedSearch);
       
       const matchesStatus = statusFilter === "" || transaction.status === statusFilter;
       const matchesCashier = cashierFilter === "" || cashierFullName === cashierFilter;

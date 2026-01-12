@@ -253,9 +253,11 @@ function Discounts() {
   };
 
   const filteredDiscounts = useMemo(() => {
+    const normalizedSearch = searchTerm.trim().toLowerCase();
+    
     return discounts.filter(
       (d) =>
-        d.name.toLowerCase().includes(searchTerm.toLowerCase()) &&
+        (normalizedSearch === "" || d.name.toLowerCase().includes(normalizedSearch)) &&
         (applicationFilter === "" ||
           d.application.toLowerCase().includes(applicationFilter.toLowerCase())) &&
         (statusFilter === "" || d.status.toLowerCase() === statusFilter.toLowerCase())
@@ -263,9 +265,11 @@ function Discounts() {
   }, [discounts, searchTerm, applicationFilter, statusFilter]);
 
   const filteredPromotions = useMemo(() => {
+    const normalizedSearch = searchTerm.trim().toLowerCase();
+    
     return promotions.filter(
       (p) =>
-        p.name.toLowerCase().includes(searchTerm.toLowerCase()) &&
+        (normalizedSearch === "" || p.name.toLowerCase().includes(normalizedSearch)) &&
         (statusFilter === "" || p.status.toLowerCase() === statusFilter.toLowerCase())
     );
   }, [promotions, searchTerm, statusFilter]);

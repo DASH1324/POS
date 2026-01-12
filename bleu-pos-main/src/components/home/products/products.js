@@ -106,31 +106,35 @@ function Products() {
   }, [navigate, fetchProductTypes, fetchProducts, fetchMerchandise]);
 
   const filteredProductsForActiveTab = useMemo(() => {
-    if (!activeTab) return [];
+  if (!activeTab) return [];
 
-    if (activeTab === "merch") {
-      return merchandise.filter((merch) => {
-        const matchesSearch = (merch.MerchandiseName || "")
-          .toLowerCase()
-          .includes(searchTerm.toLowerCase());
-        return matchesSearch;
-      });
-    }
+  // Trim and normalize search term
+  const normalizedSearch = searchTerm.trim().toLowerCase();
 
-    return products.filter((product) => {
-      const matchesTab = product.ProductTypeID === activeTab;
-      const matchesSearch = (product.ProductName || "")
+  if (activeTab === "merch") {
+    return merchandise.filter((merch) => {
+      const matchesSearch = (merch.MerchandiseName || "")
         .toLowerCase()
-        .includes(searchTerm.toLowerCase());
-      const matchesCategory =
-        categoryFilter === "" || product.ProductCategory === categoryFilter;
-      const matchesSize =
-        sizeFilter === "" ||
-        (product.ProductSizes && product.ProductSizes.includes(sizeFilter));
-
-      return matchesTab && matchesSearch && matchesCategory && matchesSize;
+        .includes(normalizedSearch);
+      return matchesSearch;
     });
-  }, [activeTab, products, merchandise, searchTerm, categoryFilter, sizeFilter]);
+  }
+
+  return products.filter((product) => {
+    const matchesTab = product.ProductTypeID === activeTab;
+    const matchesSearch = normalizedSearch === "" || 
+      (product.ProductName || "")
+        .toLowerCase()
+        .includes(normalizedSearch);
+    const matchesCategory =
+      categoryFilter === "" || product.ProductCategory === categoryFilter;
+    const matchesSize =
+      sizeFilter === "" ||
+      (product.ProductSizes && product.ProductSizes.includes(sizeFilter));
+
+    return matchesTab && matchesSearch && matchesCategory && matchesSize;
+  });
+}, [activeTab, products, merchandise, searchTerm, categoryFilter, sizeFilter]);
 
   const uniqueCategories = useMemo(() => {
     if (!activeTab || products.length === 0) return [];

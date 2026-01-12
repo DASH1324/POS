@@ -722,8 +722,6 @@ const addToCart = useCallback(async (item, type = 'product') => {
     <div className="menu-page">
       <Navbar user={loggedInUser} isCartOpen={isCartOpen} />
 
-      {showInitialCashModal && <div className="initialCash-modal-blocker" />}
-
       {showInitialCashModal && (
         <div className="initialCash-modal-overlay">
           <div className="initialCash-modal-container">
