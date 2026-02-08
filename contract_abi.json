@@ -1,0 +1,544 @@
+[
+  {
+    "anonymous": false,
+    "inputs": [
+      {
+        "indexed": true,
+        "internalType": "uint256",
+        "name": "logId",
+        "type": "uint256"
+      },
+      {
+        "indexed": false,
+        "internalType": "string",
+        "name": "serviceIdentifier",
+        "type": "string"
+      },
+      {
+        "indexed": false,
+        "internalType": "string",
+        "name": "action",
+        "type": "string"
+      },
+      {
+        "indexed": false,
+        "internalType": "string",
+        "name": "entityType",
+        "type": "string"
+      },
+      {
+        "indexed": false,
+        "internalType": "uint256",
+        "name": "entityId",
+        "type": "uint256"
+      },
+      {
+        "indexed": false,
+        "internalType": "string",
+        "name": "actorUsername",
+        "type": "string"
+      },
+      {
+        "indexed": true,
+        "internalType": "address",
+        "name": "actorAddress",
+        "type": "address"
+      },
+      {
+        "indexed": false,
+        "internalType": "string",
+        "name": "changeDescription",
+        "type": "string"
+      },
+      {
+        "indexed": false,
+        "internalType": "uint256",
+        "name": "timestamp",
+        "type": "uint256"
+      }
+    ],
+    "name": "ActivityLogged",
+    "type": "event"
+  },
+  {
+    "inputs": [
+      {
+        "internalType": "uint256",
+        "name": "",
+        "type": "uint256"
+      }
+    ],
+    "name": "activityLogs",
+    "outputs": [
+      {
+        "internalType": "uint256",
+        "name": "logId",
+        "type": "uint256"
+      },
+      {
+        "internalType": "string",
+        "name": "serviceIdentifier",
+        "type": "string"
+      },
+      {
+        "internalType": "string",
+        "name": "action",
+        "type": "string"
+      },
+      {
+        "internalType": "string",
+        "name": "entityType",
+        "type": "string"
+      },
+      {
+        "internalType": "uint256",
+        "name": "entityId",
+        "type": "uint256"
+      },
+      {
+        "internalType": "string",
+        "name": "actorUsername",
+        "type": "string"
+      },
+      {
+        "internalType": "address",
+        "name": "actorAddress",
+        "type": "address"
+      },
+      {
+        "internalType": "string",
+        "name": "changeDescription",
+        "type": "string"
+      },
+      {
+        "internalType": "string",
+        "name": "dataHash",
+        "type": "string"
+      },
+      {
+        "internalType": "uint256",
+        "name": "timestamp",
+        "type": "uint256"
+      }
+    ],
+    "stateMutability": "view",
+    "type": "function"
+  },
+  {
+    "inputs": [
+      {
+        "internalType": "uint256",
+        "name": "_logId",
+        "type": "uint256"
+      }
+    ],
+    "name": "getLog",
+    "outputs": [
+      {
+        "components": [
+          {
+            "internalType": "uint256",
+            "name": "logId",
+            "type": "uint256"
+          },
+          {
+            "internalType": "string",
+            "name": "serviceIdentifier",
+            "type": "string"
+          },
+          {
+            "internalType": "string",
+            "name": "action",
+            "type": "string"
+          },
+          {
+            "internalType": "string",
+            "name": "entityType",
+            "type": "string"
+          },
+          {
+            "internalType": "uint256",
+            "name": "entityId",
+            "type": "uint256"
+          },
+          {
+            "internalType": "string",
+            "name": "actorUsername",
+            "type": "string"
+          },
+          {
+            "internalType": "address",
+            "name": "actorAddress",
+            "type": "address"
+          },
+          {
+            "internalType": "string",
+            "name": "changeDescription",
+            "type": "string"
+          },
+          {
+            "internalType": "string",
+            "name": "dataHash",
+            "type": "string"
+          },
+          {
+            "internalType": "uint256",
+            "name": "timestamp",
+            "type": "uint256"
+          }
+        ],
+        "internalType": "struct ActivityLogger.ActivityLog",
+        "name": "",
+        "type": "tuple"
+      }
+    ],
+    "stateMutability": "view",
+    "type": "function"
+  },
+  {
+    "inputs": [
+      {
+        "internalType": "uint256",
+        "name": "_logId",
+        "type": "uint256"
+      }
+    ],
+    "name": "getLogAction",
+    "outputs": [
+      {
+        "internalType": "string",
+        "name": "",
+        "type": "string"
+      }
+    ],
+    "stateMutability": "view",
+    "type": "function"
+  },
+  {
+    "inputs": [
+      {
+        "internalType": "uint256",
+        "name": "_logId",
+        "type": "uint256"
+      }
+    ],
+    "name": "getLogActorAddress",
+    "outputs": [
+      {
+        "internalType": "address",
+        "name": "",
+        "type": "address"
+      }
+    ],
+    "stateMutability": "view",
+    "type": "function"
+  },
+  {
+    "inputs": [
+      {
+        "internalType": "uint256",
+        "name": "_logId",
+        "type": "uint256"
+      }
+    ],
+    "name": "getLogActorUsername",
+    "outputs": [
+      {
+        "internalType": "string",
+        "name": "",
+        "type": "string"
+      }
+    ],
+    "stateMutability": "view",
+    "type": "function"
+  },
+  {
+    "inputs": [
+      {
+        "internalType": "uint256",
+        "name": "_logId",
+        "type": "uint256"
+      }
+    ],
+    "name": "getLogChangeDescription",
+    "outputs": [
+      {
+        "internalType": "string",
+        "name": "",
+        "type": "string"
+      }
+    ],
+    "stateMutability": "view",
+    "type": "function"
+  },
+  {
+    "inputs": [],
+    "name": "getLogCount",
+    "outputs": [
+      {
+        "internalType": "uint256",
+        "name": "",
+        "type": "uint256"
+      }
+    ],
+    "stateMutability": "view",
+    "type": "function"
+  },
+  {
+    "inputs": [
+      {
+        "internalType": "uint256",
+        "name": "_logId",
+        "type": "uint256"
+      }
+    ],
+    "name": "getLogDataHash",
+    "outputs": [
+      {
+        "internalType": "string",
+        "name": "",
+        "type": "string"
+      }
+    ],
+    "stateMutability": "view",
+    "type": "function"
+  },
+  {
+    "inputs": [
+      {
+        "internalType": "uint256",
+        "name": "_logId",
+        "type": "uint256"
+      }
+    ],
+    "name": "getLogEntityId",
+    "outputs": [
+      {
+        "internalType": "uint256",
+        "name": "",
+        "type": "uint256"
+      }
+    ],
+    "stateMutability": "view",
+    "type": "function"
+  },
+  {
+    "inputs": [
+      {
+        "internalType": "uint256",
+        "name": "_logId",
+        "type": "uint256"
+      }
+    ],
+    "name": "getLogEntityType",
+    "outputs": [
+      {
+        "internalType": "string",
+        "name": "",
+        "type": "string"
+      }
+    ],
+    "stateMutability": "view",
+    "type": "function"
+  },
+  {
+    "inputs": [
+      {
+        "internalType": "uint256",
+        "name": "_logId",
+        "type": "uint256"
+      }
+    ],
+    "name": "getLogServiceIdentifier",
+    "outputs": [
+      {
+        "internalType": "string",
+        "name": "",
+        "type": "string"
+      }
+    ],
+    "stateMutability": "view",
+    "type": "function"
+  },
+  {
+    "inputs": [
+      {
+        "internalType": "uint256",
+        "name": "_logId",
+        "type": "uint256"
+      }
+    ],
+    "name": "getLogTimestamp",
+    "outputs": [
+      {
+        "internalType": "uint256",
+        "name": "",
+        "type": "uint256"
+      }
+    ],
+    "stateMutability": "view",
+    "type": "function"
+  },
+  {
+    "inputs": [
+      {
+        "internalType": "string",
+        "name": "_serviceIdentifier",
+        "type": "string"
+      },
+      {
+        "internalType": "uint256",
+        "name": "_limit",
+        "type": "uint256"
+      }
+    ],
+    "name": "getLogsByService",
+    "outputs": [
+      {
+        "components": [
+          {
+            "internalType": "uint256",
+            "name": "logId",
+            "type": "uint256"
+          },
+          {
+            "internalType": "string",
+            "name": "serviceIdentifier",
+            "type": "string"
+          },
+          {
+            "internalType": "string",
+            "name": "action",
+            "type": "string"
+          },
+          {
+            "internalType": "string",
+            "name": "entityType",
+            "type": "string"
+          },
+          {
+            "internalType": "uint256",
+            "name": "entityId",
+            "type": "uint256"
+          },
+          {
+            "internalType": "string",
+            "name": "actorUsername",
+            "type": "string"
+          },
+          {
+            "internalType": "address",
+            "name": "actorAddress",
+            "type": "address"
+          },
+          {
+            "internalType": "string",
+            "name": "changeDescription",
+            "type": "string"
+          },
+          {
+            "internalType": "string",
+            "name": "dataHash",
+            "type": "string"
+          },
+          {
+            "internalType": "uint256",
+            "name": "timestamp",
+            "type": "uint256"
+          }
+        ],
+        "internalType": "struct ActivityLogger.ActivityLog[]",
+        "name": "",
+        "type": "tuple[]"
+      }
+    ],
+    "stateMutability": "view",
+    "type": "function"
+  },
+  {
+    "inputs": [
+      {
+        "internalType": "string",
+        "name": "_serviceIdentifier",
+        "type": "string"
+      },
+      {
+        "internalType": "string",
+        "name": "_action",
+        "type": "string"
+      },
+      {
+        "internalType": "string",
+        "name": "_entityType",
+        "type": "string"
+      },
+      {
+        "internalType": "uint256",
+        "name": "_entityId",
+        "type": "uint256"
+      },
+      {
+        "internalType": "string",
+        "name": "_actorUsername",
+        "type": "string"
+      },
+      {
+        "internalType": "string",
+        "name": "_changeDescription",
+        "type": "string"
+      },
+      {
+        "internalType": "string",
+        "name": "_dataHash",
+        "type": "string"
+      }
+    ],
+    "name": "logActivity",
+    "outputs": [
+      {
+        "internalType": "uint256",
+        "name": "",
+        "type": "uint256"
+      }
+    ],
+    "stateMutability": "nonpayable",
+    "type": "function"
+  },
+  {
+    "inputs": [],
+    "name": "logCount",
+    "outputs": [
+      {
+        "internalType": "uint256",
+        "name": "",
+        "type": "uint256"
+      }
+    ],
+    "stateMutability": "view",
+    "type": "function"
+  },
+  {
+    "inputs": [
+      {
+        "internalType": "uint256",
+        "name": "_logId",
+        "type": "uint256"
+      },
+      {
+        "internalType": "string",
+        "name": "_dataHash",
+        "type": "string"
+      }
+    ],
+    "name": "verifyLogIntegrity",
+    "outputs": [
+      {
+        "internalType": "bool",
+        "name": "",
+        "type": "bool"
+      }
+    ],
+    "stateMutability": "view",
+    "type": "function"
+  }
+]

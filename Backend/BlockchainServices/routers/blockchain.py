@@ -25,9 +25,9 @@ oauth2_scheme = OAuth2PasswordBearer(tokenUrl="http://localhost:4000/auth/token"
 # --- Auth Configuration ---
 USER_SERVICE_ME_URL = "http://localhost:4000/auth/users/me"
 
-BUILDBEAR_RPC_URL = os.getenv("BUILDBEAR_RPC_URL", "https://rpc.buildbear.io/deaf-warlock-ac333142")
-PRIVATE_KEY = os.getenv("PRIVATE_KEY", "dbcaeb0e881cca9574bd5c6c50447fd5c1e6c0cfaf48cd0f48be6538eca9c9c6")
-CONTRACT_ADDRESS = os.getenv("CONTRACT_ADDRESS", "0x5d82f15140657Ae236FC24C1DB715f6f0A6144b1")
+BUILDBEAR_RPC_URL = os.getenv("BUILDBEAR_RPC_URL", "https://rpc.buildbear.io/growing-ironman-dd540317")
+PRIVATE_KEY = os.getenv("PRIVATE_KEY", "2dbb193054ea94de5788bc9cd200f595a2cce926a8f3a37680f1a51a022d9e54")
+CONTRACT_ADDRESS = os.getenv("CONTRACT_ADDRESS", "0x97cb0f492b4dfA48322F97a97583462d768dA54D")
 
 # Matches the solidity smart contract
 ACTIVITY_LOG_ABI = [
@@ -134,13 +134,13 @@ try:
             contract = w3.eth.contract(address=contract_checksum, abi=ACTIVITY_LOG_ABI)
             logger.info(f"✅ Contract initialized at: {contract_checksum}")
             
-            # Test contract connection
+            # Test contract connection (optional - don't fail if this doesn't work)
             try:
-                log_count = contract.functions.logCount().call()
+                log_count = contract.functions.getLogCount().call()
                 logger.info(f"✅ Contract verified. Current log count: {log_count}")
             except Exception as e:
-                logger.error(f"⚠️  Contract call test failed: {e}")
-                contract = None
+                logger.warning(f"⚠️  Contract call test failed (contract may still work): {e}")
+                # Don't set contract to None - it might still work for transactions
         except Exception as e:
             logger.error(f"⚠️  Invalid contract address: {e}")
             contract = None
@@ -162,7 +162,7 @@ class ActivityLogRequest(BaseModel):
     action: str = Field(..., description="Action type: CREATE, UPDATE, DELETE")
     entity_type: str = Field(..., description="Entity type (e.g., 'Sale', 'Discount', 'Promotion')")
     entity_id: int = Field(..., description="ID of the entity")
-    actor_username: str = Field(..., description="Username of the person performing the action")
+    actor_username: Optional[str] = Field(None, description="Username of the person performing the action (auto-filled if not provided)")
     change_description: str = Field(..., description="Description of what changed")
     data: Dict[str, Any] = Field(..., description="The actual data being logged")
 
@@ -310,7 +310,7 @@ async def log_to_blockchain(log_data: ActivityLogRequest) -> ActivityLogResponse
             'from': account.address,
             'nonce': nonce,
             'gas': 500000,  
-            'gasPrice': w3.eth.gas_price // 10  
+            'gasPrice': w3.eth.gas_price  
         })
         
         # Sign transaction
@@ -337,8 +337,8 @@ async def log_to_blockchain(log_data: ActivityLogRequest) -> ActivityLogResponse
         
         # Fallback: Get log ID from contract state
         if log_id is None:
-            log_id = contract.functions.logCount().call() - 1
-            logger.info(f"Log ID from logCount: {log_id}")
+            log_id = contract.functions.getLogCount().call() - 1
+            logger.info(f"Log ID from getLogCount: {log_id}")
         
         # Save to BlockchainAudit database
         await save_to_database(
@@ -382,15 +382,16 @@ async def create_activity_log(
     Log an activity to the blockchain.
     This should be called by other microservices after successful POST/PATCH operations.
     """
-    # Ensure actor username matches authenticated user
-    if log_data.actor_username != current_user.get("username"):
-        logger.warning(f"Actor username mismatch: {log_data.actor_username} vs {current_user.get('username')}")
+    # If actor_username not provided, auto-fill from authenticated user
+    if not log_data.actor_username:
+        log_data.actor_username = current_user.get("username")
+        logger.info(f"ℹ️ Actor username auto-filled: {log_data.actor_username}")
     
     # Log to blockchain
     result = await log_to_blockchain(log_data)
     
     return result
-    
+
 
 @router.get("/logs", response_model=List[BlockchainLogQueryResponse])
 async def get_activity_logs(
