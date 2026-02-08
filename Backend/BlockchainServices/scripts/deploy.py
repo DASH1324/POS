@@ -16,11 +16,12 @@ print("🚀 DEPLOYING ACTIVITYLOGGER CONTRACT")
 print("="*70 + "\n")
 
 # Configuration - Load from .env
-BUILDBEAR_RPC_URL = os.getenv("BUILDBEAR_RPC_URL", "https://rpc.buildbear.io/deaf-warlock-ac333142")
-PRIVATE_KEY = os.getenv("PRIVATE_KEY", "dbcaeb0e881cca9574bd5c6c50447fd5c1e6c0cfaf48cd0f48be6538eca9c9c6")
+BUILDBEAR_RPC_URL = os.getenv("BUILDBEAR_RPC_URL", "https://rpc.buildbear.io/growing-ironman-dd540317")
+PRIVATE_KEY = os.getenv("PRIVATE_KEY", "2dbb193054ea94de5788bc9cd200f595a2cce926a8f3a37680f1a51a022d9e54")
 
 # Read contract source from file
-with open('contracts/ActivityLogger.sol', 'r') as f:
+contract_path = os.path.join(os.path.dirname(__file__), '../contracts/ActivityLogger.sol')
+with open(contract_path, 'r') as f:
     CONTRACT_SOURCE = f.read()
 
 try:
@@ -107,7 +108,7 @@ CONTRACT_ADDRESS={contract_address}
     print("\n📋 Next step: Your FastAPI service will auto-reload")
     print("   and detect the new contract address!")
     print("\n🌐 View on Explorer:")
-    print(f"   https://explorer.buildbear.io/severe-electro-aed9ddc9/address/{contract_address}")
+    print(f"   https://rpc.buildbear.io/growing-ironman-dd540317/address/{contract_address}")
     print("\n" + "="*70 + "\n")
 
 except Exception as e:

@@ -91,7 +91,7 @@ async function main() {
   console.log("   • Status: http://localhost:9005/blockchain/status");
   console.log("   • API Docs: http://localhost:9005/docs");
   console.log("\n4️⃣  View on BuildBear Explorer:"); 
-  console.log(`   https://rpc.buildbear.io/deaf-warlock-ac333142/address/${contractAddress}`);
+  console.log(`   https://rpc.buildbear.io/growing-ironman-dd540317/address/${contractAddress}`);
   
   console.log("\n" + "=".repeat(70));
   console.log("✨ DEPLOYMENT COMPLETE!");
