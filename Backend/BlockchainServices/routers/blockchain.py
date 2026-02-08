@@ -25,8 +25,8 @@ oauth2_scheme = OAuth2PasswordBearer(tokenUrl="http://localhost:4000/auth/token"
 # --- Auth Configuration ---
 USER_SERVICE_ME_URL = "http://localhost:4000/auth/users/me"
 
-BUILDBEAR_RPC_URL = os.getenv("BUILDBEAR_RPC_URL", "https://rpc.buildbear.io/deaf-warlock-ac333142")
-PRIVATE_KEY = os.getenv("PRIVATE_KEY", "dbcaeb0e881cca9574bd5c6c50447fd5c1e6c0cfaf48cd0f48be6538eca9c9c6")
+BUILDBEAR_RPC_URL = os.getenv("BUILDBEAR_RPC_URL", "https://rpc.buildbear.io/growing-ironman-dd540317")
+PRIVATE_KEY = os.getenv("PRIVATE_KEY", "2dbb193054ea94de5788bc9cd200f595a2cce926a8f3a37680f1a51a022d9e54")
 CONTRACT_ADDRESS = os.getenv("CONTRACT_ADDRESS", "0x5d82f15140657Ae236FC24C1DB715f6f0A6144b1")
 
 # Matches the solidity smart contract
@@ -384,7 +384,10 @@ async def create_activity_log(
     """
     # Ensure actor username matches authenticated user
     if log_data.actor_username != current_user.get("username"):
-        logger.warning(f"Actor username mismatch: {log_data.actor_username} vs {current_user.get('username')}")
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail=f"Actor username mismatch: {log_data.actor_username} does not match authenticated user {current_user.get('username')}"
+        )
     
     # Log to blockchain
     result = await log_to_blockchain(log_data)
